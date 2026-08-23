@@ -34,3 +34,8 @@ Then visit http://localhost:8080.
 
 ## Important
 Demo data is clearly marked in the UI. Before public launch, connect a licensed market-data provider and validate every data field, scoring rule, and redistribution right.
+
+
+## Cloudflare static deployment
+
+The repository root now contains `index.html`, copied from the frontend, so the dashboard can be deployed as a static site without a build command. The backend remains under `/backend` for a separate API deployment.
