@@ -475,7 +475,7 @@ function back() {
 }
   
 async function loadWatchlist() {
- const container = document.getElementById("watchlistItems");
+  const container = document.getElementById("watchlistItems");
 
   if (!container) return;
 
@@ -501,16 +501,49 @@ async function loadWatchlist() {
       return;
     }
 
-    container.innerHTML = data.items.map(item => `
-      <div class="row">
-        <span class="stock" onclick="stock('${item.ticker}')">
-          ${item.name}
-          <span class="sub">${item.ticker}</span>
+    const stocks = await Promise.all(
+      data.items.map(async item => {
+        const stockResponse = await fetch(
+          API + "/api/stocks/" + item.ticker
+        );
+
+        if (!stockResponse.ok) {
+          return null;
+        }
+
+        return await stockResponse.json();
+      })
+    );
+
+    const validStocks = stocks.filter(x => x);
+
+    container.innerHTML = validStocks.map(x => `
+      <div class="row"
+           style="grid-template-columns:1.4fr .5fr .7fr .7fr auto">
+
+        <span class="stock" onclick="stock('${x.ticker}')">
+          ${x.name}
+          <span class="sub">
+            ${x.ticker} · ${x.sector}
+          </span>
         </span>
 
-        <span class="badge">
-          ★ Favorite
+        <strong class="${x.score >= 80 ? "g" : "y"}">
+          ${x.score}
+        </strong>
+
+        <span class="badge ${x.score < 80 ? "watch" : ""}">
+          ${x.signal}
         </span>
+
+        <span class="sub">
+          /100
+        </span>
+
+        <span>
+          ★
+        </span>
+
       </div>
     `).join("");
 
