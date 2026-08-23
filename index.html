@@ -419,7 +419,36 @@ function stock(ticker) {
     x.score +
     "/100 based on fundamentals, insider activity, valuation and market sentiment.";
 }
+  
+async function toggleWatchlist() {
+  const btn = document.getElementById("watchlistBtn");
 
+  const ticker = document.getElementById("dticker").textContent
+    .split(" · ")[0];
+
+  if (!ticker) return;
+
+  try {
+    const response = await fetch(
+      API + "/api/watchlist/" + ticker,
+      {
+        method: "POST"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Watchlist request failed");
+    }
+
+    btn.textContent = "★ Added to Watchlist";
+    btn.style.color = "var(--g)";
+
+  } catch (error) {
+    console.error(error);
+    btn.textContent = "Could not add";
+  }
+}
+  
 function back() {
   document.getElementById("detail").classList.remove("show");
   document.getElementById("dash").classList.remove("hide");
