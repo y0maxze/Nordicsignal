@@ -347,9 +347,7 @@ function stock(ticker) {
     return item.ticker === ticker;
   });
 
-  if (!x) {
-    return;
-  }
+  if (!x) return;
 
   document.getElementById("dash").classList.add("hide");
   document.getElementById("detail").classList.add("show");
@@ -363,12 +361,55 @@ function stock(ticker) {
     x.ticker + " · " + x.sector;
 
   document.getElementById("dscore").textContent = x.score;
+
+  document.getElementById("dsignal").textContent =
+    x.signal || "Neutral";
+
   document.getElementById("df").textContent =
     x.fundamentals + "/40";
+
   document.getElementById("di").textContent =
     x.insider + "/25";
+
   document.getElementById("dv").textContent =
     x.valuation + "/20";
+
+  document.getElementById("ds").textContent =
+    (x.sentiment || 0) + "/15";
+
+  let driver = "Multiple factors are supporting the signal.";
+  let recommendation =
+    "The current score is based on several NordicSignal factors.";
+
+  if (x.insider >= 22) {
+    driver = "Insider activity is the main driver.";
+    recommendation =
+      "Insider activity is currently one of the strongest contributors to the NordicSignal score.";
+  } else if (x.fundamentals >= 34) {
+    driver = "Strong fundamentals are the main driver.";
+    recommendation =
+      "The fundamental score is currently one of the strongest contributors to the overall signal.";
+  } else if ((x.sentiment || 0) < 8) {
+    driver = "Weak market sentiment is the main concern.";
+    recommendation =
+      "Market sentiment is currently weighing on the overall NordicSignal score.";
+  } else if (x.valuation < 15) {
+    driver = "Valuation is limiting the signal.";
+    recommendation =
+      "The valuation component is currently preventing a stronger overall signal.";
+  }
+
+  document.getElementById("ddriver").textContent = driver;
+
+  document.getElementById("drecommendation").textContent =
+    recommendation;
+
+  document.getElementById("danalysis").textContent =
+    "NordicSignal currently rates " +
+    x.name +
+    " at " +
+    x.score +
+    "/100 based on fundamentals, insider activity, valuation and market sentiment.";
 }
 
 function back() {
