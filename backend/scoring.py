@@ -1,9 +1,8 @@
 def clamp(value, low, high):
-    return max(low, min(high, value))
+    return max(low, min(high, int(round(value))))
 
 def calculate_score(fundamentals, insider, valuation, sentiment):
-    # Current model: 40 + 25 + 20 + 15 = 100
-    return clamp(round(fundamentals + insider + valuation + sentiment), 0, 100)
+    return clamp(fundamentals + insider + valuation + sentiment, 0, 100)
 
 def signal_label(score):
     if score >= 85:

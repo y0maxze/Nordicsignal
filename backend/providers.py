@@ -11,19 +11,19 @@ class MarketDataProvider(ABC):
 
 class DemoProvider(MarketDataProvider):
     def quote(self, ticker):
-        return {"ticker": ticker, "price": None, "change_pct": None, "source": "demo"}
+        return {"ticker": ticker, "price": None, "change_pct": None, "volume": None, "source": "demo"}
 
     def historical(self, ticker, period="1y"):
         return []
 
 class RealtimeProvider(MarketDataProvider):
-    """Adapter slot for a licensed real-time market-data provider.
-
-    Implement quote() and historical() here after credentials/licensing are selected.
-    Keep provider-specific code isolated from the scoring engine.
+    """
+    Provider adapter for the future licensed market-data connection.
+    Keeping this isolated means the scoring/database layer does not need
+    to change when a real provider is selected.
     """
     def quote(self, ticker):
-        raise NotImplementedError("Connect licensed real-time provider")
+        raise NotImplementedError("Connect the selected licensed real-time provider.")
 
     def historical(self, ticker, period="1y"):
-        raise NotImplementedError("Connect licensed historical provider")
+        raise NotImplementedError("Connect the selected historical-data provider.")
