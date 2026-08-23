@@ -6,6 +6,7 @@ from database import connect, init_db
 from scoring import calculate_score, signal_label
 
 app = FastAPI(title="NordicSignal API", version="1.1.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
