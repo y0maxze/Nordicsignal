@@ -1,3 +1,4 @@
+# NordicSignal database schema
 import sqlite3
 from pathlib import Path
 
