@@ -459,7 +459,58 @@ function back() {
   document.getElementById("sub").textContent =
     "Signal-driven stock intelligence";
 }
+  
+async function loadWatchlist() {
+ const container = document.getElementById("watchlistItems");
 
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="sub">Loading watchlist...</div>
+  `;
+
+  try {
+    const response = await fetch(API + "/api/watchlist");
+
+    if (!response.ok) {
+      throw new Error("Failed to load watchlist");
+    }
+
+    const data = await response.json();
+
+    if (!data.items || data.items.length === 0) {
+      container.innerHTML = `
+        <div class="sub">
+          Your watchlist is empty.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = data.items.map(item => `
+      <div class="row">
+        <span class="stock" onclick="stock('${item.ticker}')">
+          ${item.name}
+          <span class="sub">${item.ticker}</span>
+        </span>
+
+        <span class="badge">
+          ★ Favorite
+        </span>
+      </div>
+    `).join("");
+
+  } catch (error) {
+    console.error(error);
+
+    container.innerHTML = `
+      <div class="sub">
+        Could not load watchlist.
+      </div>
+    `;
+  }
+}
+  
 function page(name, element) {
   document.querySelectorAll("nav a").forEach(function(x) {
     x.classList.remove("active");
