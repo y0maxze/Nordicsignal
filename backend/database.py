@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS insider_trades (
     ticker TEXT NOT NULL,
     person TEXT,
     role TEXT,
-    transaction TEXT,
+    transaction_type TEXT,
     shares REAL,
     price REAL,
     trade_date TEXT,
