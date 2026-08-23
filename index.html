@@ -112,8 +112,22 @@ inne<!doctype html>
   </p>
 
 </section></div>
+<div id="watchlistContent" class="section" style="display:none">
+  <h2>My Watchlist</h2>
+
+  <div class="sub" style="margin-bottom:18px">
+    Your saved stocks and signals
+  </div>
+
+  <div class="row head">
+    <span>Company</span>
+    <span>Favorite</span>
+  </div>
+
+  <div id="watchlistItems"></div>
+</div>
 </main></div>
-<script>
+  <script>
 const API = "https://nordicsignal-api.onrender.com";
 let all = [];
 
@@ -522,6 +536,19 @@ function page(name, element) {
     back();
     return;
   }
+  if(name === "Watchlist") {
+  document.getElementById("dash").classList.add("hide");
+  document.getElementById("detail").classList.remove("show");
+
+  document.getElementById("watchlistContent").style.display = "block";
+
+  document.getElementById("title").textContent = "Watchlist";
+  document.getElementById("sub").textContent =
+    "Your saved stocks and signals";
+
+  loadWatchlist();
+  return;
+}
 
   document.getElementById("dash").classList.remove("hide");
   document.getElementById("detail").classList.remove("show");
