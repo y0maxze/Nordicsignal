@@ -102,58 +102,87 @@ function renderRadar(items) {
 
 function renderSignalRadar(items) {
   const feed = document.getElementById("radar-feed");
+  if (!feed) return;
 
-  if (!feed) {
-    return;
-  }
+  const signals = items.map(x => {
+    const fundamentals = x.fundamentals || 0;
+    const insider = x.insider || 0;
+    const valuation = x.valuation || 0;
+    const sentiment = x.sentiment || 0;
 
-  const html = items.map(function(x) {
     let type = "STABLE";
-    let text = "No major change detected";
     let cls = "y";
+    let headline = "Stable signal";
+    let driver = "No dominant signal detected";
 
     if (x.score >= 85) {
       type = "STRONG";
-      text = "High-conviction signal";
       cls = "g";
+      headline = "High-conviction signal";
+
+      if (insider >= 22) {
+        driver = "Insider activity is the main driver";
+      } else if (fundamentals >= 34) {
+        driver = "Strong fundamentals are the main driver";
+      } else {
+        driver = "Multiple factors are supporting the signal";
+      }
+
     } else if (x.score >= 80) {
       type = "WATCH";
-      text = "Positive signal building";
       cls = "g";
+      headline = "Positive signal building";
+
+      if (fundamentals >= 34) {
+        driver = "Fundamentals are supporting the signal";
+      } else if (insider >= 22) {
+        driver = "Insider activity is supporting the signal";
+      } else {
+        driver = "Several positive factors are aligned";
+      }
+
     } else if (x.score < 75) {
       type = "RISK";
-      text = "Weakening signal";
       cls = "r";
+      headline = "Weakening signal";
+
+      if (sentiment < 8) {
+        driver = "Weak market sentiment is the main concern";
+      } else if (valuation < 15) {
+        driver = "Valuation is limiting the signal";
+      } else {
+        driver = "Overall score is below the strong-signal range";
+      }
     }
 
-    const badgeClass = cls === "y" ? "watch" : "";
+    return `
+      <div class="signal"
+           style="display:grid;grid-template-columns:80px 1fr auto;gap:16px;align-items:center">
 
-    return (
-      '<div class="signal" style="display:grid;grid-template-columns:70px 1fr auto;gap:14px;align-items:center">' +
+        <span class="badge ${cls === "y" ? "watch" : ""}"
+              style="${cls === "r" ? "color:var(--r);background:#321722" : ""}">
+          ${type}
+        </span>
 
-        '<span class="badge ' + badgeClass + '">' +
-          type +
-        '</span>' +
+        <div>
+          <strong>${x.ticker} · ${x.name}</strong>
+          <div class="sub">
+            ${headline} · ${driver}
+          </div>
+        </div>
 
-        '<div>' +
-          '<strong>' +
-            x.ticker + " · " + x.name +
-          '</strong>' +
+        <div style="text-align:right">
+          <strong class="${cls}" style="font-size:20px">
+            ${x.score}
+          </strong>
+          <div class="sub">/100</div>
+        </div>
 
-          '<div class="sub">' +
-            text + " · Score " + x.score + "/100" +
-          '</div>' +
-        '</div>' +
-
-        '<strong class="' + cls + '">' +
-          x.score +
-        '</strong>' +
-
-      '</div>'
-    );
+      </div>
+    `;
   }).join("");
 
-  feed.innerHTML = html;
+  feed.innerHTML = signals;
 }
 
 function renderDemo() {
