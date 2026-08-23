@@ -17,7 +17,93 @@ inne<!doctype html>
 
   <div id="radar-feed" style="margin-top:15px"></div>
 </section><div class="grid"><section class="section"><h2>Top Stock Signals</h2><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div><div id="stocks"></div></section><section class="section"><h2>Latest Signals</h2><div id="radar"></div></section></div></div>
-<div id="detail" class="detail"><div class="back" onclick="back()">← Back to dashboard</div><section class="section"><div style="display:flex;justify-content:space-between"><div><h1 id="dname">—</h1><div class="sub" id="dticker">—</div></div><div style="text-align:right"><div class="big g" id="dscore">—</div><div class="sub">/100</div></div></div><div class="chart"><svg viewBox="0 0 900 180" preserveAspectRatio="none"><polyline points="0,145 80,132 150,138 220,105 290,120 360,84 430,96 500,67 570,78 640,51 710,64 780,35 850,47 900,24" fill="none" stroke="#35d49a" stroke-width="3"/></svg></div><div class="metrics"><div class="metric"><div class="label">Fundamentals</div><b id="df">—</b></div><div class="metric"><div class="label">Insider</div><b class="g" id="di">—</b></div><div class="metric"><div class="label">Valuation</div><b id="dv">—</b></div></div><h2 style="margin-top:24px">Why this score?</h2><p class="sub" style="font-size:14px;line-height:1.7">NordicSignal combines company fundamentals, insider/institutional activity, valuation and market sentiment into a single research score. It is a research aid, not an automatic buy/sell recommendation.</p></section></div>
+<div id="detail" class="detail"><div class="back" onclick="back()">← Back to dashboard</div>
+
+<section class="section">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">
+
+    <div>
+      <div class="sub">NORDICSIGNAL ANALYSIS</div>
+      <h1 id="dname" style="margin:6px 0 4px">—</h1>
+      <div class="sub" id="dticker">—</div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="big g" id="dscore">—</div>
+      <div class="sub">/100</div>
+    </div>
+
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-top:18px">
+    <span id="dsignal" class="badge">—</span>
+    <span class="sub">Current NordicSignal</span>
+  </div>
+
+  <div class="chart">
+    <svg viewBox="0 0 900 180" preserveAspectRatio="none">
+      <polyline
+        points="0,145 80,132 150,138 220,105 290,120 360,84 430,96 500,67 570,78 640,51 710,64 780,35 850,47 900,24"
+        fill="none"
+        stroke="#35d49a"
+        stroke-width="3"
+      />
+    </svg>
+  </div>
+
+  <h2 style="margin-top:24px">Signal Breakdown</h2>
+
+  <div class="metrics">
+
+    <div class="metric">
+      <div class="label">Fundamentals</div>
+      <b id="df">—</b>
+      <div class="sub">Business quality</div>
+    </div>
+
+    <div class="metric">
+      <div class="label">Insider</div>
+      <b class="g" id="di">—</b>
+      <div class="sub">Insider activity</div>
+    </div>
+
+    <div class="metric">
+      <div class="label">Valuation</div>
+      <b id="dv">—</b>
+      <div class="sub">Relative valuation</div>
+    </div>
+
+  </div>
+
+  <div class="metric" style="margin-top:14px">
+    <div class="label">Sentiment</div>
+    <b id="ds">—</b>
+    <div class="sub">Market sentiment</div>
+  </div>
+
+  <h2 style="margin-top:28px">Signal Driver</h2>
+
+  <div class="metric">
+    <div class="label">Why is NordicSignal giving this score?</div>
+    <b id="ddriver">—</b>
+    <p class="sub" id="drecommendation" style="font-size:14px;line-height:1.6;margin-bottom:0">
+      —
+    </p>
+  </div>
+
+  <h2 style="margin-top:28px">Analysis</h2>
+
+  <p
+    class="sub"
+    style="font-size:14px;line-height:1.7"
+    id="danalysis"
+  >
+    NordicSignal combines fundamentals, insider activity,
+    valuation and sentiment into a single research score.
+  </p>
+
+</section></div>
 </main></div>
 <script>
 const API = "https://nordicsignal-api.onrender.com";
