@@ -1,4 +1,4 @@
-<!doctype html>
+inne<!doctype html>
 <html lang="no"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NordicSignal</title><style>
 :root{--bg:#07111f;--p:#0d1b2d;--p2:#10243a;--line:#20354d;--t:#eef5ff;--m:#91a5bd;--g:#35d49a;--y:#f3c95b;--r:#fb7185}
@@ -6,20 +6,68 @@
 </style></head><body><div class="app"><aside class="side"><div class="logo">Nordic<span>Signal</span></div><nav><a class="active" onclick="page('Dashboard',this)">Dashboard</a><a onclick="page('Stock Radar',this)">Stock Radar</a><a onclick="page('Watchlist',this)">Watchlist</a><a onclick="page('Insider Activity',this)">Insider Activity</a><a onclick="page('Short Radar',this)">Short Radar</a><a onclick="page('Markets',this)">Markets</a></nav></aside>
 <main class="main"><div class="top"><div><h1 id="title">Market Dashboard</h1><div class="sub" id="sub">Signal-driven stock intelligence</div></div><input id="search" class="search" placeholder="Search ticker or company…"></div>
 <div id="dash"><section class="cards"><div class="card"><div class="label">Market</div><div class="value g">OPEN</div><div class="sub">Oslo Børs</div></div><div class="card"><div class="label">Stocks tracked</div><div class="value" id="count">—</div><div class="sub">Universe</div></div><div class="card"><div class="label">Strong signals</div><div class="value g" id="strong">—</div><div class="sub">Score ≥ 80</div></div><div class="card"><div class="label">Signal engine</div><div class="value g">ACTIVE</div><div class="sub">4-factor model</div></div></section>
-<div class="grid"><section class="section"><h2>Top Stock Signals</h2><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div><div id="stocks"></div></section><section class="section"><h2>Latest Signals</h2><div id="radar"></div></section></div></div>
+<section class="section signal-radar">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:15px">
+    <div>
+      <h2 style="margin:0">Signal Radar</h2>
+      <div class="sub">What is changing right now</div>
+    </div>
+    <span class="badge">LIVE ENGINE</span>
+  </div>
+
+  <div id="radar-feed" style="margin-top:15px"></div>
+</section><div class="grid"><section class="section"><h2>Top Stock Signals</h2><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div><div id="stocks"></div></section><section class="section"><h2>Latest Signals</h2><div id="radar"></div></section></div></div>
 <div id="detail" class="detail"><div class="back" onclick="back()">← Back to dashboard</div><section class="section"><div style="display:flex;justify-content:space-between"><div><h1 id="dname">—</h1><div class="sub" id="dticker">—</div></div><div style="text-align:right"><div class="big g" id="dscore">—</div><div class="sub">/100</div></div></div><div class="chart"><svg viewBox="0 0 900 180" preserveAspectRatio="none"><polyline points="0,145 80,132 150,138 220,105 290,120 360,84 430,96 500,67 570,78 640,51 710,64 780,35 850,47 900,24" fill="none" stroke="#35d49a" stroke-width="3"/></svg></div><div class="metrics"><div class="metric"><div class="label">Fundamentals</div><b id="df">—</b></div><div class="metric"><div class="label">Insider</div><b class="g" id="di">—</b></div><div class="metric"><div class="label">Valuation</div><b id="dv">—</b></div></div><h2 style="margin-top:24px">Why this score?</h2><p class="sub" style="font-size:14px;line-height:1.7">NordicSignal combines company fundamentals, insider/institutional activity, valuation and market sentiment into a single research score. It is a research aid, not an automatic buy/sell recommendation.</p></section></div>
 </main></div>
 <script>
 const API="https://nordicsignal-api.onrender.com";
 let all=[];
 async function load(){try{const s=await fetch(API+"/api/stocks");all=s.items;render(all);const r=await fetch(API+"/api/radar");renderRadar((await r.json()).items)}catch(e){renderDemo();}}
-function render(items){document.getElementById("count").textContent=items.length;document.getElementById("strong").textContent=items.filter(x=>x.score>=80).length;document.getElementById("stocks").innerHTML=items.map(x=>`<div class="row"><span class="stock" onclick="stock('${x.ticker}')">${x.name}<span class="sub">${x.ticker} · ${x.sector}</span></span><span class="${x.score>=80?'g':'y'}">${x.score}</span><span><div class="bar"><div class="fill" style="width:${x.score}%"></div></div></span><span class="badge ${x.score<80?'watch':''}">${x.signal}</span></div>`).join("")}
+function render(items){document.getElementById("count").textContent=items.length;document.getElementById("strong").textContent=items.filter(x=>x.score>=80).length;document.getElementById("stocks").innerHTML=items.map(x=>`<div class="row"><span class="stock" onclick="stock('${x.ticker}')">${x.name}<span class="sub">${x.ticker} · ${x.sector}</span></span><span class="${x.score>=80?'g':'y'}">${x.score}</span><span><div class="bar"><div class="fill" style="width:${x.score}%"></div></div></span><span class="badge ${x.score<80?'watch':''}">${x.signal}</span></div>`).join(""));
 function renderRadar(items){document.getElementById("radar").innerHTML=items.map(x=>`<div class="signal"><strong class="${x.strength==='risk'?'y':'g'}">${x.ticker} · ${x.event}</strong><span class="sub">Model signal detected.</span></div>`).join("")}
-function renderDemo(){const d=[{ticker:"LSG",name:"Lerøy Seafood",sector:"Seafood",score:86,fundamentals:34,insider:24,valuation:16},{ticker:"MPCC",name:"MPCC",sector:"Shipping",score:80,fundamentals:36,insider:15,valuation:17},{ticker:"ELO",name:"Elopak",sector:"Packaging",score:81,fundamentals:30,insider:23,valuation:16},{ticker:"PEXIP",name:"Pexip",sector:"Technology",score:77,fundamentals:33,insider:18,valuation:15},{ticker:"XPLRA",name:"Xplora",sector:"Technology",score:70,fundamentals:32,insider:18,valuation:14}];all=d;render(d);renderRadar([{ticker:"LSG",event:"Insider + institutional activity",strength:"strong"},{ticker:"MPCC",event:"Earnings watch",strength:"strong"},{ticker:"XPLRA",event:"Short pressure",strength:"risk"}])}
+function renderSignalRadar(items){
+  const feed=document.getElementById("radar-feed");
+  if(!feed)return;
+
+  const signals=items.map(x=>{
+    let type="STABLE";
+    let text="No major change detected";
+    let cls="y";
+
+    if(x.score>=85){
+      type="STRONG";
+      text="High-conviction signal";
+      cls="g";
+    }else if(x.score>=80){
+      type="WATCH";
+      text="Positive signal building";
+      cls="g";
+    }else if(x.score<75){
+      type="RISK";
+      text="Weakening signal";
+      cls="r";
+    }
+
+    return `
+      <div class="signal" style="display:grid;grid-template-columns:70px 1fr auto;gap:14px;align-items:center">
+        <span class="badge ${cls==='y'?'watch':''}" style="${cls==='r'?'color:var(--r);background:#321722':''}">
+          ${type}
+        </span>
+        <div>
+          <strong>${x.ticker} · ${x.name}</strong>
+          <div class="sub">${text} · Score ${x.score}/100</div>
+        </div>
+        <strong class="${cls}">${x.score}</strong>
+      </div>
+    `;
+  }).join("");
+
+  feed.innerHTML=signals;
+}
+  function renderDemo(){const d=[{ticker:"LSG",name:"Lerøy Seafood",sector:"Seafood",score:86,fundamentals:34,insider:24,valuation:16},{ticker:"MPCC",name:"MPCC",sector:"Shipping",score:80,fundamentals:36,insider:15,valuation:17},{ticker:"ELO",name:"Elopak",sector:"Packaging",score:81,fundamentals:30,insider:23,valuation:16},{ticker:"PEXIP",name:"Pexip",sector:"Technology",score:77,fundamentals:33,insider:18,valuation:15},{ticker:"XPLRA",name:"Xplora",sector:"Technology",score:70,fundamentals:32,insider:18,valuation:14}];all=d;render(d);renderRadar([{ticker:"LSG",event:"Insider + institutional activity",strength:"strong"},{ticker:"MPCC",event:"Earnings watch",strength:"strong"},{ticker:"XPLRA",event:"Short pressure",strength:"risk"}])}
 async function stock(t){let x=all.find(a=>a.ticker===t);if(!x)return;document.getElementById("dash").classList.add("hide");document.getElementById("detail").classList.add("show");document.getElementById("title").textContent=x.name;document.getElementById("sub").textContent="Stock intelligence · "+x.ticker;document.getElementById("dname").textContent=x.name;document.getElementById("dticker").textContent=x.ticker+" · "+x.sector;document.getElementById("dscore").textContent=x.score;document.getElementById("df").textContent=x.fundamentals+"/40";document.getElementById("di").textContent=x.insider+"/25";document.getElementById("dv").textContent=x.valuation+"/20"}
 function back(){document.getElementById("detail").classList.remove("show");document.getElementById("dash").classList.remove("hide");document.getElementById("title").textContent="Market Dashboard";document.getElementById("sub").textContent="Signal-driven stock intelligence"}
 function page(name,el){document.querySelectorAll("nav a").forEach(x=>x.classList.remove("active"));el.classList.add("active");if(name==="Dashboard"){back();return}document.getElementById("dash").classList.remove("hide");document.getElementById("detail").classList.remove("show");document.getElementById("title").textContent=name;document.getElementById("sub").textContent=name==="Stock Radar"?"Market-wide ranking of model signals.":name==="Watchlist"?"Saved companies and score changes.":name==="Insider Activity"?"CEO, CFO, director and institutional signals.":name==="Short Radar"?"Short interest and pressure signals.":"Market overview and sectors."}
 document.getElementById("search").addEventListener("input",e=>{let q=e.target.value.toLowerCase();render(all.filter(x=>(x.name+x.ticker).toLowerCase().includes(q)))});
 load();
 </script></body></html>
-inne
