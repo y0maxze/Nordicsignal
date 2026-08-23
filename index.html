@@ -20,40 +20,94 @@ inne<!doctype html>
 <div id="detail" class="detail"><div class="back" onclick="back()">← Back to dashboard</div><section class="section"><div style="display:flex;justify-content:space-between"><div><h1 id="dname">—</h1><div class="sub" id="dticker">—</div></div><div style="text-align:right"><div class="big g" id="dscore">—</div><div class="sub">/100</div></div></div><div class="chart"><svg viewBox="0 0 900 180" preserveAspectRatio="none"><polyline points="0,145 80,132 150,138 220,105 290,120 360,84 430,96 500,67 570,78 640,51 710,64 780,35 850,47 900,24" fill="none" stroke="#35d49a" stroke-width="3"/></svg></div><div class="metrics"><div class="metric"><div class="label">Fundamentals</div><b id="df">—</b></div><div class="metric"><div class="label">Insider</div><b class="g" id="di">—</b></div><div class="metric"><div class="label">Valuation</div><b id="dv">—</b></div></div><h2 style="margin-top:24px">Why this score?</h2><p class="sub" style="font-size:14px;line-height:1.7">NordicSignal combines company fundamentals, insider/institutional activity, valuation and market sentiment into a single research score. It is a research aid, not an automatic buy/sell recommendation.</p></section></div>
 </main></div>
 <script>
-const API="https://nordicsignal-api.onrender.com";
-let all=[];
-async function load(){try{const s=await fetch(API+"/api/stocks");all=s.items;render(all);renderSignalRadar(all);const r=await fetch(API+"/api/radar");renderRadar((await r.json()).items)}catch(e){renderDemo();}}
-function render(items){
-  document.getElementById("count").textContent = items.length;
-  document.getElementById("strong").textContent = items.filter(x => x.score >= 80).length;
+const API = "https://nordicsignal-api.onrender.com";
+let all = [];
 
-  document.getElementById("stocks").innerHTML = items.map(x => `
-    <div class="row">
-      <span class="stock" onclick="stock('${x.ticker}')">
-        ${x.name}
-        <span class="sub">${x.ticker} · ${x.sector}</span>
-      </span>
+async function load() {
+  try {
+    const response = await fetch(API + "/api/stocks");
+    const data = await response.json();
 
-      <span class="${x.score >= 80 ? 'g' : 'y'}">${x.score}</span>
+    all = data.items || [];
 
-      <span>
-        <div class="bar">
-          <div class="fill" style="width:${x.score}%"></div>
-        </div>
-      </span>
+    render(all);
+    renderSignalRadar(all);
 
-      <span class="badge ${x.score < 80 ? 'watch' : ''}">
-        ${x.signal}
-      </span>
-    </div>
-  `).join("");
+    const radarResponse = await fetch(API + "/api/radar");
+    const radarData = await radarResponse.json();
+
+    renderRadar(radarData.items || []);
+  } catch (error) {
+    console.error("API error:", error);
+    renderDemo();
+  }
 }
-function renderRadar(items){document.getElementById("radar").innerHTML=items.map(x=>`<div class="signal"><strong class="${x.strength==='risk'?'y':'g'}">${x.ticker} · ${x.event}</strong><span class="sub">Model signal detected.</span></div>`).join("")}
+
+function render(items) {
+  document.getElementById("count").textContent = items.length;
+
+  document.getElementById("strong").textContent =
+    items.filter(function(x) {
+      return x.score >= 80;
+    }).length;
+
+  const html = items.map(function(x) {
+    const scoreClass = x.score >= 80 ? "g" : "y";
+    const badgeClass = x.score < 80 ? "watch" : "";
+
+    return (
+      '<div class="row">' +
+        '<span class="stock" onclick="stock(\'' + x.ticker + '\')">' +
+          x.name +
+          '<span class="sub">' +
+            x.ticker + " · " + x.sector +
+          '</span>' +
+        '</span>' +
+
+        '<span class="' + scoreClass + '">' +
+          x.score +
+        '</span>' +
+
+        '<span>' +
+          '<div class="bar">' +
+            '<div class="fill" style="width:' + x.score + '%"></div>' +
+          '</div>' +
+        '</span>' +
+
+        '<span class="badge ' + badgeClass + '">' +
+          x.signal +
+        '</span>' +
+
+      '</div>'
+    );
+  }).join("");
+
+  document.getElementById("stocks").innerHTML = html;
+}
+
+function renderRadar(items) {
+  const html = items.map(function(x) {
+    return (
+      '<div class="signal">' +
+        '<strong>' +
+          x.ticker +
+        '</strong>' +
+        '<span class="sub">Model signal detected.</span>' +
+      '</div>'
+    );
+  }).join("");
+
+  document.getElementById("radar").innerHTML = html;
+}
+
 function renderSignalRadar(items) {
   const feed = document.getElementById("radar-feed");
-  if (!feed) return;
 
-  const signals = items.map(function(x) {
+  if (!feed) {
+    return;
+  }
+
+  const html = items.map(function(x) {
     let type = "STABLE";
     let text = "No major change detected";
     let cls = "y";
@@ -72,37 +126,197 @@ function renderSignalRadar(items) {
       cls = "r";
     }
 
-    return `
-      <div class="signal" style="display:grid;grid-template-columns:70px 1fr auto;gap:14px;align-items:center">
-        <span class="badge ${cls === "y" ? "watch" : ""}" style="${cls === "r" ? "color:var(--r);background:#321722" : ""}">
-          ${type}
-        </span>
+    const badgeClass = cls === "y" ? "watch" : "";
 
-        <div>
-          <strong>${x.ticker} · ${x.name}</strong>
-          <div class="sub">${text} · Score ${x.score}/100</div>
-        </div>
+    return (
+      '<div class="signal" style="display:grid;grid-template-columns:70px 1fr auto;gap:14px;align-items:center">' +
 
-        <strong class="${cls}">${x.score}</strong>
-      </div>
-    `;
+        '<span class="badge ' + badgeClass + '">' +
+          type +
+        '</span>' +
+
+        '<div>' +
+          '<strong>' +
+            x.ticker + " · " + x.name +
+          '</strong>' +
+
+          '<div class="sub">' +
+            text + " · Score " + x.score + "/100" +
+          '</div>' +
+        '</div>' +
+
+        '<strong class="' + cls + '">' +
+          x.score +
+        '</strong>' +
+
+      '</div>'
+    );
   }).join("");
 
-  feed.innerHTML = signals;
+  feed.innerHTML = html;
 }
-  function renderDemo(){const d=[{ticker:"LSG",name:"Lerøy Seafood",sector:"Seafood",score:86,fundamentals:34,insider:24,valuation:16},{ticker:"MPCC",name:"MPCC",sector:"Shipping",score:80,fundamentals:36,insider:15,valuation:17},{ticker:"ELO",name:"Elopak",sector:"Packaging",score:81,fundamentals:30,insider:23,valuation:16},{ticker:"PEXIP",name:"Pexip",sector:"Technology",score:77,fundamentals:33,insider:18,valuation:15},{ticker:"XPLRA",name:"Xplora",sector:"Technology",score:70,fundamentals:32,insider:18,valuation:14}];all=d;render(d);renderRadar([{ticker:"LSG",event:"Insider + institutional activity",strength:"strong"},{ticker:"MPCC",event:"Earnings watch",strength:"strong"},{ticker:"XPLRA",event:"Short pressure",strength:"risk"}])}
-async function stock(t){let x=all.find(a=>a.ticker===t);if(!x)return;document.getElementById("dash").classList.add("hide");document.getElementById("detail").classList.add("show");document.getElementById("title").textContent=x.name;document.getElementById("sub").textContent="Stock intelligence · "+x.ticker;document.getElementById("dname").textContent=x.name;document.getElementById("dticker").textContent=x.ticker+" · "+x.sector;document.getElementById("dscore").textContent=x.score;document.getElementById("df").textContent=x.fundamentals+"/40";document.getElementById("di").textContent=x.insider+"/25";document.getElementById("dv").textContent=x.valuation+"/20"}
-function back(){document.getElementById("detail").classList.remove("show");document.getElementById("dash").classList.remove("hide");document.getElementById("title").textContent="Market Dashboard";document.getElementById("sub").textContent="Signal-driven stock intelligence"}
-function page(name,el){document.querySelectorAll("nav a").forEach(x=>x.classList.remove("active"));el.classList.add("active");if(name==="Dashboard"){back();return}document.getElementById("dash").classList.remove("hide");document.getElementById("detail").classList.remove("show");document.getElementById("title").textContent=name;document.getElementById("sub").textContent=name==="Stock Radar"?"Market-wide ranking of model signals.":name==="Watchlist"?"Saved companies and score changes.":name==="Insider Activity"?"CEO, CFO, director and institutional signals.":name==="Short Radar"?"Short interest and pressure signals.":"Market overview and sectors."}
-document.getElementById("search").addEventListener("input", function(e) {
-    const q = e.target.value.toLowerCase();
 
-    render(
-        all.filter(function(x) {
-            return (x.name + x.ticker).toLowerCase().includes(q);
-        })
-    );
-});
+function renderDemo() {
+  const data = [
+    {
+      ticker: "LSG",
+      name: "Lerøy Seafood",
+      sector: "Seafood",
+      score: 86,
+      fundamentals: 34,
+      insider: 24,
+      valuation: 16
+    },
+    {
+      ticker: "MPCC",
+      name: "MPCC",
+      sector: "Shipping",
+      score: 80,
+      fundamentals: 36,
+      insider: 15,
+      valuation: 17
+    },
+    {
+      ticker: "ELO",
+      name: "Elopak",
+      sector: "Packaging",
+      score: 81,
+      fundamentals: 30,
+      insider: 23,
+      valuation: 16
+    },
+    {
+      ticker: "PEXIP",
+      name: "Pexip",
+      sector: "Technology",
+      score: 77,
+      fundamentals: 33,
+      insider: 18,
+      valuation: 15
+    },
+    {
+      ticker: "XPLRA",
+      name: "Xplora",
+      sector: "Technology",
+      score: 70,
+      fundamentals: 32,
+      insider: 18,
+      valuation: 14
+    }
+  ];
+
+  all = data;
+
+  render(data);
+
+  renderSignalRadar(data);
+
+  renderRadar([
+    {
+      ticker: "LSG",
+      event: "Insider + institutional activity"
+    },
+    {
+      ticker: "MPCC",
+      event: "Earnings watch"
+    },
+    {
+      ticker: "XPLRA",
+      event: "Short pressure"
+    }
+  ]);
+}
+
+function stock(ticker) {
+  const x = all.find(function(item) {
+    return item.ticker === ticker;
+  });
+
+  if (!x) {
+    return;
+  }
+
+  document.getElementById("dash").classList.add("hide");
+  document.getElementById("detail").classList.add("show");
+
+  document.getElementById("title").textContent = x.name;
+  document.getElementById("sub").textContent =
+    "Stock intelligence · " + x.ticker;
+
+  document.getElementById("dname").textContent = x.name;
+  document.getElementById("dticker").textContent =
+    x.ticker + " · " + x.sector;
+
+  document.getElementById("dscore").textContent = x.score;
+  document.getElementById("df").textContent =
+    x.fundamentals + "/40";
+  document.getElementById("di").textContent =
+    x.insider + "/25";
+  document.getElementById("dv").textContent =
+    x.valuation + "/20";
+}
+
+function back() {
+  document.getElementById("detail").classList.remove("show");
+  document.getElementById("dash").classList.remove("hide");
+
+  document.getElementById("title").textContent =
+    "Market Dashboard";
+
+  document.getElementById("sub").textContent =
+    "Signal-driven stock intelligence";
+}
+
+function page(name, element) {
+  document.querySelectorAll("nav a").forEach(function(x) {
+    x.classList.remove("active");
+  });
+
+  element.classList.add("active");
+
+  if (name === "Dashboard") {
+    back();
+    return;
+  }
+
+  document.getElementById("dash").classList.remove("hide");
+  document.getElementById("detail").classList.remove("show");
+
+  document.getElementById("title").textContent = name;
+
+  if (name === "Stock Radar") {
+    document.getElementById("sub").textContent =
+      "Market-wide ranking of model signals.";
+  } else if (name === "Watchlist") {
+    document.getElementById("sub").textContent =
+      "Saved companies and score changes.";
+  } else if (name === "Insider Activity") {
+    document.getElementById("sub").textContent =
+      "CEO, CFO, director and institutional signals.";
+  } else if (name === "Short Radar") {
+    document.getElementById("sub").textContent =
+      "Short interest and pressure signals.";
+  } else {
+    document.getElementById("sub").textContent =
+      "Market overview and sectors.";
+  }
+}
+
+document.getElementById("search").addEventListener(
+  "input",
+  function(event) {
+    const query = event.target.value.toLowerCase();
+
+    const filtered = all.filter(function(x) {
+      return (
+        x.name.toLowerCase().includes(query) ||
+        x.ticker.toLowerCase().includes(query)
+      );
+    });
+
+    render(filtered);
+  }
+);
 
 load();
-</script></body></html>
+</script>
