@@ -28,13 +28,16 @@
 </main></div>
 <script>
 const API="https://nordicsignal-api.onrender.com";
-let all=[];
-async function load(){try{const s=await fetch(API+"/api/stocks");all=s.items;render(all);const r=await fetch(API+"/api/radar");renderRadar((await r.json()).items)}catch(e){renderDemo();}}
+let all = [];
+let universe = [];
+async function load(){try{const s=await fetch(API+"/api/stocks");all = s.items;
+universe = [...s.items];
+render(all);const r=await fetch(API+"/api/radar");renderRadar((await r.json()).items)}catch(e){renderDemo();}}
 function render(items) {
-  document.getElementById("count").textContent = all.length;
+  document.getElementById("count").textContent = universe.length;
 
-  document.getElementById("strong").textContent =
-    all.filter(x => x.score >= 80).length;
+document.getElementById("strong").textContent =
+  universe.filter(x => x.score >= 80).length;
 
   document.getElementById("stocks").innerHTML = items.map(x => `
     <div class="row">
