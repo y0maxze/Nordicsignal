@@ -41,10 +41,14 @@ let searchTimer;
 document.getElementById("search").addEventListener("input", function(e) {
   const q = e.target.value.trim();
 
+  const resultsBox = document.getElementById("searchResults");
+  const resultsList = document.getElementById("searchResultsList");
+
   clearTimeout(searchTimer);
 
   if (!q) {
-    render(all);
+    resultsBox.style.display = "none";
+    resultsList.innerHTML = "";
     return;
   }
 
@@ -60,9 +64,11 @@ document.getElementById("search").addEventListener("input", function(e) {
 
       const data = await response.json();
 
+      resultsBox.style.display = "block";
+
       if (!data.items || data.items.length === 0) {
-        document.getElementById("stocks").innerHTML = `
-          <div class="sub" style="padding:20px 0">
+        resultsList.innerHTML = `
+          <div class="sub" style="padding:12px">
             No stocks found for "${q}"
           </div>
         `;
@@ -70,34 +76,71 @@ document.getElementById("search").addEventListener("input", function(e) {
       }
 
       const results = await Promise.all(
-        data.items.map(async item => {
+        data.items.map(async function(item) {
           try {
             const stockResponse = await fetch(
               API + "/api/stocks/" + item.ticker
             );
 
-            if (!stockResponse.ok) return item;
+            if (!stockResponse.ok) {
+              return item;
+            }
 
             return await stockResponse.json();
-          } catch {
+
+          } catch (error) {
             return item;
           }
         })
       );
 
-      all = all.filter(
-        x => !data.items.some(item => item.ticker === x.ticker)
-      );
+      resultsList.innerHTML = results.map(function(x) {
+        return `
+          <div
+            onclick="stock('${x.ticker}')"
+            style="
+              padding:13px;
+              border-top:1px solid var(--line);
+              cursor:pointer;
+            "
+          >
+            <strong>${x.name}</strong>
 
-      all = [...all, ...results];
+            <div class="sub">
+              ${x.ticker} · ${x.sector || ""} · ${x.exchange || "Oslo Børs"}
+            </div>
 
-      render(results);
+            ${
+              x.score !== undefined
+                ? `
+                  <div style="
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                    margin-top:8px;
+                  ">
+                    <span class="badge ${x.score < 80 ? "watch" : ""}">
+                      ${x.signal || "—"}
+                    </span>
+
+                    <strong class="${x.score >= 80 ? "g" : "y"}">
+                      ${x.score}/100
+                    </strong>
+                  </div>
+                `
+                : ""
+            }
+          </div>
+        `;
+      }).join("");
 
     } catch (error) {
       console.error(error);
 
-      document.getElementById("stocks").innerHTML = `
-        <div class="sub" style="padding:20px 0">
+      resultsBox.style.display = "block";
+
+      resultsList.innerHTML = `
+        <div class="sub" style="padding:12px">
           Search unavailable.
         </div>
       `;
