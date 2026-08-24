@@ -28,7 +28,7 @@ class _Parser(HTMLParser):
 
 
 ISSUERS={
- 'LSG':('Lerøy Seafood Group ASA',('lerøy seafood','leroy seafood')),
+ 'LSG':('Lerøy Seafood Group ASA',('lerøy seafood','leroy seafood','lerøy seafood group','leroy seafood group')),
  'MPCC':('MPC Container Ships',('mpc container ships',)), 'ELO':('Elopak',('elopak',)),
  'PEXIP':('Pexip',('pexip',)), 'XPLRA':('Xplora Technologies',('xplora',)), 'EQNR':('Equinor',('equinor',)),
  'DNB':('DNB',('dnb',)), 'NHY':('Norsk Hydro',('norsk hydro',)), 'YAR':('Yara International',('yara international','yara')),
@@ -40,23 +40,23 @@ ISSUERS={
  'CMBTO':('CMB.TECH',('cmb.tech','cmbt','cmbto')), 'VAR':('Vår Energi',('vår energi','var energi')),
 }
 
-# Stable issuer archive pages. The generic company-news page is retained as a
-# fallback, but every candidate is verified against the issuer before it can
-# become an insider disclosure.
+# Known issuer pages are preferred. The generic company-news page remains the
+# fallback so the provider can cover the full Oslo universe without a brittle
+# hard-coded page id for every company.
 ISSUER_ARCHIVES={
- 'LSG':'https://live.euronext.com/en/listview/company-press-release/108681',
- 'AKRBP':'https://live.euronext.com/en/listview/company-press-release/148951',
- 'AKSO':'https://live.euronext.com/en/listview/company-press-release/208056',
- 'BWLPG':'https://live.euronext.com/en/listview/company-press-release/203005',
+ 'LSG':'https://live.euronext.com/en/product/equities/NO0003096208-XOSL',
+ 'AKRBP':'https://live.euronext.com/en/product/equities/NO0010345853-XOSL',
+ 'AKSO':'https://live.euronext.com/en/product/equities/NO0010716582-XOSL',
+ 'BWLPG':'https://live.euronext.com/en/product/equities/BMG173841013-XOSL',
 }
 
 PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
-BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|kjøpt|kjøpte|kjøp|kjøpte)\b',re.I)
-SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg)\b',re.I)
-SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg).{0,220}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
+BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|kjøpte|ervervet|ervervelse)\b',re.I)
+SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendelse)\b',re.I)
+SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 
 _CACHE={}
-_CACHE_TTL=90
+_CACHE_TTL=45
 
 
 def norm(v): return re.sub(r'[^a-z0-9]+',' ',(v or '').lower().replace('ø','o').replace('æ','ae').replace('å','a')).strip()
@@ -72,8 +72,6 @@ def date_of(t):
 def issuer_ok(body,ticker,name,title=''):
     n=norm(' '.join((body or '', title or '')))
     cname,aliases=ISSUERS.get(ticker,(name,()))
-    # Require an explicit issuer/company identity. This prevents generic
-    # Newspoint pages from leaking unrelated issuers such as Scatec into LSG.
     return any(x and norm(x) in n for x in (cname,*aliases,name))
 
 
@@ -87,7 +85,7 @@ def parse_trade(body,ticker,title,source,url):
     for p in patterns:
         mm=re.search(p,body,re.I)
         if mm: person=mm.group(1).strip(); break
-    return {'ticker':ticker,'date':date_of(body) or date_of(title),'trade_date':date_of(body),'title':title or 'Primary insider transaction','direction':direction,'transaction_type':direction if direction in ('buy','sell') else 'other','shares':shares,'insider':person,'source':source,'verified_detail':direction in ('buy','sell') or shares is not None,'summary':' '.join(body.split())[:1000],'url':url}
+    return {'ticker':ticker,'date':date_of(body) or date_of(title),'trade_date':date_of(body),'title':title or 'Primary insider transaction','direction':direction,'transaction_type':direction if direction in ('buy','sell') else 'other','shares':shares,'insider':person,'source':source,'verified_detail':direction in ('buy','sell') or shares is not None,'issuer_verified':True,'summary':' '.join(body.split())[:1000],'url':url}
 
 
 def fetch(session,url,params=None):
@@ -109,14 +107,12 @@ def fetch(session,url,params=None):
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v4',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v5',False): return
 
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
-        cache_key=ticker
-        cached=_CACHE.get(cache_key)
-        if cached and time.time()-cached[0] < _CACHE_TTL:
-            return cached[1]
+        cached=_CACHE.get(ticker)
+        if cached and time.time()-cached[0] < _CACHE_TTL: return cached[1]
 
         session=getattr(self,'session',requests.Session(impersonate='chrome'))
         candidates=[]; seen=set(); pages=[]
@@ -128,59 +124,54 @@ def install():
             except Exception: continue
             p=_Parser(); p.feed(html)
             for href,label in p.links:
-                if '/products/equities/company-news/' not in href: continue
-                full=href if href.startswith('http') else 'https://live.euronext.com'+href
-                if full in seen: continue
+                full=href if href and href.startswith('http') else ('https://live.euronext.com'+href if href else '')
+                if not full or full in seen: continue
                 low=norm(label)
-                if ticker in ISSUER_ARCHIVES or any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig')):
+                # Euronext has used multiple URL layouts for regulated news.
+                # Validate the issuer on the detail page rather than relying on
+                # the URL path, which prevents false matches without dropping
+                # legitimate LSG notices.
+                if any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig')) or ticker in ISSUER_ARCHIVES:
                     seen.add(full); candidates.append((full,label))
 
         items=[]
-        for url,label in candidates[:60]:
+        for url,label in candidates[:80]:
             try:
                 detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text; low=norm(body)
                 if not any(norm(x) in low for x in PHRASES): continue
                 if not issuer_ok(body,ticker,name,label): continue
-                item=parse_trade(body,ticker,label,'Euronext Oslo Børs Newspoint',url)
-                # Keep only actual trade disclosures. Unknown-detail notices are
-                # useful activity metadata but must never be scored as a buy/sell.
-                if item['verified_detail']: items.append(item)
+                # Keep issuer-verified disclosures even when the detail page
+                # exposes only the headline. Direction/quantity are scored only
+                # when actually parsed, but the disclosure itself remains live.
+                items.append(parse_trade(body,ticker,label,'Euronext Oslo Børs Newspoint',url))
             except Exception: continue
 
-        # Yahoo syndicated issuer-release fallback. It is accepted only when
-        # the article itself identifies the requested issuer.
-        if not items:
-            try:
-                q=quote(f'{name} Primary Insider Transaction')
-                data=session.get(f'https://query2.finance.yahoo.com/v1/finance/search?q={q}&newsCount=10',timeout=15).json()
-                for n in data.get('news',[]):
-                    title=n.get('title',''); url=n.get('link') or ''
-                    if not any(x in norm(title) for x in ('primary insider','primærinsider','mandatory notification','meldepliktig')): continue
-                    try:
-                        detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text
-                    except Exception: continue
-                    if not issuer_ok(body,ticker,name,title) or not any(norm(x) in norm(body) for x in PHRASES): continue
-                    item=parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url)
-                    if item['verified_detail']: items.append(item)
-            except Exception: pass
+        # Yahoo syndicated issuer-release fallback.
+        try:
+            q=quote(f'{name} Primary Insider Transaction')
+            data=session.get(f'https://query2.finance.yahoo.com/v1/finance/search?q={q}&newsCount=20',timeout=15).json()
+            for n in data.get('news',[]):
+                title=n.get('title',''); url=n.get('link') or ''
+                if not any(x in norm(title) for x in ('primary insider','primærinsider','mandatory notification','meldepliktig')): continue
+                try:
+                    detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text
+                except Exception: continue
+                if not issuer_ok(body,ticker,name,title) or not any(norm(x) in norm(body) for x in PHRASES): continue
+                items.append(parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url))
+        except Exception: pass
 
         dedup={}
         for x in items:
             k=(x.get('url'),x.get('date'),x.get('direction'),x.get('shares'),norm(x.get('insider')))
             if k not in dedup: dedup[k]=x
         items=sorted(dedup.values(),key=lambda x:x.get('date') or '',reverse=True)[:12]
-        buys=sum(x['direction']=='buy' for x in items); sells=sum(x['direction']=='sell' for x in items)
+        buys=sum(x['direction']=='buy' for x in items); sells=sum(x['direction']=='sell' for x in items); unknown=len(items)-buys-sells
         now=datetime.now(timezone.utc).isoformat()
-        if items:
-            result={'ticker':ticker,'items':items,'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'live','buy_count':buys,'sell_count':sells,'unknown_count':len(items)-buys-sells,'verified_detail_count':len(items),'signal':'buying' if buys>sells else 'selling' if sells>buys else 'activity','updated_at':now}
-        else:
-            # This is a successful live regulatory check, not a data failure.
-            # Keep items empty when there genuinely are no verified trades.
-            result={'ticker':ticker,'items':[],'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'live','buy_count':0,'sell_count':0,'unknown_count':0,'verified_detail_count':0,'signal':'no_activity','updated_at':now}
-        _CACHE[cache_key]=(time.time(),result)
+        result={'ticker':ticker,'items':items,'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'live','buy_count':buys,'sell_count':sells,'unknown_count':unknown,'verified_detail_count':sum(1 for x in items if x.get('verified_detail')),'signal':'buying' if buys>sells else 'selling' if sells>buys else 'activity' if items else 'no_activity','updated_at':now,'provider_checked':True}
+        _CACHE[ticker]=(time.time(),result)
         return result
 
     NordicRegulatoryProvider.insider=insider
-    NordicRegulatoryProvider._robust_insider_patch_v4=True
+    NordicRegulatoryProvider._robust_insider_patch_v5=True
 
 install()
