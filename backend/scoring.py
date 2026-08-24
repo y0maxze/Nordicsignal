@@ -5,9 +5,11 @@ def calculate_score(fundamentals, insider, valuation, sentiment):
     return clamp(fundamentals + insider + valuation + sentiment, 0, 100)
 
 def signal_label(score):
-    if score >= 85:
+    """Human-readable signal band for the 0–100 model score."""
+    score = float(score or 0)
+    if score >= 80:
         return "Strong"
-    if score >= 75:
+    if score >= 70:
         return "Watch"
     if score >= 60:
         return "Neutral"
