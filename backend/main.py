@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import connect, init_db
 from scoring import signal_label
 from providers import YahooProvider, NordicRegulatoryProvider
+from extra_api import install as install_extra_api
 
 try:
     import sitecustomize as _nordicsignal_runtime_patch
@@ -17,6 +18,7 @@ except Exception:
 
 app = FastAPI(title="NordicSignal API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+install_extra_api(app)
 
 UNIVERSE = [("LSG", "Lerøy Seafood", "Seafood"), ("MPCC", "MPC Container Ships", "Shipping"), ("ELO", "Elopak", "Packaging"), ("PEXIP", "Pexip", "Technology"), ("XPLRA", "Xplora Technologies", "Technology"), ("EQNR", "Equinor", "Energy"), ("DNB", "DNB", "Financials"), ("NHY", "Norsk Hydro", "Materials"), ("YAR", "Yara International", "Chemicals"), ("MOWI", "Mowi", "Seafood"), ("SALM", "SalMar", "Seafood"), ("GJF", "Gjensidige Forsikring", "Financials"), ("TEL", "Telenor", "Telecom"), ("ORK", "Orkla", "Consumer"), ("TOM", "Tomra Systems", "Industrials"), ("KOG", "Kongsberg Gruppen", "Industrials"), ("NAS", "Norwegian Air Shuttle", "Airlines"), ("AKRBP", "Aker BP", "Energy"), ("AKSO", "Aker Solutions", "Energy"), ("SUBC", "Subsea 7", "Energy"), ("BWLPG", "BW LPG", "Shipping"), ("HAUTO", "Höegh Autoliners", "Shipping"), ("CMBTO", "CMB.TECH", "Shipping"), ("VAR", "Vår Energi", "Energy")]
 TICKERS = [x[0] for x in UNIVERSE]
@@ -96,13 +98,7 @@ def sentiment_score(history):
 
 
 def insider_score(data):
-    """Return a score only when insider coverage is actually verified.
-
-    A clean provider check with zero disclosures is verified no-activity and
-    receives the neutral baseline. Disclosures whose issuer is verified but
-    whose trade direction/quantity could not be parsed are not enough to claim
-    a fully verified insider score; those stocks remain partial_live.
-    """
+    """Return a score only when insider coverage is actually verified."""
     if not data or data.get("status") not in ("live", "no_recent_disclosures", "partial_live"):
         return None
     items = data.get("items") or []
