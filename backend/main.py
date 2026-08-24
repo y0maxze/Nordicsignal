@@ -125,3 +125,21 @@ def add_watchlist(ticker: str):
     conn.commit()
     conn.close()
     return {"status": "ok", "ticker": ticker.upper()}
+    
+@app.delete("/api/watchlist/{ticker}")
+def remove_watchlist(ticker: str):
+    conn = connect()
+
+    conn.execute(
+        "DELETE FROM watchlist WHERE ticker=?",
+        (ticker.upper(),)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "ok",
+        "ticker": ticker.upper()
+    }
+    
