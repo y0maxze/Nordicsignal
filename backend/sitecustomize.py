@@ -1,9 +1,4 @@
-"""Runtime patch for live insider disclosures from Euronext Oslo Børs Newspoint.
-
-Python imports sitecustomize during normal interpreter startup.  We use this small
-compatibility layer so the existing provider can be improved without replacing
-the working market-data code in providers.py.
-"""
+"""Runtime patch for live insider disclosures from Euronext Oslo Børs Newspoint."""
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin
 import re
@@ -33,16 +28,18 @@ def _install_insider_patch():
         html = self._html(self.EURONEXT_NEWS, params=params)
         parser = self._parser(html)
         candidates = []
+        seen = set()
         insider_terms = (
-            "primary insider",
-            "primary insiders",
-            "insider transaction",
-            "insider notification",
-            "mandatory notification of trade",
-            "primærinsider",
-            "primærinsidetransaksjon",
-            "meldepliktig handel",
+            "primary insider", "primary insiders", "insider transaction",
+            "insider notification", "mandatory notification of trade",
+            "primærinsider", "primærinsidetransaksjon", "meldepliktig handel",
+            "pdmr",
         )
+        company_terms = [x for x in {
+            self._norm(company_name),
+            self._norm(company_name.replace("ASA", "")),
+            self._norm(ticker),
+        } if x]
 
         for href, text in parser.links:
             title = " ".join((text or "").split())
@@ -51,16 +48,22 @@ def _install_insider_patch():
                 continue
             if "buyback" in low or "share buyback" in low or "tilbakekjøp" in low:
                 continue
+            # Euronext uses several URL forms (including /listview/company-press-release/).
+            # Do not require a particular path; identify the issuer from the link text.
+            company_match = any(term in self._norm(title) for term in company_terms)
+            if company_terms and not company_match:
+                continue
             url = urljoin(self.EURONEXT_NEWS, href)
-            if url not in {x["url"] for x in candidates}:
-                candidates.append({"url": url, "title": title})
+            if url in seen:
+                continue
+            seen.add(url)
+            candidates.append({"url": url, "title": title})
             if len(candidates) >= 12:
                 break
 
         items = []
         buy_count = 0
         sell_count = 0
-
         for candidate in candidates:
             try:
                 detail_html = self._html(candidate["url"])
@@ -69,12 +72,13 @@ def _install_insider_patch():
             except Exception:
                 body = ""
 
-            combined = f"{candidate['title']} {body}".lower()
+            combined = f"{candidate['title']} {body}"
+            low = combined.lower()
             direction = "unknown"
-            if re.search(r"\b(bought|buy|purchased|acquired|acquisition|kjøpt|kjøpte|kjøp|ervervet|erverv)\b", combined):
+            if re.search(r"\b(bought|buy|purchased|acquired|acquisition|purchase|kjøpt|kjøpte|kjøp|ervervet|erverv)\b", low):
                 direction = "buy"
                 buy_count += 1
-            elif re.search(r"\b(sold|sell|sale|disposed|disposal|solgte|solgt|salg|avhendet|avhending)\b", combined):
+            elif re.search(r"\b(sold|sell|sale|disposed|disposal|solgte|solgt|salg|avhendet|avhending)\b", low):
                 direction = "sell"
                 sell_count += 1
 
@@ -84,7 +88,7 @@ def _install_insider_patch():
                 "direction": direction,
                 "url": candidate["url"],
                 "source": "Oslo Børs Newspoint",
-                "text": body[:1200],
+                "text": body[:1600],
             })
 
         if not items:
