@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 from curl_cffi import requests
 
 
@@ -40,9 +40,6 @@ ISSUERS={
  'CMBTO':('CMB.TECH',('cmb.tech','cmbt','cmbto')), 'VAR':('Vår Energi',('vår energi','var energi')),
 }
 
-# Known issuer pages are preferred. The generic company-news page remains the
-# fallback so the provider can cover the full Oslo universe without a brittle
-# hard-coded page id for every company.
 ISSUER_ARCHIVES={
  'LSG':'https://live.euronext.com/en/product/equities/NO0003096208-XOSL',
  'AKRBP':'https://live.euronext.com/en/product/equities/NO0010345853-XOSL',
@@ -51,7 +48,7 @@ ISSUER_ARCHIVES={
 }
 
 PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
-BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|kjøpte|ervervet|ervervelse)\b',re.I)
+BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|ervervet|ervervelse)\b',re.I)
 SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendelse)\b',re.I)
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 
@@ -104,10 +101,20 @@ def fetch(session,url,params=None):
     raise last or RuntimeError('request failed')
 
 
+def canonical_url(url):
+    """Collapse Euronext language variants to one disclosure URL identity."""
+    try:
+        parts=urlsplit(url)
+        path=re.sub(r'^/(?:en|fr|nb|nl|pt|de|it|el)(?=/)', '', parts.path, flags=re.I)
+        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ''))
+    except Exception:
+        return url
+
+
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v5',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v6',False): return
 
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
@@ -125,14 +132,11 @@ def install():
             p=_Parser(); p.feed(html)
             for href,label in p.links:
                 full=href if href and href.startswith('http') else ('https://live.euronext.com'+href if href else '')
-                if not full or full in seen: continue
+                canonical=canonical_url(full)
+                if not full or canonical in seen: continue
                 low=norm(label)
-                # Euronext has used multiple URL layouts for regulated news.
-                # Validate the issuer on the detail page rather than relying on
-                # the URL path, which prevents false matches without dropping
-                # legitimate LSG notices.
                 if any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig')) or ticker in ISSUER_ARCHIVES:
-                    seen.add(full); candidates.append((full,label))
+                    seen.add(canonical); candidates.append((full,label))
 
         items=[]
         for url,label in candidates[:80]:
@@ -140,13 +144,9 @@ def install():
                 detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text; low=norm(body)
                 if not any(norm(x) in low for x in PHRASES): continue
                 if not issuer_ok(body,ticker,name,label): continue
-                # Keep issuer-verified disclosures even when the detail page
-                # exposes only the headline. Direction/quantity are scored only
-                # when actually parsed, but the disclosure itself remains live.
                 items.append(parse_trade(body,ticker,label,'Euronext Oslo Børs Newspoint',url))
             except Exception: continue
 
-        # Yahoo syndicated issuer-release fallback.
         try:
             q=quote(f'{name} Primary Insider Transaction')
             data=session.get(f'https://query2.finance.yahoo.com/v1/finance/search?q={q}&newsCount=20',timeout=15).json()
@@ -160,18 +160,23 @@ def install():
                 items.append(parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url))
         except Exception: pass
 
+        # Deduplicate translated Euronext copies of the same disclosure.
+        # URL alone is insufficient because the same notice exists at /en/,
+        # /nb/, /fr/, etc. Use disclosure facts instead.
         dedup={}
         for x in items:
-            k=(x.get('url'),x.get('date'),x.get('direction'),x.get('shares'),norm(x.get('insider')))
+            k=(x.get('date'),x.get('direction'),x.get('shares'),norm(x.get('insider')),norm(x.get('summary',''))[:240])
             if k not in dedup: dedup[k]=x
         items=sorted(dedup.values(),key=lambda x:x.get('date') or '',reverse=True)[:12]
         buys=sum(x['direction']=='buy' for x in items); sells=sum(x['direction']=='sell' for x in items); unknown=len(items)-buys-sells
+        verified_detail_count=sum(1 for x in items if x.get('verified_detail'))
         now=datetime.now(timezone.utc).isoformat()
-        result={'ticker':ticker,'items':items,'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'live','buy_count':buys,'sell_count':sells,'unknown_count':unknown,'verified_detail_count':sum(1 for x in items if x.get('verified_detail')),'signal':'buying' if buys>sells else 'selling' if sells>buys else 'activity' if items else 'no_activity','updated_at':now,'provider_checked':True}
+        status='live' if not items or verified_detail_count > 0 else 'partial_live'
+        result={'ticker':ticker,'items':items,'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':status,'buy_count':buys,'sell_count':sells,'unknown_count':unknown,'verified_detail_count':verified_detail_count,'signal':'buying' if buys>sells else 'selling' if sells>buys else 'activity' if items else 'no_activity','updated_at':now,'provider_checked':True}
         _CACHE[ticker]=(time.time(),result)
         return result
 
     NordicRegulatoryProvider.insider=insider
-    NordicRegulatoryProvider._robust_insider_patch_v5=True
+    NordicRegulatoryProvider._robust_insider_patch_v6=True
 
 install()
