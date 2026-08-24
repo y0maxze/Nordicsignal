@@ -6,7 +6,7 @@ from database import connect, init_db
 from scoring import calculate_score, signal_label
 from providers import YahooProvider
 
-app = FastAPI(title="NordicSignal API", version="2.1.0")
+app = FastAPI(title="NordicSignal API", version="2.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 SEED = [
@@ -100,9 +100,20 @@ def sentiment_score(history):
 
 
 def refresh_one(ticker):
+    """Calculate a score only from a successful live Yahoo research/history fetch.
+
+    Seeded/stored scores are never relabeled as live. A live refresh failure is
+    returned explicitly so callers can distinguish unavailable live data from
+    an actual live score.
+    """
+    ticker = ticker.upper()
     try:
         research = provider.research(ticker)
         history = provider.historical(ticker, "3m")
+        if not research:
+            raise RuntimeError("Yahoo Finance returned no research data")
+        if len(history) < 5:
+            raise RuntimeError("Yahoo Finance returned insufficient historical data")
         f = fundamentals_score(research)
         i = insider_score(research)
         v = valuation_score(research)
@@ -112,9 +123,9 @@ def refresh_one(ticker):
         conn = connect()
         conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, f, i, v, s, total, now, "live"))
         conn.commit(); conn.close()
-        return {"ticker": ticker, "score": total, "source": "live", "updated_at": now}
+        return {"ticker": ticker, "score": total, "source": "live", "live_verified": True, "updated_at": now, "components": {"fundamentals": f, "insider": i, "valuation": v, "sentiment": s}}
     except Exception as exc:
-        return {"ticker": ticker, "source": "stored", "error": str(exc)}
+        return {"ticker": ticker, "source": "stored", "live_verified": False, "error": str(exc)}
 
 
 def refresh_all():
@@ -130,12 +141,48 @@ def startup():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "NordicSignal API", "version": "2.1.0", "provider": "Yahoo Finance"}
+    return {"status": "ok", "service": "NordicSignal API", "version": "2.2.0", "provider": "Yahoo Finance", "score_policy": "live_only_or_explicit_stored"}
 
 
 @app.get("/api/refresh")
 def refresh():
     return {"status": "ok", "results": refresh_all()}
+
+
+@app.get("/api/verification")
+def verification():
+    """Show whether the currently displayed score is backed by live data."""
+    conn = connect()
+    rows = conn.execute("""SELECT s.ticker,s.name,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source
+        FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker)
+        WHERE s.active=1 ORDER BY s.ticker""").fetchall()
+    conn.close()
+    now = datetime.now(timezone.utc)
+    items = []
+    for r in rows:
+        try:
+            updated = datetime.fromisoformat(r["created_at"])
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            age_seconds = max(0, int((now - updated).total_seconds()))
+        except Exception:
+            age_seconds = None
+        items.append({
+            "ticker": r["ticker"],
+            "name": r["name"],
+            "score": r["total"],
+            "source": r["source"],
+            "live_verified": r["source"] == "live",
+            "updated_at": r["created_at"],
+            "age_seconds": age_seconds,
+            "components": {
+                "fundamentals": r["fundamentals"],
+                "insider": r["insider"],
+                "valuation": r["valuation"],
+                "sentiment": r["sentiment"],
+            },
+        })
+    return {"status": "ok", "items": items, "all_live_verified": bool(items) and all(x["live_verified"] for x in items)}
 
 
 @app.get("/api/stocks")
@@ -144,7 +191,7 @@ def stocks():
     rows = conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source
         FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker)
         WHERE s.active=1 ORDER BY sc.total DESC""").fetchall(); conn.close()
-    return {"items": [{"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"score_updated_at":r["created_at"]} for r in rows]}
+    return {"items": [{"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"live_verified":r["source"] == "live","score_updated_at":r["created_at"]} for r in rows]}
 
 
 @app.get("/api/search")
@@ -159,7 +206,7 @@ def search(q: str = ""):
 def stock(ticker: str):
     conn=connect(); r=conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source FROM stocks s JOIN scores sc ON sc.ticker=s.ticker WHERE s.ticker=? ORDER BY sc.id DESC LIMIT 1""",(ticker.upper(),)).fetchone(); conn.close()
     if not r: return {"error":"Ticker not found"}
-    return {"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"score_updated_at":r["created_at"]}
+    return {"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"live_verified":r["source"] == "live","score_updated_at":r["created_at"]}
 
 
 @app.get("/api/quote/{ticker}")
