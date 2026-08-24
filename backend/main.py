@@ -140,7 +140,31 @@ def radar():
         ORDER BY total DESC LIMIT 10
     """).fetchall()
     conn.close()
-    return {"items": [{"ticker": r["ticker"], "score": r["total"]} for r in rows]}
+
+    items = []
+    for r in rows:
+        score = r["total"]
+        if score >= 85:
+            event = "Strong signal"
+            strength = "strong"
+        elif score >= 75:
+            event = "Watch signal"
+            strength = "watch"
+        elif score >= 60:
+            event = "Neutral signal"
+            strength = "neutral"
+        else:
+            event = "Risk signal"
+            strength = "risk"
+
+        items.append({
+            "ticker": r["ticker"],
+            "score": score,
+            "event": event,
+            "strength": strength,
+        })
+
+    return {"items": items}
 
 @app.get("/api/watchlist")
 def get_watchlist():
@@ -180,4 +204,3 @@ def remove_watchlist(ticker: str):
         "status": "ok",
         "ticker": ticker.upper()
     }
-    
