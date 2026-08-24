@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS scores (
     sentiment INTEGER NOT NULL,
     total INTEGER NOT NULL,
     created_at TEXT NOT NULL,
+    source TEXT DEFAULT 'stored',
     FOREIGN KEY(ticker) REFERENCES stocks(ticker)
 );
 
@@ -85,5 +86,9 @@ def connect():
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA)
+    try:
+        conn.execute("ALTER TABLE scores ADD COLUMN source TEXT DEFAULT 'stored'")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
