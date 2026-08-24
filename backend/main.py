@@ -89,7 +89,8 @@ def sentiment_score(history):
 
 
 def insider_score(data):
-    if not data or data.get("status") not in ("live", "no_recent_disclosures"): return None
+    # No disclosure is not the same thing as a verified neutral insider score.
+    if not data or data.get("status") != "live": return None
     buys, sells = int(data.get("buy_count") or 0), int(data.get("sell_count") or 0)
     if buys == 0 and sells == 0: return 12
     return clamp_score(12 + (buys - sells) * 2.5, 0, 25)
