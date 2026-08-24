@@ -32,12 +32,7 @@ class DemoProvider(MarketDataProvider):
 
 
 class YahooProvider(MarketDataProvider):
-    """Yahoo Finance adapter for Oslo-listed symbols.
-
-    Chart/OHLCV data is public. Quote-summary research endpoints require a
-    Yahoo cookie + crumb, so research is attempted but never allowed to
-    break the API; the application can safely fall back to stored data.
-    """
+    """Yahoo Finance adapter for Oslo-listed symbols."""
     BASE = "https://query1.finance.yahoo.com"
     UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36"
 
@@ -81,13 +76,14 @@ class YahooProvider(MarketDataProvider):
         price = meta.get("regularMarketPrice") or meta.get("previousClose")
         previous = meta.get("previousClose")
         change = ((price - previous) / previous * 100) if price is not None and previous else None
+        volumes = result.get("indicators", {}).get("quote", [{}])[0].get("volume") or []
         return {
             "ticker": ticker.upper(),
             "symbol": symbol,
             "price": price,
             "previous_close": previous,
             "change_pct": change,
-            "volume": (result.get("indicators", {}).get("quote", [{}])[0].get("volume") or [None])[-1],
+            "volume": volumes[-1] if volumes else None,
             "currency": meta.get("currency"),
             "exchange": meta.get("exchangeName"),
             "source": "Yahoo Finance",
@@ -95,24 +91,45 @@ class YahooProvider(MarketDataProvider):
         }
 
     def historical(self, ticker, period="1y"):
-        ranges = {"1d": ("1d", "5m"), "1w": ("5d", "1h"), "1m": ("1mo", "1d"), "3m": ("3mo", "1d"), "1y": ("1y", "1d"), "5y": ("5y", "1wk")}
+        # UI periods are intentionally explicit. Yahoo's range/interval pair
+        # controls the amount of data and therefore the chart resolution.
+        ranges = {
+            "now": ("1d", "5m"),
+            "1d": ("1d", "5m"),
+            "1w": ("5d", "1h"),
+            "1m": ("1mo", "1d"),
+            "3m": ("3mo", "1d"),
+            "6m": ("6mo", "1d"),
+            "1y": ("1y", "1d"),
+            "5y": ("5y", "1wk"),
+            "10y": ("10y", "1mo"),
+            "max": ("max", "1mo"),
+        }
         rng, interval = ranges.get(period, ranges["1y"])
-        data = self._get(f"{self.BASE}/v8/finance/chart/{self.symbol(ticker)}", {"range": rng, "interval": interval, "events": "div,splits"})
+        data = self._get(
+            f"{self.BASE}/v8/finance/chart/{self.symbol(ticker)}",
+            {"range": rng, "interval": interval, "events": "div,splits"},
+        )
         result = data["chart"]["result"][0]
         timestamps = result.get("timestamp") or []
         quote = (result.get("indicators", {}).get("quote") or [{}])[0]
         rows = []
+        closes = quote.get("close") or []
+        opens = quote.get("open") or []
+        highs = quote.get("high") or []
+        lows = quote.get("low") or []
+        volumes = quote.get("volume") or []
         for i, ts in enumerate(timestamps):
-            if i >= len(quote.get("close", [])) or quote["close"][i] is None:
+            if i >= len(closes) or closes[i] is None:
                 continue
             rows.append({
                 "timestamp": ts,
-                "date": datetime.fromtimestamp(ts, timezone.utc).date().isoformat(),
-                "open": quote.get("open", [None])[i],
-                "high": quote.get("high", [None])[i],
-                "low": quote.get("low", [None])[i],
-                "close": quote.get("close", [None])[i],
-                "volume": quote.get("volume", [None])[i],
+                "date": datetime.fromtimestamp(ts, timezone.utc).isoformat(),
+                "open": opens[i] if i < len(opens) else None,
+                "high": highs[i] if i < len(highs) else None,
+                "low": lows[i] if i < len(lows) else None,
+                "close": closes[i],
+                "volume": volumes[i] if i < len(volumes) else None,
             })
         return rows
 
@@ -130,5 +147,4 @@ class YahooProvider(MarketDataProvider):
 
 
 class RealtimeProvider(YahooProvider):
-    """Backward-compatible name for the live provider."""
     pass
