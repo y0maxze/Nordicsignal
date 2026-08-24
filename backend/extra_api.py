@@ -8,240 +8,137 @@ from database import connect
 from providers import YahooProvider
 
 
-def _now():
-    return datetime.now(timezone.utc).isoformat()
-
+def _now(): return datetime.now(timezone.utc).isoformat()
 
 def _ensure_schema():
-    conn = connect()
-    conn.executescript('''
-    CREATE TABLE IF NOT EXISTS paper_accounts (
-        id INTEGER PRIMARY KEY CHECK(id=1),
-        starting_cash REAL NOT NULL DEFAULT 100000,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS paper_trades (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        account_id INTEGER NOT NULL DEFAULT 1,
-        ticker TEXT NOT NULL,
-        side TEXT NOT NULL CHECK(side IN ('buy','sell')),
-        shares REAL NOT NULL,
-        price REAL NOT NULL,
-        fee REAL NOT NULL DEFAULT 0,
-        executed_at TEXT NOT NULL,
-        note TEXT,
-        FOREIGN KEY(account_id) REFERENCES paper_accounts(id)
-    );
-    ''')
+    conn=connect(); conn.executescript('''CREATE TABLE IF NOT EXISTS paper_accounts (id INTEGER PRIMARY KEY CHECK(id=1), starting_cash REAL NOT NULL DEFAULT 100000, created_at TEXT NOT NULL, updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS paper_trades (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL DEFAULT 1, ticker TEXT NOT NULL, side TEXT NOT NULL CHECK(side IN ('buy','sell')), shares REAL NOT NULL, price REAL NOT NULL, fee REAL NOT NULL DEFAULT 0, executed_at TEXT NOT NULL, note TEXT, FOREIGN KEY(account_id) REFERENCES paper_accounts(id));''')
     if not conn.execute('SELECT 1 FROM paper_accounts WHERE id=1').fetchone():
-        now = _now()
-        conn.execute('INSERT INTO paper_accounts(id,starting_cash,created_at,updated_at) VALUES(1,?,?,?)',(100000,now,now))
+        now=_now(); conn.execute('INSERT INTO paper_accounts(id,starting_cash,created_at,updated_at) VALUES(1,?,?,?)',(100000,now,now))
     conn.commit(); conn.close()
 
-
 class TradeIn(BaseModel):
-    ticker: str = Field(min_length=1, max_length=12)
-    side: str
-    shares: float = Field(gt=0)
-    price: float | None = Field(default=None, gt=0)
-    fee: float = Field(default=0, ge=0)
-    note: str | None = Field(default=None, max_length=240)
+    ticker:str=Field(min_length=1,max_length=12); side:str; shares:float=Field(gt=0); price:float|None=Field(default=None,gt=0); fee:float=Field(default=0,ge=0); note:str|None=Field(default=None,max_length=240)
+class AccountIn(BaseModel): starting_cash:float=Field(gt=0,le=1000000000)
 
-
-class AccountIn(BaseModel):
-    starting_cash: float = Field(gt=0, le=1000000000)
-
-
-def _quote(provider, ticker):
-    q = provider.quote(ticker)
-    if q.get('price') is None:
-        raise HTTPException(502, detail='Live quote unavailable')
+def _quote(provider,ticker):
+    q=provider.quote(ticker)
+    if q.get('price') is None: raise HTTPException(502,detail='Live quote unavailable')
     return q
 
-
 def _positions(provider):
-    conn = connect()
-    account = conn.execute('SELECT starting_cash FROM paper_accounts WHERE id=1').fetchone()
-    trades = conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id').fetchall()
-    conn.close()
-    starting = float(account['starting_cash']) if account else 100000.0
-    cash = starting
-    positions = {}
-    cost_layers = {}
-    realized = {}
+    conn=connect(); account=conn.execute('SELECT starting_cash FROM paper_accounts WHERE id=1').fetchone(); trades=conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id').fetchall(); conn.close()
+    starting=float(account['starting_cash']) if account else 100000.; cash=starting; positions={}; layers={}; realized={}
     for t in trades:
         ticker=t['ticker']; shares=float(t['shares']); price=float(t['price']); gross=shares*price; fee=float(t['fee'] or 0)
-        if t['side']=='buy':
-            cash -= gross + fee
-            positions[ticker]=positions.get(ticker,0)+shares
-            cost_layers.setdefault(ticker, []).append([shares, gross + fee])
-        else:
-            held=positions.get(ticker,0)
-            if shares > held + 1e-10:
-                # Historical data should never contain an invalid sell, but keep
-                # portfolio reconstruction deterministic if old data is present.
-                shares = held
-            cash += gross - fee
-            positions[ticker]=positions.get(ticker,0)-shares
-            remaining=shares; removed_cost=0.0
-            layers=cost_layers.setdefault(ticker, [])
-            while remaining > 1e-10 and layers:
-                layer_shares, layer_cost=layers[0]
-                take=min(remaining, layer_shares)
-                unit_cost=layer_cost/layer_shares if layer_shares else 0.0
-                removed_cost += take*unit_cost
-                layer_shares -= take; layer_cost -= take*unit_cost; remaining -= take
-                if layer_shares <= 1e-10: layers.pop(0)
-                else: layers[0]=[layer_shares, layer_cost]
-            realized[ticker]=realized.get(ticker,0.0)+(gross-fee-removed_cost)
+        if t['side']=='buy': cash-=gross+fee; positions[ticker]=positions.get(ticker,0)+shares; layers.setdefault(ticker,[]).append([shares,gross+fee]); continue
+        held=positions.get(ticker,0)
+        if shares>held+1e-10: shares=held
+        cash+=gross-fee; positions[ticker]=positions.get(ticker,0)-shares; remaining=shares; removed=0.; queue=layers.setdefault(ticker,[])
+        while remaining>1e-10 and queue:
+            ls,lc=queue[0]; take=min(remaining,ls); unit=lc/ls if ls else 0.; removed+=take*unit; ls-=take; lc-=take*unit; remaining-=take
+            if ls<=1e-10: queue.pop(0)
+            else: queue[0]=[ls,lc]
+        realized[ticker]=realized.get(ticker,0.)+(gross-fee-removed)
     result=[]
-    for ticker, shares in positions.items():
-        if abs(shares) < 1e-10: continue
-        try: q=_quote(provider,ticker); price=float(q['price'])
+    for ticker,shares in positions.items():
+        if abs(shares)<1e-10: continue
+        try: price=float(_quote(provider,ticker)['price'])
         except Exception: price=None
-        value=shares*price if price is not None else None
-        layers=cost_layers.get(ticker,[])
-        cost=sum(layer[1] for layer in layers)
-        pnl=(value-cost) if value is not None else None
-        result.append({'ticker':ticker,'shares':shares,'price':price,'value':value,'cost_basis':cost,'pnl':pnl,'realized_pnl':realized.get(ticker,0.0),'change_pct':(pnl/cost*100 if pnl is not None and cost else None)})
-    market_value=sum(x['value'] or 0 for x in result)
-    total_realized=sum(realized.values())
-    equity=cash+market_value
-    return {'starting_cash':starting,'cash':cash,'positions':result,'market_value':market_value,'equity':equity,'pnl':equity-starting,'pnl_pct':(equity-starting)/starting*100,'realized_pnl':total_realized}
+        value=shares*price if price is not None else None; cost=sum(x[1] for x in layers.get(ticker,[])); pnl=value-cost if value is not None else None
+        result.append({'ticker':ticker,'shares':shares,'price':price,'value':value,'cost_basis':cost,'pnl':pnl,'realized_pnl':realized.get(ticker,0.),'change_pct':pnl/cost*100 if pnl is not None and cost else None})
+    market=sum(x['value'] or 0 for x in result); equity=cash+market
+    return {'starting_cash':starting,'cash':cash,'positions':result,'market_value':market,'equity':equity,'pnl':equity-starting,'pnl_pct':(equity-starting)/starting*100,'realized_pnl':sum(realized.values())}
 
-
-def _dividends(provider, ticker, start_ts, end_ts):
-    symbol=provider.symbol(ticker)
-    data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}', {'period1':int(start_ts),'period2':int(end_ts),'interval':'1d','events':'div,splits'})
-    events=((data.get('chart') or {}).get('result') or [{}])[0].get('events') or {}
-    out=[]
-    for ts, item in (events.get('dividends') or {}).items():
+def _dividends(provider,ticker,start_ts,end_ts):
+    symbol=provider.symbol(ticker); data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':int(start_ts),'period2':int(end_ts),'interval':'1d','events':'div,splits'}); events=((data.get('chart') or {}).get('result') or [{}])[0].get('events') or {}; out=[]
+    for ts,item in (events.get('dividends') or {}).items():
         amount=item.get('amount') if isinstance(item,dict) else None
         if amount is not None: out.append({'timestamp':int(ts),'amount':float(amount)})
     return sorted(out,key=lambda x:x['timestamp'])
 
-
 def _xirr(cashflows):
-    """Money-weighted annualized return for irregular cash flows."""
-    if len(cashflows)<2: return None
-    first=cashflows[0][0]
-    flows=[((dt-first).total_seconds()/31557600.0, float(amount)) for dt,amount in cashflows]
-    if not any(a<0 for _,a in flows) or not any(a>0 for _,a in flows): return None
+    if len(cashflows)<2:return None
+    first=cashflows[0][0]; flows=[((dt-first).total_seconds()/31557600.,float(amount)) for dt,amount in cashflows]
+    if not any(a<0 for _,a in flows) or not any(a>0 for _,a in flows):return None
     def npv(rate):
-        base=1.0+rate
-        if base<=0: return float('inf')
-        return sum(amount/(base**years) for years,amount in flows)
-    lo,hi=-0.9999,10.0
-    nlo,nhi=npv(lo),npv(hi)
+        base=1+rate
+        if base<=0:return float('inf')
+        return sum(a/(base**years) for years,a in flows)
+    lo,hi=-.9999,10.; nlo,nhi=npv(lo),npv(hi)
     for _ in range(40):
-        if nlo*nhi<=0: break
-        hi=hi*2+1
-        nhi=npv(hi)
-    if nlo*nhi>0: return None
+        if nlo*nhi<=0:break
+        hi=hi*2+1; nhi=npv(hi)
+    if nlo*nhi>0:return None
     for _ in range(100):
         mid=(lo+hi)/2; nm=npv(mid)
-        if abs(nm)<1e-7: return mid
-        if nlo*nm<=0: hi,nhi=mid,nm
-        else: lo,nlo=mid,nm
+        if abs(nm)<1e-7:return mid
+        if nlo*nm<=0:hi,nhi=mid,nm
+        else:lo,nlo=mid,nm
     return (lo+hi)/2
 
-
-def _backtest(provider, ticker, start, end, initial_cash, monthly_investment, reinvest_dividends):
-    history=provider.historical(ticker,'max')
-    start_ts=int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp()) if 'T' not in start else int(datetime.fromisoformat(start.replace('Z','+00:00')).timestamp())
-    end_ts=int(datetime.fromisoformat(end).replace(tzinfo=timezone.utc).timestamp())+86399 if 'T' not in end else int(datetime.fromisoformat(end.replace('Z','+00:00')).timestamp())
-    rows=[x for x in history if start_ts<=int(x['timestamp'])<=end_ts]
-    if not rows: raise HTTPException(404,detail='No historical data for selected period')
-    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400)
-    div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}
-    cash=float(initial_cash); shares=0.0; invested=0.0; last_month=None; points=[]; tx=[]; cashflows=[]
+def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends):
+    history=provider.historical(ticker,'max'); start_ts=int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp()) if 'T' not in start else int(datetime.fromisoformat(start.replace('Z','+00:00')).timestamp()); end_ts=int(datetime.fromisoformat(end).replace(tzinfo=timezone.utc).timestamp())+86399 if 'T' not in end else int(datetime.fromisoformat(end.replace('Z','+00:00')).timestamp()); rows=[x for x in history if start_ts<=int(x['timestamp'])<=end_ts]
+    if not rows:raise HTTPException(404,detail='No historical data for selected period')
+    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}; cash=float(initial_cash); shares=0.; invested=0.; last_month=None; points=[]; tx=[]; flows=[]
     for row in rows:
         d=datetime.fromtimestamp(int(row['timestamp']),timezone.utc).date(); price=float(row['close'])
-        if last_month != (d.year,d.month):
+        if last_month!=(d.year,d.month):
             contribution=float(initial_cash if last_month is None and monthly_investment<=0 else monthly_investment)
-            if last_month is None and monthly_investment>0: contribution += float(initial_cash)
-            cash += contribution
-            buy_shares=contribution/price if price else 0
-            shares += buy_shares; cash -= buy_shares*price; invested += contribution
-            tx.append({'date':d.isoformat(),'side':'buy','shares':buy_shares,'price':price,'amount':contribution})
-            cashflows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
-            last_month=(d.year,d.month)
-        div_per_share=div_by_day.get(d.isoformat(),0)
-        if div_per_share and shares:
-            dividend=shares*div_per_share
-            if reinvest_dividends and price>0:
-                add=dividend/price; shares+=add; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend})
-            else:
-                cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
-        equity=cash+shares*price
-        points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':shares*price,'equity':equity,'invested':invested})
-    end_equity=points[-1]['equity']; total_return=end_equity-invested
-    cashflows.append((datetime.fromisoformat(rows[-1]['date']).replace(tzinfo=timezone.utc),end_equity))
-    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total_return,'return_pct':total_return/invested*100 if invested else 0,'xirr':_xirr(cashflows),'shares':shares,'cash':cash,'dividends':sum(x['amount'] for x in tx if x['side'].startswith('dividend')),'points':points,'transactions':tx[-30:]}
-
+            if last_month is None and monthly_investment>0: contribution+=float(initial_cash)
+            cash+=contribution; bought=contribution/price if price else 0; shares+=bought; cash-=bought*price; invested+=contribution; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); last_month=(d.year,d.month)
+        div_per=div_by_day.get(d.isoformat(),0)
+        if div_per and shares:
+            dividend=shares*div_per
+            if reinvest_dividends and price>0: add=dividend/price; shares+=add; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend})
+            else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
+        equity=cash+shares*price; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':shares*price,'equity':equity,'invested':invested})
+    end_equity=points[-1]['equity']; total=end_equity-invested; end_date=datetime.fromtimestamp(int(rows[-1]['timestamp']),timezone.utc); flows.append((end_date,end_equity))
+    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':sum(x['amount'] for x in tx if x['side'].startswith('dividend')),'points':points,'transactions':tx[-30:]}
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
-
     @app.get('/api/paper/account')
     def paper_account():
-        conn=connect(); row=conn.execute('SELECT * FROM paper_accounts WHERE id=1').fetchone(); conn.close()
-        return dict(row) if row else {'id':1,'starting_cash':100000}
-
+        conn=connect(); row=conn.execute('SELECT * FROM paper_accounts WHERE id=1').fetchone(); conn.close(); return dict(row) if row else {'id':1,'starting_cash':100000}
     @app.post('/api/paper/account')
-    def set_paper_account(payload: AccountIn):
-        conn=connect(); now=_now(); conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,now)); conn.commit(); conn.close(); return paper_account()
-
+    def set_paper_account(payload:AccountIn):
+        conn=connect(); conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,_now())); conn.commit(); conn.close(); return paper_account()
     @app.get('/api/paper/portfolio')
-    def paper_portfolio(): return _positions(provider)
-
+    def paper_portfolio():return _positions(provider)
     @app.get('/api/paper/trades')
     def paper_trades(limit:int=100):
         conn=connect(); rows=conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id DESC LIMIT ?',(min(limit,500),)).fetchall(); conn.close(); return {'items':[dict(r) for r in rows]}
-
     @app.post('/api/paper/trades')
-    def paper_trade(payload: TradeIn):
+    def paper_trade(payload:TradeIn):
         side=payload.side.lower(); ticker=payload.ticker.upper()
-        if side not in ('buy','sell'): raise HTTPException(400,detail='side must be buy or sell')
-        price=payload.price or float(_quote(provider,ticker)['price']); shares=float(payload.shares); fee=float(payload.fee)
-        port=_positions(provider); position=next((p for p in port['positions'] if p['ticker']==ticker),None); held=position['shares'] if position else 0
-        if side=='buy' and port['cash'] < shares*price+fee: raise HTTPException(400,detail='Insufficient paper cash')
-        if side=='sell' and held < shares-1e-10: raise HTTPException(400,detail=f'Insufficient paper shares; holding {held:g}')
-        conn=connect(); conn.execute('INSERT INTO paper_trades(account_id,ticker,side,shares,price,fee,executed_at,note) VALUES(1,?,?,?,?,?,?,?)',(ticker,side,shares,price,fee,_now(),payload.note)); conn.commit(); conn.close()
-        return {'status':'ok','trade':{'ticker':ticker,'side':side,'shares':shares,'price':price,'fee':fee},'portfolio':_positions(provider)}
-
+        if side not in ('buy','sell'):raise HTTPException(400,detail='side must be buy or sell')
+        price=payload.price or float(_quote(provider,ticker)['price']); shares=float(payload.shares); fee=float(payload.fee); port=_positions(provider); position=next((p for p in port['positions'] if p['ticker']==ticker),None); held=position['shares'] if position else 0
+        if side=='buy' and port['cash']<shares*price+fee:raise HTTPException(400,detail='Insufficient paper cash')
+        if side=='sell' and held<shares-1e-10:raise HTTPException(400,detail=f'Insufficient paper shares; holding {held:g}')
+        conn=connect(); conn.execute('INSERT INTO paper_trades(account_id,ticker,side,shares,price,fee,executed_at,note) VALUES(1,?,?,?,?,?,?,?)',(ticker,side,shares,price,fee,_now(),payload.note)); conn.commit(); conn.close(); return {'status':'ok','trade':{'ticker':ticker,'side':side,'shares':shares,'price':price,'fee':fee},'portfolio':_positions(provider)}
     @app.post('/api/paper/reset')
     def paper_reset():
         conn=connect(); conn.execute('DELETE FROM paper_trades WHERE account_id=1'); conn.commit(); conn.close(); return {'status':'ok','portfolio':_positions(provider)}
-
     @app.get('/api/paper/backtest')
-    def paper_backtest(ticker:str, start:str, end:str, initial_cash:float=100000, monthly_investment:float=0, reinvest_dividends:bool=True):
-        if initial_cash<=0 or monthly_investment<0: raise HTTPException(400,detail='Invalid investment amounts')
+    def paper_backtest(ticker:str,start:str,end:str,initial_cash:float=100000,monthly_investment:float=0,reinvest_dividends:bool=True):
+        if initial_cash<=0 or monthly_investment<0:raise HTTPException(400,detail='Invalid investment amounts')
         return _backtest(provider,ticker.upper(),start,end,initial_cash,monthly_investment,reinvest_dividends)
-
     @app.get('/api/news/{ticker}')
-    def stock_news(ticker:str, limit:int=12):
+    def stock_news(ticker:str,limit:int=12):
         ticker=ticker.upper(); limit=max(1,min(limit,20)); items=[]
         try:
-            url=f'{provider.BASE}/v1/finance/search?q={quote_plus(ticker)}&quotesCount=1&newsCount={limit}'
-            data=provider._get(url)
+            data=provider._get(f'{provider.BASE}/v1/finance/search?q={quote_plus(ticker)}&quotesCount=1&newsCount={limit}')
             for n in data.get('news') or []:
-                title=n.get('title') or ''; publisher=n.get('publisher') or 'Unknown'; link=n.get('link') or ''; ts=n.get('providerPublishTime')
-                dt=datetime.fromtimestamp(ts,timezone.utc).isoformat() if ts else None
-                low=title.lower(); category='Nyhet'
-                if any(k in low for k in ('insider','primary insider','mandatory notification')): category='Insider'
-                elif any(k in low for k in ('report','results','quarter','q1','q2','q3','q4','earnings')): category='Rapport'
-                elif any(k in low for k in ('dividend','ex-dividend')): category='Utbytte'
-                elif any(k in low for k in ('acqui','merger','contract','order','agreement')): category='Selskap'
+                title=n.get('title') or ''; publisher=n.get('publisher') or 'Unknown'; link=n.get('link') or ''; ts=n.get('providerPublishTime'); dt=datetime.fromtimestamp(ts,timezone.utc).isoformat() if ts else None; low=title.lower(); category='Nyhet'
+                if any(k in low for k in ('insider','primary insider','mandatory notification')):category='Insider'
+                elif any(k in low for k in ('report','results','quarter','q1','q2','q3','q4','earnings')):category='Rapport'
+                elif any(k in low for k in ('dividend','ex-dividend')):category='Utbytte'
+                elif any(k in low for k in ('acqui','merger','contract','order','agreement')):category='Selskap'
                 items.append({'ticker':ticker,'title':title,'publisher':publisher,'url':link,'published_at':dt,'category':category,'summary':title})
-        except Exception as exc:
-            return {'ticker':ticker,'items':[],'status':'unavailable','source':'Yahoo Finance search','error':str(exc)}
+        except Exception as exc:return {'ticker':ticker,'items':[],'status':'unavailable','source':'Yahoo Finance search','error':str(exc)}
         return {'ticker':ticker,'items':items,'status':'live_news' if items else 'no_news','source':'Yahoo Finance search'}
-
     @app.get('/api/news/{ticker}/summary')
     def news_summary(ticker:str):
-        d=stock_news(ticker,8); items=d.get('items') or []
-        counts={}
-        for x in items: counts[x['category']]=counts.get(x['category'],0)+1
+        d=stock_news(ticker,8); items=d.get('items') or []; counts={}
+        for x in items:counts[x['category']]=counts.get(x['category'],0)+1
         return {'ticker':ticker.upper(),'headline_count':len(items),'categories':counts,'summary':(' · '.join(x['title'] for x in items[:3]) if items else 'Ingen nye offentlige nyheter funnet.'),'items':items}
