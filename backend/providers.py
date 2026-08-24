@@ -20,7 +20,6 @@ class DemoProvider(MarketDataProvider):
 
 
 class YahooProvider(MarketDataProvider):
-    """Yahoo Finance adapter using chart data plus browser-like research session."""
     BASES = ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com")
     BASE = BASES[0]
     UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36"
@@ -94,16 +93,8 @@ class YahooProvider(MarketDataProvider):
         return rows
 
     def fundamentals(self, ticker):
-        """Fetch fundamentals through Yahoo's timeseries endpoint, which does not use quoteSummary crumbs."""
         symbol = self.symbol(ticker)
-        types = [
-            "annualTotalRevenue","annualEBITDA","annualEBIT","annualNetIncome",
-            "annualDilutedEPS","annualOperatingCashFlow","annualFreeCashFlow",
-            "annualTotalDebt","annualStockholdersEquity","annualGrossProfit",
-            "annualOperatingIncome","annualPretaxIncome","annualBasicAverageShares",
-            "quarterlyTotalRevenue","quarterlyEBITDA","quarterlyDilutedEPS",
-            "quarterlyOperatingCashFlow","quarterlyFreeCashFlow"
-        ]
+        types = ["annualTotalRevenue","annualEBITDA","annualEBIT","annualNetIncome","annualDilutedEPS","annualOperatingCashFlow","annualFreeCashFlow","annualTotalDebt","annualStockholdersEquity","annualGrossProfit","annualOperatingIncome","annualPretaxIncome","annualBasicAverageShares","quarterlyTotalRevenue","quarterlyEBITDA","quarterlyDilutedEPS","quarterlyOperatingCashFlow","quarterlyFreeCashFlow"]
         params = {"symbol": symbol, "type": ",".join(types), "period1": "946684800", "period2": str(int(time.time()) + 86400)}
         last_error = None
         for base in self.BASES:
@@ -111,33 +102,75 @@ class YahooProvider(MarketDataProvider):
                 data = self._get(f"{base}/ws/fundamentals-timeseries/v1/finance/timeseries/{symbol}", params)
                 result = data.get("timeseries", {}).get("result") or []
                 if result:
-                    latest = {}
-                    for series in result:
-                        for key, value in series.items():
-                            if key in ("meta", "timestamp"): continue
-                            if isinstance(value, list) and value:
-                                latest[key] = value
-                    return {"ticker": ticker.upper(), "symbol": symbol, "series": latest, "source": "Yahoo Finance Timeseries", "captured_at": datetime.now(timezone.utc).isoformat()}
+                    return {"ticker": ticker.upper(), "symbol": symbol, "series": result, "source": "Yahoo Finance Timeseries", "captured_at": datetime.now(timezone.utc).isoformat()}
                 last_error = RuntimeError("Yahoo returned no fundamentals timeseries")
             except Exception as exc: last_error = exc
         raise RuntimeError(f"Yahoo fundamentals failed for {symbol}: {last_error}")
 
+    @staticmethod
+    def _latest(series, key):
+        values = series.get(key) or []
+        candidates = []
+        for row in values:
+            if not isinstance(row, dict): continue
+            value = row.get("reportedValue")
+            if isinstance(value, dict): value = value.get("raw")
+            if isinstance(value, (int, float)):
+                candidates.append((row.get("asOfDate", ""), float(value)))
+        return sorted(candidates, key=lambda x: x[0])[-1][1] if candidates else None
+
     def research(self, ticker):
-        modules = "price,summaryDetail,defaultKeyStatistics,financialData,insiderTransactions,insiderHolders"
-        last_error = None
-        for attempt in range(2):
-            try:
-                self._bootstrap(force=attempt > 0)
-                params = {"modules": modules, "formatted": "false", "lang": "en-US", "region": "US", "crumb": self.crumb}
-                for base in self.BASES:
-                    try:
-                        data = self._get(f"{base}/v10/finance/quoteSummary/{self.symbol(ticker)}", params, need_crumb=False)
-                        result = data.get("quoteSummary", {}).get("result") or []
-                        if result: return result[0]
-                        last_error = RuntimeError("Yahoo returned no quoteSummary result")
-                    except Exception as exc: last_error = exc
-            except Exception as exc: last_error = exc
-        raise RuntimeError(f"Yahoo research failed for {self.symbol(ticker)}: {last_error}")
+        """Return a live research object without requiring Yahoo quoteSummary crumbs.
+
+        Fundamental and valuation fields come from Yahoo's crumb-free timeseries/chart
+        endpoints. Insider fields remain empty until a reliable non-crumb source exists.
+        """
+        q = self.quote(ticker)
+        f = self.fundamentals(ticker)
+        series = {item.get("meta", {}).get("symbol", ""): item for item in f.get("series", [])}
+        flat = {}
+        for item in f.get("series", []):
+            for key, value in item.items():
+                if key not in ("meta", "timestamp"):
+                    flat[key] = value
+        revenue = self._latest(flat, "annualTotalRevenue")
+        ebitda = self._latest(flat, "annualEBITDA")
+        ebit = self._latest(flat, "annualEBIT")
+        net_income = self._latest(flat, "annualNetIncome")
+        eps = self._latest(flat, "annualDilutedEPS")
+        ocf = self._latest(flat, "annualOperatingCashFlow")
+        fcf = self._latest(flat, "annualFreeCashFlow")
+        debt = self._latest(flat, "annualTotalDebt")
+        equity = self._latest(flat, "annualStockholdersEquity")
+        gross = self._latest(flat, "annualGrossProfit")
+        opinc = self._latest(flat, "annualOperatingIncome")
+        pretax = self._latest(flat, "annualPretaxIncome")
+        shares = self._latest(flat, "annualBasicAverageShares")
+        price = q.get("price")
+        market_cap = price * shares if price is not None and shares else None
+        pe = price / eps if price is not None and eps and eps > 0 else None
+        pb = market_cap / equity if market_cap is not None and equity and equity > 0 else None
+        ev = (market_cap + debt) if market_cap is not None and debt is not None else None
+        ev_ebitda = ev / ebitda if ev is not None and ebitda and ebitda > 0 else None
+        return {
+            "summaryDetail": {"regularMarketPrice": price, "trailingPE": pe, "priceToBook": pb, "marketCap": market_cap},
+            "defaultKeyStatistics": {"trailingEps": eps, "priceToBook": pb, "enterpriseToEbitda": ev_ebitda, "sharesOutstanding": shares},
+            "financialData": {
+                "currentPrice": price, "totalRevenue": revenue, "ebitda": ebitda, "ebit": ebit, "netIncomeToCommon": net_income,
+                "freeCashflow": fcf, "operatingCashflow": ocf, "totalDebt": debt, "grossProfits": gross, "operatingIncome": opinc,
+                "returnOnEquity": (net_income / equity) if net_income is not None and equity else None,
+                "grossMargins": (gross / revenue) if gross is not None and revenue else None,
+                "ebitdaMargins": (ebitda / revenue) if ebitda is not None and revenue else None,
+                "operatingMargins": (opinc / revenue) if opinc is not None and revenue else None,
+                "debtToEquity": (debt / equity * 100) if debt is not None and equity else None,
+            },
+            "insiderTransactions": {"transactions": []},
+            "insiderHolders": {"holders": []},
+            "price": q,
+            "fundamentals": {"revenue": revenue, "ebitda": ebitda, "ebit": ebit, "net_income": net_income, "eps": eps, "operating_cashflow": ocf, "free_cashflow": fcf, "debt": debt, "equity": equity, "gross_profit": gross, "operating_income": opinc, "pretax_income": pretax, "shares": shares},
+            "source": "Yahoo Finance Timeseries + Chart",
+            "captured_at": datetime.now(timezone.utc).isoformat()
+        }
 
 
 class RealtimeProvider(YahooProvider):
