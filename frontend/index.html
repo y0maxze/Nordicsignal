@@ -38,14 +38,16 @@ async function load() {
       throw new Error("Stocks API failed");
     }
 
+    const data = await response.json();
+
     all = data.items;
-universe = [...data.items];
+    universe = [...data.items];
 
-document.getElementById("count").textContent = data.items.length;
-document.getElementById("strong").textContent =
-  data.items.filter(x => x.score >= 80).length;
+    document.getElementById("count").textContent = data.items.length;
+    document.getElementById("strong").textContent =
+      data.items.filter(x => x.score >= 80).length;
 
-render(data.items);
+    render(data.items);
 
     const radarResponse = await fetch(API + "/api/radar");
 
@@ -62,6 +64,7 @@ render(data.items);
     renderDemo();
   }
 }
+
 function render(items) {
   document.getElementById("stocks").innerHTML = items.map(x => `
     <div class="row">
