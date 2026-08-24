@@ -14,14 +14,14 @@ function scoreBadge(x){
 
 function scoreSourceText(x){
   if(x?.live_verified) return "All scored components have a live source.";
-  if(x?.partial_live) return "Fundamentals, valuation and sentiment are live; insider activity is not included.";
+  if(x?.partial_live) return "Live market data is being used where verified; unavailable components are excluded rather than guessed.";
   return "Score is based on stored data.";
 }
 
 async function loadScoreAnalysis(ticker){
   const box=document.getElementById("scoreAnalysis");
   if(!box) return;
-  box.innerHTML='<div class="notice">Loading score verification…</div>';
+  box.innerHTML='<div class="notice">Loading live score verification…</div>';
   try{
     const [explanation, fundamentals, verification, insider, shortData]=await Promise.all([
       fetch(ANALYSIS_API+"/api/score-explanation/"+encodeURIComponent(ticker)).then(r=>r.json()),
@@ -39,6 +39,7 @@ async function loadScoreAnalysis(ticker){
     const insiderItems=insider.items||[];
     const insiderSignal=insider.signal||"unavailable";
     const insiderClass=insiderSignal==="buying"?"g":insiderSignal==="selling"?"r":"y";
+    const verifiedDetails=insider.verified_detail_count??insiderItems.filter(x=>x.verified_detail).length;
 
     box.innerHTML=`
       <div class="toolbar"><div><h2>Why this score?</h2><div class="sub">${scoreBadge(v)} · ${coverageLabel(v)}</div></div><div class="value">${v.score??'—'} / 100</div></div>
@@ -68,9 +69,9 @@ async function loadScoreAnalysis(ticker){
           <div class="metric"><div class="label">Recent buys</div><b>${insider.buy_count??'—'}</b></div>
           <div class="metric"><div class="label">Recent sells</div><b>${insider.sell_count??'—'}</b></div>
           <div class="metric"><div class="label">Public short %</div><b>${shortPct}</b></div>
-        </div><div class="sub" style="margin-top:12px">Insider source: ${esc(insider.source||"Unavailable")} · Short source: ${esc(shortData.source||"Unavailable")}</div></section>
+        </div><div class="sub" style="margin-top:12px">${verifiedDetails} insider disclosures have verified trade details. Source: ${esc(insider.source||"Unavailable")}</div></section>
       </div>
-      ${insiderItems.length?`<section class="section" style="margin-top:17px"><div class="toolbar"><h3>Recent insider disclosures</h3><span class="sub">${insiderItems.length} found</span></div>${insiderItems.slice(0,5).map(item=>`<div class="signal"><strong class="${item.transaction_type==='buy'?'g':item.transaction_type==='sell'?'r':'y'}">${esc(item.transaction_type||'other')}</strong><div class="sub">${esc(item.title||'Primary insider disclosure')} · ${esc(item.trade_date||'Date unavailable')}</div>${item.shares?`<div class="small">${Number(item.shares).toLocaleString('no-NO')} shares${item.price?` · NOK ${Number(item.price).toLocaleString('no-NO')}`:''}</div>`:''}</div>`).join('')}</section>`:""}
+      ${insiderItems.length?`<section class="section" style="margin-top:17px"><div class="toolbar"><h3>Recent insider disclosures</h3><span class="sub">${insiderItems.length} found</span></div>${insiderItems.slice(0,8).map(item=>{const dir=item.direction||item.transaction_type||'unknown';const cls=dir==='buy'?'g':dir==='sell'?'r':'y';const detail=[item.insider,item.shares!=null?Number(item.shares).toLocaleString('no-NO')+' shares':null].filter(Boolean).join(' · ');return `<div class="signal"><strong class="${cls}">${esc(dir)}</strong><div class="sub">${esc(item.title||'Primary insider disclosure')} · ${esc(item.date||item.trade_date||'Date unavailable')}</div>${detail?`<div class="small">${esc(detail)}</div>`:''}${item.summary?`<div class="small" style="margin-top:4px">${esc(item.summary)}</div>`:''}</div>`}).join('')}</section>`:""}
       <div class="sub" style="margin-top:14px">Data freshness: ${v.updated_at?esc(new Date(v.updated_at).toLocaleString('no-NO')):'—'}</div>`;
   }catch(e){box.innerHTML='<div class="notice">Score analysis temporarily unavailable.</div>';console.error(e)}
 }
