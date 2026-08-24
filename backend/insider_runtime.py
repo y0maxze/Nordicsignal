@@ -36,8 +36,16 @@ ISSUERS={
  'BWLPG':('BW LPG',('bw lpg',)), 'HAUTO':('Höegh Autoliners',('höegh autoliners','hoegh autoliners')),
  'GOGL':('Golden Ocean',('golden ocean',)), 'VAR':('Vår Energi',('vår energi','var energi')),
 }
-PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr')
-BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|kjøpt|kjøpte|kjøp)\b',re.I)
+# Stable Euronext issuer archive pages. These are much more reliable than the
+# generic company-news page, which is often rendered through client-side filters.
+ISSUER_ARCHIVES={
+ 'LSG':'https://live.euronext.com/en/listview/company-press-release/108681',
+ 'AKRBP':'https://live.euronext.com/en/listview/company-press-release/148951',
+ 'AKSO':'https://live.euronext.com/en/listview/company-press-release/208056',
+ 'BWLPG':'https://live.euronext.com/en/listview/company-press-release/203005',
+}
+PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
+BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|kjøpt|kjøpte|kjøp|kjøpte)\b',re.I)
 SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg)\b',re.I)
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg).{0,220}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 
@@ -58,9 +66,10 @@ def parse_trade(body,ticker,title,source,url):
     if m:
         d=re.sub(r'[^0-9]','',m.group(1)); shares=int(d) if d else None
     person=None
-    for p in (r'\b([A-Z][A-Za-zÀ-ÿ .\'-]{2,80}),\s*(?:CEO|CFO|Chair|Chairman|Board member|Styremedlem|Konsernsjef)\b',r'\b(CEO|CFO)\s+([A-Z][A-Za-zÀ-ÿ .\'-]{2,80})'):
+    patterns=(r'\b([A-Z][A-Za-zÀ-ÿ .\'-]{2,80}),\s*(?:CEO|CFO|Chair|Chairman|Board member|Styremedlem|Konsernsjef)\b',r'\b(?:CEO|CFO)\s+([A-Z][A-Za-zÀ-ÿ .\'-]{2,80})')
+    for p in patterns:
         mm=re.search(p,body,re.I)
-        if mm: person=mm.group(1 if mm.lastindex==1 else 2).strip(); break
+        if mm: person=mm.group(1).strip(); break
     return {'ticker':ticker,'date':date_of(body),'trade_date':date_of(body),'title':title or 'Primary insider transaction','direction':direction,'transaction_type':direction if direction in ('buy','sell') else 'other','shares':shares,'insider':person,'source':source,'verified_detail':direction in ('buy','sell') or shares is not None,'summary':' '.join(body.split())[:1000],'url':url}
 
 def fetch(session,url,params=None):
@@ -71,11 +80,12 @@ def fetch(session,url,params=None):
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v2',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v3',False): return
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
         session=getattr(self,'session',requests.Session(impersonate='chrome')); candidates=[]; seen=set()
         pages=[]
+        if ticker in ISSUER_ARCHIVES: pages.append(ISSUER_ARCHIVES[ticker])
         if ticker=='LSG': pages.append('https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information')
         pages.append('https://live.euronext.com/en/markets/oslo/equities/company-news')
         for page in pages:
@@ -86,29 +96,30 @@ def install():
                 if '/products/equities/company-news/' not in href: continue
                 full=href if href.startswith('http') else 'https://live.euronext.com'+href
                 if full in seen: continue
-                if ticker=='LSG' or any(x in norm(label) for x in ('insider','primar','pdmr','mandatory notification')):
+                low=norm(label)
+                if ticker in ISSUER_ARCHIVES or any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig')):
                     seen.add(full); candidates.append((full,label))
         items=[]
-        for url,label in candidates[:30]:
+        for url,label in candidates[:40]:
             try:
-                detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text
-                if not any(x in norm(body) for x in PHRASES): continue
+                detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text; low=norm(body)
+                if not any(norm(x) in low for x in PHRASES): continue
                 if not issuer_ok(body,ticker,name): continue
                 item=parse_trade(body,ticker,label,'Euronext Oslo Børs Newspoint',url)
                 if item['verified_detail']: items.append(item)
             except Exception: continue
-        # Yahoo's public search endpoint is a fallback for issuer releases syndicated from Oslo Børs.
+        # Yahoo syndicated release fallback.
         if not items:
             try:
                 q=quote(f'{name} Primary Insider Transaction')
                 data=session.get(f'https://query2.finance.yahoo.com/v1/finance/search?q={q}&newsCount=10',timeout=15).json()
                 for n in data.get('news',[]):
                     title=n.get('title',''); url=n.get('link') or ''
-                    if not any(x in norm(title) for x in ('primary insider','primærinsider','mandatory notification')): continue
+                    if not any(x in norm(title) for x in ('primary insider','primærinsider','mandatory notification','meldepliktig')): continue
                     try:
                         detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text
                     except Exception: continue
-                    if not issuer_ok(body,ticker,name) or not any(x in norm(body) for x in PHRASES): continue
+                    if not issuer_ok(body,ticker,name) or not any(norm(x) in norm(body) for x in PHRASES): continue
                     item=parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url)
                     if item['verified_detail']: items.append(item)
             except Exception: pass
@@ -122,5 +133,5 @@ def install():
         if items:
             return {'ticker':ticker,'items':items,'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'live','buy_count':buys,'sell_count':sells,'unknown_count':len(items)-buys-sells,'verified_detail_count':len(items),'signal':'buying' if buys>sells else 'selling' if sells>buys else 'activity','updated_at':now}
         return {'ticker':ticker,'items':[],'source':'Euronext Oslo Børs Newspoint + issuer release fallback','status':'no_recent_disclosures','buy_count':0,'sell_count':0,'unknown_count':0,'verified_detail_count':0,'signal':'unavailable','updated_at':now}
-    NordicRegulatoryProvider.insider=insider; NordicRegulatoryProvider._robust_insider_patch_v2=True
+    NordicRegulatoryProvider.insider=insider; NordicRegulatoryProvider._robust_insider_patch_v3=True
 install()
