@@ -74,6 +74,44 @@ def stocks():
         })
     return {"items": items}
 
+@app.get("/api/search")
+def search(q: str = ""):
+    q = q.strip()
+
+    if not q:
+        return {"items": []}
+
+    conn = connect()
+
+    rows = conn.execute("""
+        SELECT ticker, name, sector, exchange
+        FROM stocks
+        WHERE active = 1
+          AND (
+              ticker LIKE ?
+              OR name LIKE ?
+          )
+        ORDER BY name ASC
+        LIMIT 20
+    """, (
+        f"%{q}%",
+        f"%{q}%"
+    )).fetchall()
+
+    conn.close()
+
+    return {
+        "items": [
+            {
+                "ticker": r["ticker"],
+                "name": r["name"],
+                "sector": r["sector"],
+                "exchange": r["exchange"]
+            }
+            for r in rows
+        ]
+    }
+
 @app.get("/api/stocks/{ticker}")
 def stock(ticker: str):
     conn = connect()
