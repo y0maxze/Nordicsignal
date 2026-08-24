@@ -5,7 +5,7 @@ import re
 
 def _install_insider_patch():
     try:
-        from providers import NordicRegulatoryProvider
+        from providers import NordicRegulatoryProvider, _TextParser
     except Exception:
         return
 
@@ -15,12 +15,16 @@ def _install_insider_patch():
     ISSUER_PAGES = {
         "LSG": "https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information",
     }
+    NEWS_ARCHIVE = "https://live.euronext.com/en/markets/oslo/equities/company-news"
 
     INSIDER_PHRASES = (
         "primary insider",
         "primærinsidetransaksjon",
         "mandatory notification of trade primary insiders",
         "meldepliktig handel for primærinnsidere",
+        "notification of trade by primary insider",
+        "notification of trade by pdmr",
+        "pdmr",
     )
 
     MONTHS = {
@@ -42,22 +46,22 @@ def _install_insider_patch():
         if not m:
             return None
         month = MONTHS.get(m.group(2).lower())
-        if not month:
-            return None
-        return f"{m.group(3)}-{month:02d}-{int(m.group(1)):02d}"
+        return f"{m.group(3)}-{month:02d}-{int(m.group(1)):02d}" if month else None
 
-    def extract_rows(text, ticker, company_name):
+    def is_insider(text):
+        low = norm(text)
+        return any(norm(p) in low for p in INSIDER_PHRASES)
+
+    def extract_rows(text, ticker):
         lines = [" ".join(x.split()) for x in (text or "").splitlines() if x.strip()]
         rows = []
         for idx, line in enumerate(lines):
-            low = line.lower()
-            if not any(phrase in low for phrase in INSIDER_PHRASES):
+            if not is_insider(line):
                 continue
+            low = line.lower()
             if any(x in low for x in ("buyback", "share buyback", "tilbakekjop")):
                 continue
-            d = parse_date(line)
-            if not d and idx > 0:
-                d = parse_date(lines[idx - 1])
+            d = parse_date(line) or (parse_date(lines[idx - 1]) if idx else None)
             rows.append({
                 "ticker": ticker,
                 "date": d,
@@ -65,52 +69,62 @@ def _install_insider_patch():
                 "direction": "unknown",
                 "source": "Euronext Oslo Børs Newspoint",
             })
-        unique = []
-        seen = set()
+        return rows
+
+    def extract_link_rows(parser, ticker):
+        rows = []
+        for href, text in parser.links:
+            if not href or not text or not is_insider(text):
+                continue
+            full = href if href.startswith("http") else "https://live.euronext.com" + href
+            rows.append({"ticker": ticker, "date": parse_date(text), "title": text.strip(), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint", "url": full})
+        return rows
+
+    def dedup(rows):
+        out, seen = [], set()
         for row in rows:
-            key = (row.get("date"), norm(row.get("title")))
-            # English and Norwegian versions on the same date represent one disclosure.
             date_key = row.get("date")
-            if date_key and date_key in seen:
+            title_key = norm(row.get("title"))
+            # English/Norwegian duplicate publications on the same date are one disclosure.
+            key = date_key or title_key
+            if key in seen:
                 continue
-            if not date_key and key in seen:
-                continue
-            seen.add(date_key or key)
-            unique.append(row)
-        return unique
+            seen.add(key)
+            out.append(row)
+        return out
 
     def insider(self, ticker, company_name=""):
         ticker = (ticker or "").upper()
-        company_name = company_name or ticker
         now = datetime.now(timezone.utc)
         urls = []
         if ticker in ISSUER_PAGES:
-            urls.append(ISSUER_PAGES[ticker])
-        urls.append(self.EURONEXT_NEWS)
+            urls.append((ISSUER_PAGES[ticker], None))
+        urls.append((NEWS_ARCHIVE, {
+            "keys": ticker,
+            "field_company_pr_pub_datetime_end": "now",
+            "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"),
+            "page": 0,
+        }))
         last_error = None
 
-        for url in urls:
+        for url, params in urls:
             try:
-                params = None if ticker in ISSUER_PAGES and url == ISSUER_PAGES[ticker] else {
-                    "keys": company_name,
-                    "field_company_pr_pub_datetime_end": "now",
-                    "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"),
-                    "page": 0,
-                }
                 html = self._html(url, params=params)
-                parser = self._parser(html)
-                rows = extract_rows(parser.text, ticker, company_name)
+                parser = _TextParser()
+                parser.feed(html)
+                rows = extract_rows(parser.text, ticker)
+                rows.extend(extract_link_rows(parser, ticker))
+                rows = dedup(rows)
 
-                # If the HTML parser receives the table as one long text block,
-                # parse date/title pairs directly from that block as a fallback.
+                # Parse table rows when the response is flattened into one text block.
                 if not rows:
                     flat = " ".join((parser.text or "").split())
-                    for m in re.finditer(r"(\d{1,2}[./-]\d{1,2}[./-]20\d{2}|\d{1,2}\s+[A-Za-z]{3}\s+20\d{2}).{0,180}?(Primary Insider Transaction|Primærinsidetransaksjon|Mandatory Notification of Trade Primary Insiders|Meldepliktig handel for primærinnsidere)", flat, flags=re.I):
+                    date_pat = r"(?:\d{1,2}[./-]\d{1,2}[./-]20\d{2}|\d{1,2}\s+[A-Za-z]{3}\s+20\d{2})"
+                    phrase_pat = r"(?:Primary Insider Transaction|Primærinsidetransaksjon|Mandatory Notification of Trade Primary Insiders|Meldepliktig handel for primærinnsidere|Notification of Trade by Primary Insider|Notification of Trade by PDMR)"
+                    pattern = re.compile(rf"({date_pat}).{{0,250}}?({phrase_pat})", re.I)
+                    for m in pattern.finditer(flat):
                         rows.append({"ticker": ticker, "date": parse_date(m.group(1)), "title": m.group(2), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
-                    dedup = {}
-                    for row in rows:
-                        dedup[row.get("date") or row.get("title")] = row
-                    rows = list(dedup.values())
+                    rows = dedup(rows)
 
                 if rows:
                     return {
@@ -141,13 +155,6 @@ def _install_insider_patch():
             result["debug"] = str(last_error)
         return result
 
-    def parser(html):
-        from providers import _TextParser
-        p = _TextParser()
-        p.feed(html)
-        return p
-
-    NordicRegulatoryProvider._parser = staticmethod(parser)
     NordicRegulatoryProvider.insider = insider
     NordicRegulatoryProvider._live_insider_patch = True
 
