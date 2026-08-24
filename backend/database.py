@@ -78,10 +78,12 @@ CREATE TABLE IF NOT EXISTS watchlist (
 );
 """
 
+
 def connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = connect()
@@ -92,20 +94,3 @@ def init_db():
         pass
     conn.commit()
     conn.close()
-
-# The API imports database before constructing FastAPI's app. Hook the
-# constructor here so optional routes are attached without changing Render's
-# existing `uvicorn main:app` start command.
-try:
-    from fastapi import FastAPI
-    _ns_original_fastapi_init = FastAPI.__init__
-    def _ns_fastapi_init(self, *args, **kwargs):
-        _ns_original_fastapi_init(self, *args, **kwargs)
-        try:
-            from extra_api import install
-            install(self)
-        except Exception:
-            pass
-    FastAPI.__init__ = _ns_fastapi_init
-except Exception:
-    pass
