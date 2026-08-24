@@ -18,7 +18,10 @@ except Exception:
 app = FastAPI(title="NordicSignal API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-UNIVERSE = [("LSG", "Lerøy Seafood", "Seafood"), ("MPCC", "MPC Container Ships", "Shipping"), ("ELO", "Elopak", "Packaging"), ("PEXIP", "Pexip", "Technology"), ("XPLRA", "Xplora Technologies", "Technology"), ("EQNR", "Equinor", "Energy"), ("DNB", "DNB", "Financials"), ("NHY", "Norsk Hydro", "Materials"), ("YAR", "Yara International", "Chemicals"), ("MOWI", "Mowi", "Seafood"), ("SALM", "SalMar", "Seafood"), ("GJF", "Gjensidige Forsikring", "Financials"), ("TEL", "Telenor", "Telecom"), ("ORK", "Orkla", "Consumer"), ("TOM", "Tomra Systems", "Industrials"), ("KOG", "Kongsberg Gruppen", "Industrials"), ("NAS", "Norwegian Air Shuttle", "Airlines"), ("AKRBP", "Aker BP", "Energy"), ("AKSO", "Aker Solutions", "Energy"), ("SUBC", "Subsea 7", "Energy"), ("BWLPG", "BW LPG", "Shipping"), ("HAUTO", "Höegh Autoliners", "Shipping"), ("GOGL", "Golden Ocean", "Shipping"), ("VAR", "Vår Energi", "Energy")]
+# Golden Ocean completed its merger with CMB.TECH on 20 Aug 2025 and GOGL
+# stopped trading on 19 Aug 2025. The live Oslo listing is now CMB.TECH's
+# CMBTO ticker, so the universe must not keep a delisted GOGL row.
+UNIVERSE = [("LSG", "Lerøy Seafood", "Seafood"), ("MPCC", "MPC Container Ships", "Shipping"), ("ELO", "Elopak", "Packaging"), ("PEXIP", "Pexip", "Technology"), ("XPLRA", "Xplora Technologies", "Technology"), ("EQNR", "Equinor", "Energy"), ("DNB", "DNB", "Financials"), ("NHY", "Norsk Hydro", "Materials"), ("YAR", "Yara International", "Chemicals"), ("MOWI", "Mowi", "Seafood"), ("SALM", "SalMar", "Seafood"), ("GJF", "Gjensidige Forsikring", "Financials"), ("TEL", "Telenor", "Telecom"), ("ORK", "Orkla", "Consumer"), ("TOM", "Tomra Systems", "Industrials"), ("KOG", "Kongsberg Gruppen", "Industrials"), ("NAS", "Norwegian Air Shuttle", "Airlines"), ("AKRBP", "Aker BP", "Energy"), ("AKSO", "Aker Solutions", "Energy"), ("SUBC", "Subsea 7", "Energy"), ("BWLPG", "BW LPG", "Shipping"), ("HAUTO", "Höegh Autoliners", "Shipping"), ("CMBTO", "CMB.TECH", "Shipping"), ("VAR", "Vår Energi", "Energy")]
 TICKERS = [x[0] for x in UNIVERSE]
 provider = YahooProvider()
 regulatory = NordicRegulatoryProvider()
@@ -96,8 +99,10 @@ def sentiment_score(history):
 
 
 def insider_score(data):
-    # No disclosure is not the same thing as a verified neutral insider score.
-    if not data or data.get("status") != "live": return None
+    # A successful official Euronext query with no recent disclosures is still
+    # verified insider coverage; it gets the neutral baseline rather than
+    # incorrectly downgrading the whole stock to partial_live.
+    if not data or data.get("status") not in ("live", "no_recent_disclosures"): return None
     buys, sells = int(data.get("buy_count") or 0), int(data.get("sell_count") or 0)
     if buys == 0 and sells == 0: return 12
     return clamp_score(12 + (buys - sells) * 2.5, 0, 25)
@@ -119,7 +124,7 @@ def refresh_one(ticker, include_insider=True):
         if len(history) < 5: raise RuntimeError("Yahoo Finance returned insufficient historical data")
         metrics = fundamental_metrics(research); f, v, s = fundamentals_score(metrics), valuation_score(research), sentiment_score(history)
         if include_insider:
-            try: insider = regulatory.insider(ticker)
+            try: insider = regulatory.insider(ticker, company_name)
             except Exception as exc: insider = {"status": "unavailable", "error": str(exc), "items": []}
         else:
             insider = {"status": "deferred", "items": [], "source": "Euronext Oslo Børs / Oslo Børs Newspoint"}
