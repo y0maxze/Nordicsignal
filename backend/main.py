@@ -6,7 +6,7 @@ from database import connect, init_db
 from scoring import calculate_score, signal_label
 from providers import YahooProvider
 
-app = FastAPI(title="NordicSignal API", version="2.3.0")
+app = FastAPI(title="NordicSignal API", version="2.3.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 SEED = [("LSG", "Lerøy Seafood", "Seafood", 34, 24, 16, 12),("MPCC", "MPCC", "Shipping", 36, 15, 17, 12),("ELO", "Elopak", "Packaging", 30, 23, 16, 12),("PEXIP", "Pexip", "Technology", 33, 18, 15, 11),("XPLRA", "Xplora", "Technology", 32, 18, 14, 6)]
@@ -28,7 +28,7 @@ def seed_db():
     conn.commit(); conn.close()
 
 def fundamentals_score(r):
-    fd=r.get("financialData",{}); ks=r.get("defaultKeyStatistics",{}); sd=r.get("summaryDetail",{})
+    fd=r.get("financialData",{}) or {}; ks=r.get("defaultKeyStatistics",{}) or {}; sd=r.get("summaryDetail",{}) or {}
     margin=raw(fd.get("profitMargins")); roe=raw(fd.get("returnOnEquity")); growth=raw(fd.get("revenueGrowth")); debt=raw(fd.get("debtToEquity")); pe=raw(sd.get("trailingPE"),raw(ks.get("trailingPE")))
     points=20.0
     if margin is not None: points += 5 if margin>.10 else 2 if margin>0 else -4
@@ -39,7 +39,7 @@ def fundamentals_score(r):
     return clamp_score(points,0,40)
 
 def valuation_score(r):
-    sd=r.get("summaryDetail",{}); ks=r.get("defaultKeyStatistics",{})
+    sd=r.get("summaryDetail",{}) or {}; ks=r.get("defaultKeyStatistics",{}) or {}
     pe=raw(sd.get("trailingPE"),raw(ks.get("trailingPE"))); pb=raw(ks.get("priceToBook")); peg=raw(ks.get("pegRatio")); ev_ebitda=raw(ks.get("enterpriseToEbitda")); points=10.0
     if pe is not None and pe>0: points += 4 if pe<15 else 2 if pe<25 else -2
     if pb is not None and pb>0: points += 3 if pb<2 else 1 if pb<4 else -1
@@ -47,9 +47,7 @@ def valuation_score(r):
     if ev_ebitda is not None and ev_ebitda>0: points += 2 if ev_ebitda<12 else 0 if ev_ebitda<20 else -1
     return clamp_score(points,0,20)
 
-def insider_score(r):
-    # No live insider score is invented when Yahoo's crumb-protected transaction feed is unavailable.
-    return 12
+def insider_score(r): return 12
 
 def sentiment_score(history):
     if len(history)<5:return 7
@@ -75,7 +73,7 @@ def refresh_all(): return [refresh_one(t) for t in TICKERS]
 def startup(): init_db(); seed_db(); refresh_all()
 
 @app.get("/api/health")
-def health(): return {"status":"ok","service":"NordicSignal API","version":"2.3.0","provider":"Yahoo Finance","score_policy":"live_only_or_explicit_stored"}
+def health(): return {"status":"ok","service":"NordicSignal API","version":"2.3.1","provider":"Yahoo Finance","score_policy":"live_only_or_explicit_stored"}
 
 @app.get("/api/refresh")
 def refresh(): return {"status":"ok","results":refresh_all()}
@@ -126,15 +124,30 @@ def research(ticker:str):
 @app.get("/api/fundamentals/{ticker}")
 def fundamentals(ticker:str):
     try:
-        r=provider.research(ticker); f=r.get("fundamentals",{}); fd=r.get("financialData",{}); sd=r.get("summaryDetail",{}); ks=r.get("defaultKeyStatistics",{})
-        return {"ticker":ticker.upper(),"source":r.get("source"),"captured_at":r.get("captured_at"),"data":{"revenue":f.get("revenue"),"ebitda":f.get("ebitda"),"ebit":f.get("ebit"),"net_income":f.get("net_income"),"eps":f.get("eps"),"operating_cashflow":f.get("operating_cashflow"),"free_cashflow":f.get("free_cashflow"),"debt":f.get("debt"),"equity":f.get("equity"),"gross_profit":f.get("gross_profit"),"operating_income":f.get("operating_income"),"pretax_income":f.get("pretax_income"),"gross_margin":fd.get("grossMargins"),"ebitda_margin":fd.get("ebitdaMargins"),"operating_margin":fd.get("operatingMargins"),"roe":fd.get("returnOnEquity"),"debt_to_equity":fd.get("debtToEquity"),"pe":sd.get("trailingPE"),"forward_pe":None,"price_to_book":ks.get("priceToBook"),"ev_to_ebitda":ks.get("enterpriseToEbitda")}}
+        r=provider.fundamentals(ticker)
+        series=r.get("series",{}) if isinstance(r,dict) else {}
+        def latest(name):
+            values=series.get(name,[])
+            if not isinstance(values,list) or not values:return None
+            item=values[-1]
+            if isinstance(item,dict):
+                for k,v in item.items():
+                    if k not in ("asOfDate","periodType","currencyCode") and isinstance(v,(int,float)): return v
+            return None
+        return {"ticker":ticker.upper(),"source":r.get("source","Yahoo Finance Timeseries"),"captured_at":r.get("captured_at"),"data":{"revenue":latest("annualTotalRevenue"),"ebitda":latest("annualEBITDA"),"ebit":latest("annualEBIT"),"net_income":latest("annualNetIncome"),"eps":latest("annualDilutedEPS"),"operating_cashflow":latest("annualOperatingCashFlow"),"free_cashflow":latest("annualFreeCashFlow"),"debt":latest("annualTotalDebt"),"equity":latest("annualStockholdersEquity"),"gross_profit":latest("annualGrossProfit"),"operating_income":latest("annualOperatingIncome"),"pretax_income":latest("annualPretaxIncome")}}
     except Exception as exc:return {"ticker":ticker.upper(),"source":"unavailable","data":{},"error":str(exc)}
 
 @app.get("/api/score-explanation/{ticker}")
 def score_explanation(ticker:str):
     try:
-        r=provider.research(ticker); fd=r.get("financialData",{}); f=r.get("fundamentals",{}); reasons=[]
-        growth=fd.get("revenueGrowth"); margin=fd.get("ebitdaMargins"); roe=fd.get("returnOnEquity"); debt=fd.get("debtToEquity"); fcf=f.get("free_cashflow")
+        r=provider.research(ticker); fd=r.get("financialData",{}) or {}; reasons=[]
+        growth=raw(fd.get("revenueGrowth")); margin=raw(fd.get("ebitdaMargins")); roe=raw(fd.get("returnOnEquity")); debt=raw(fd.get("debtToEquity")); fcf=None
+        try:
+            fr=provider.fundamentals(ticker); series=fr.get("series",{}); vals=series.get("annualFreeCashFlow",[]); item=vals[-1] if isinstance(vals,list) and vals else {}
+            if isinstance(item,dict):
+                for k,v in item.items():
+                    if k not in ("asOfDate","periodType","currencyCode") and isinstance(v,(int,float)): fcf=v; break
+        except Exception: pass
         if fcf is not None and fcf>0: reasons.append({"type":"positive","text":"Free cash flow is positive."})
         if margin is not None and margin>=.10: reasons.append({"type":"positive","text":"EBITDA margin is at least 10%."})
         elif margin is not None and margin<0: reasons.append({"type":"negative","text":"Operating profitability is under pressure."})
