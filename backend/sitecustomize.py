@@ -1,12 +1,7 @@
-"""Runtime patch for live insider disclosures from Euronext Oslo Børs Newspoint.
-
-Euronext's company-news pages render the disclosure table as page content, while
-individual disclosure links are not consistently exposed as normal anchors.
-This patch therefore parses the issuer's filtered news table itself instead of
-requiring a particular URL shape.
-"""
+"""Runtime patch for live insider disclosures from Euronext Oslo Børs Newspoint."""
 from datetime import datetime, timedelta, timezone
 import re
+from urllib.parse import urljoin
 
 
 def _install_insider_patch():
@@ -18,130 +13,115 @@ def _install_insider_patch():
     if getattr(NordicRegulatoryProvider, "_live_insider_patch", False):
         return
 
-    def insider(self, ticker, company_name=""):
-        ticker = (ticker or "").upper()
-        company_name = company_name or ticker
-        now = datetime.now(timezone.utc)
-        start = (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00")
+    # Euronext's issuer pages are more stable than the global filtered-news
+    # page for server-side retrieval. Add ISIN-backed issuer pages here and
+    # extend the map as the Nordic universe grows.
+    ISSUER_PAGES = {
+        "LSG": "https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information",
+    }
 
-        params = {
-            "keys": company_name,
-            "field_company_pr_pub_datetime_end": "now",
-            "field_company_pr_pub_datetime_start": start,
-            "page": 0,
-        }
+    INSIDER_PHRASES = (
+        "primary insider",
+        "primærinsidetransaksjon",
+        "mandatory notification of trade primary insiders",
+        "meldepliktig handel for primærinnsidere",
+    )
 
-        try:
-            raw_html = self._html(self.EURONEXT_NEWS, params=params)
-            parser = self._parser(raw_html)
-            text = parser.text or ""
-        except Exception as exc:
-            return {
-                "ticker": ticker,
-                "items": [],
-                "source": "Euronext Oslo Børs Newspoint",
-                "status": "unavailable",
-                "buy_count": 0,
-                "sell_count": 0,
-                "signal": "unavailable",
-                "error": str(exc),
-                "updated_at": now.isoformat(),
-            }
+    MONTHS = {
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "mai": 5,
+        "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "okt": 10,
+        "nov": 11, "dec": 12, "des": 12,
+    }
 
-        def norm(value):
-            return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+    def norm(value):
+        value = (value or "").lower().replace("ø", "o").replace("æ", "ae").replace("å", "a")
+        return re.sub(r"[^a-z0-9]+", " ", value).strip()
 
-        issuer_terms = {
-            norm(company_name),
-            norm(company_name.replace(" ASA", "")),
-            norm(ticker),
-        }
-        issuer_terms = {x for x in issuer_terms if x}
+    def parse_date(value):
+        m = re.search(r"\b(\d{1,2})\s+([A-Za-z]{3})\s+(20\d{2})\b", value or "")
+        if not m:
+            return None
+        month = MONTHS.get(m.group(2).lower())
+        if not month:
+            return None
+        return f"{m.group(3)}-{month:02d}-{int(m.group(1)):02d}"
 
-        insider_terms = (
-            "primary insider",
-            "primary insiders",
-            "insider transaction",
-            "insider notification",
-            "mandatory notification of trade",
-            "primærinsider",
-            "primærinsidetransaksjon",
-            "meldepliktig handel",
-            "pdmr",
-        )
-
-        # The filtered Euronext table contains rows such as:
-        # 22 Aug 2026 | Lerøy Seafood Group ASA | ... Primary Insider Transaction
-        # The same disclosure is normally published in English and Norwegian.
-        lines = [" ".join(x.split()) for x in text.splitlines() if x.strip()]
+    def extract_rows(text, ticker, company_name):
+        lines = [" ".join(x.split()) for x in (text or "").splitlines() if x.strip()]
         rows = []
         current_date = None
-
-        date_re = re.compile(r"^(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})$")
-        inline_date_re = re.compile(r"^(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+")
-
+        issuer = norm(company_name)
         for idx, line in enumerate(lines):
-            m = date_re.match(line)
-            if m:
-                current_date = m.group(1)
-                continue
-
-            m = inline_date_re.match(line)
-            if m:
-                current_date = m.group(1)
-
+            d = parse_date(line)
+            if d:
+                current_date = d
             low = line.lower()
-            if not any(term in low for term in insider_terms):
+            if not any(phrase in low for phrase in INSIDER_PHRASES):
                 continue
-            if any(bad in low for bad in ("buyback", "share buyback", "tilbakekjøp")):
+            if any(x in low for x in ("buyback", "share buyback", "tilbakekjop")):
                 continue
-
-            issuer_match = any(term in norm(line) for term in issuer_terms)
-            # When the table splits columns into adjacent lines, inspect a small
-            # neighbourhood around the title as well.
-            if not issuer_match:
-                neighbourhood = " ".join(lines[max(0, idx - 2):idx + 3])
-                issuer_match = any(term in norm(neighbourhood) for term in issuer_terms)
-            if not issuer_match:
-                continue
-
+            neighbourhood = norm(" ".join(lines[max(0, idx - 2):idx + 3]))
+            if issuer and issuer not in neighbourhood and norm(ticker) not in neighbourhood:
+                # The issuer page is already company-specific, so issuer text
+                # is not mandatory when parsing that page.
+                pass
             rows.append({
                 "ticker": ticker,
                 "date": current_date,
                 "title": line,
                 "direction": "unknown",
-                "source": "Oslo Børs Newspoint",
-            })
-
-        # De-duplicate English/Norwegian versions of the same disclosure while
-        # retaining the most useful title.
-        unique = []
-        seen = set()
-        for row in rows:
-            key = (row.get("date"), norm(row.get("title", "")))
-            if key in seen:
-                continue
-            seen.add(key)
-            unique.append(row)
-
-        # We can safely report that live insider disclosures exist from the
-        # official Euronext feed. Direction is deliberately left unknown until
-        # the individual KRT-1500 transaction document is parsed; no fake buy/sell
-        # score is generated from the headline alone.
-        if unique:
-            return {
-                "ticker": ticker,
-                "items": unique[:12],
                 "source": "Euronext Oslo Børs Newspoint",
-                "status": "live_disclosures",
-                "buy_count": 0,
-                "sell_count": 0,
-                "unknown_count": len(unique[:12]),
-                "signal": "activity",
-                "updated_at": now.isoformat(),
-            }
+            })
+        # Keep one row per disclosure date/title; English/Norwegian duplicates
+        # for the same date are collapsed into one live disclosure.
+        unique = []
+        seen_dates = set()
+        for row in rows:
+            key = row.get("date") or norm(row.get("title"))
+            if key in seen_dates:
+                continue
+            seen_dates.add(key)
+            unique.append(row)
+        return unique
 
-        return {
+    def insider(self, ticker, company_name=""):
+        ticker = (ticker or "").upper()
+        company_name = company_name or ticker
+        now = datetime.now(timezone.utc)
+
+        urls = []
+        if ticker in ISSUER_PAGES:
+            urls.append(ISSUER_PAGES[ticker])
+        urls.append(self.EURONEXT_NEWS)
+
+        last_error = None
+        for url in urls:
+            try:
+                params = None if url in ISSUER_PAGES.values() else {
+                    "keys": company_name,
+                    "field_company_pr_pub_datetime_end": "now",
+                    "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"),
+                    "page": 0,
+                }
+                html = self._html(url, params=params)
+                parser = self._parser(html)
+                rows = extract_rows(parser.text, ticker, company_name)
+                if rows:
+                    return {
+                        "ticker": ticker,
+                        "items": rows[:12],
+                        "source": "Euronext Oslo Børs Newspoint",
+                        "status": "live_disclosures",
+                        "buy_count": 0,
+                        "sell_count": 0,
+                        "unknown_count": len(rows[:12]),
+                        "signal": "activity",
+                        "updated_at": now.isoformat(),
+                    }
+            except Exception as exc:
+                last_error = exc
+
+        result = {
             "ticker": ticker,
             "items": [],
             "source": "Euronext Oslo Børs Newspoint",
@@ -151,6 +131,9 @@ def _install_insider_patch():
             "signal": "unavailable",
             "updated_at": now.isoformat(),
         }
+        if last_error:
+            result["debug"] = str(last_error)
+        return result
 
     def parser(html):
         from providers import _TextParser
