@@ -19,6 +19,73 @@ function renderDemo(){const d=[{ticker:"LSG",name:"Lerøy Seafood",sector:"Seafo
 async function stock(t){let x=all.find(a=>a.ticker===t);if(!x)return;document.getElementById("dash").classList.add("hide");document.getElementById("detail").classList.add("show");document.getElementById("title").textContent=x.name;document.getElementById("sub").textContent="Stock intelligence · "+x.ticker;document.getElementById("dname").textContent=x.name;document.getElementById("dticker").textContent=x.ticker+" · "+x.sector;document.getElementById("dscore").textContent=x.score;document.getElementById("df").textContent=x.fundamentals+"/40";document.getElementById("di").textContent=x.insider+"/25";document.getElementById("dv").textContent=x.valuation+"/20"}
 function back(){document.getElementById("detail").classList.remove("show");document.getElementById("dash").classList.remove("hide");document.getElementById("title").textContent="Market Dashboard";document.getElementById("sub").textContent="Signal-driven stock intelligence"}
 function page(name,el){document.querySelectorAll("nav a").forEach(x=>x.classList.remove("active"));el.classList.add("active");if(name==="Dashboard"){back();return}document.getElementById("dash").classList.remove("hide");document.getElementById("detail").classList.remove("show");document.getElementById("title").textContent=name;document.getElementById("sub").textContent=name==="Stock Radar"?"Market-wide ranking of model signals.":name==="Watchlist"?"Saved companies and score changes.":name==="Insider Activity"?"CEO, CFO, director and institutional signals.":name==="Short Radar"?"Short interest and pressure signals.":"Market overview and sectors."}
-document.getElementById("search").addEventListener("input",e=>{let q=e.target.value.toLowerCase();render(all.filter(x=>(x.name+x.ticker).toLowerCase().includes(q)))});
+let searchTimer;
+
+document.getElementById("search").addEventListener("input", function(e) {
+  const q = e.target.value.trim();
+
+  clearTimeout(searchTimer);
+
+  if (!q) {
+    render(all);
+    return;
+  }
+
+  searchTimer = setTimeout(async function() {
+    try {
+      const response = await fetch(
+        API + "/api/search?q=" + encodeURIComponent(q)
+      );
+
+      if (!response.ok) {
+        throw new Error("Search failed");
+      }
+
+      const data = await response.json();
+
+      if (!data.items || data.items.length === 0) {
+        document.getElementById("stocks").innerHTML = `
+          <div class="sub" style="padding:20px 0">
+            No stocks found for "${q}"
+          </div>
+        `;
+        return;
+      }
+
+      const results = await Promise.all(
+        data.items.map(async item => {
+          try {
+            const stockResponse = await fetch(
+              API + "/api/stocks/" + item.ticker
+            );
+
+            if (!stockResponse.ok) return item;
+
+            return await stockResponse.json();
+          } catch {
+            return item;
+          }
+        })
+      );
+
+      all = all.filter(
+        x => !data.items.some(item => item.ticker === x.ticker)
+      );
+
+      all = [...all, ...results];
+
+      render(results);
+
+    } catch (error) {
+      console.error(error);
+
+      document.getElementById("stocks").innerHTML = `
+        <div class="sub" style="padding:20px 0">
+          Search unavailable.
+        </div>
+      `;
+    }
+  }, 250);
+});
 load();
 </script></body></html>
