@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import threading
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -114,7 +116,6 @@ def seed_db():
         conn.execute("INSERT OR IGNORE INTO stocks(ticker,name,sector,exchange,active) VALUES(?,?,?,?,1)", (ticker, name, sector, "Oslo Børs"))
         conn.execute("UPDATE stocks SET name=?,sector=?,exchange=?,active=1 WHERE ticker=?", (name, sector, "Oslo Børs", ticker))
         if not conn.execute("SELECT 1 FROM scores WHERE ticker=? LIMIT 1", (ticker,)).fetchone(): conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, 20, 12, 10, 8, 50, now, "seed"))
-    # Deactivate legacy/delisted symbols that are no longer in the live universe.
     placeholders=','.join('?' for _ in TICKERS)
     conn.execute(f"UPDATE stocks SET active=0 WHERE ticker NOT IN ({placeholders})", TICKERS)
     conn.commit(); conn.close()
@@ -146,9 +147,20 @@ def refresh_all(limit=None, include_insider=True):
     return sorted(results, key=lambda x: x.get("ticker", ""))
 
 
+def _background_live_refresh():
+    # Boot quickly with a Yahoo-only snapshot, then replace it with the full
+    # coverage-aware live snapshot once Render has finished accepting traffic.
+    time.sleep(2)
+    try:
+        refresh_all(include_insider=True)
+    except Exception:
+        pass
+
+
 @app.on_event("startup")
 def startup():
     init_db(); seed_db(); refresh_all(include_insider=False)
+    threading.Thread(target=_background_live_refresh, daemon=True, name="live-refresh").start()
 
 
 @app.get("/api/health")
