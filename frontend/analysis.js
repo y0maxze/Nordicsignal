@@ -18,6 +18,21 @@ function scoreSourceText(x){
   return "Score is based on stored data.";
 }
 
+function injectAnalysisStyles(){
+  if(document.getElementById("ns-analysis-styles")) return;
+  const style=document.createElement("style");
+  style.id="ns-analysis-styles";
+  style.textContent=`
+    .coverage-panel{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .coverage-panel .coverage-count{font-size:11px;color:var(--m)}
+    .status-note{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#0a1727;margin-top:12px}
+    .status-note strong{font-size:12px}
+    .metric b.muted{color:var(--m)}
+    .freshness{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}
+  `;
+  document.head.appendChild(style);
+}
+
 async function loadScoreAnalysis(ticker){
   const box=document.getElementById("scoreAnalysis");
   if(!box) return;
@@ -40,15 +55,20 @@ async function loadScoreAnalysis(ticker){
     const insiderSignal=insider.signal||"unavailable";
     const insiderClass=insiderSignal==="buying"?"g":insiderSignal==="selling"?"r":"y";
     const verifiedDetails=insider.verified_detail_count??insiderItems.filter(x=>x.verified_detail).length;
+    const verified=v.live_verified===true;
+    const partial=v.partial_live===true;
+    const verifiedPoints=v.coverage?.verified_points??0;
+    const totalPoints=v.coverage?.total_points??100;
 
     box.innerHTML=`
-      <div class="toolbar"><div><h2>Why this score?</h2><div class="sub">${scoreBadge(v)} · ${coverageLabel(v)}</div></div><div class="value">${v.score??'—'} / 100</div></div>
-      <div class="notice"><strong>${esc(scoreSourceText(v))}</strong><br>The score remains on a 0–100 scale. Coverage tells you how much of the scoring model is currently verified by live data.${v.coverage?.verified_points<100?`<br><strong>${100-(v.coverage?.verified_points||0)} points are not yet verified.</strong>`:''}</div>
+      <div class="toolbar"><div><h2>Why this score?</h2><div class="coverage-panel">${scoreBadge(v)}<span class="coverage-count">${coverageLabel(v)}</span></div></div><div class="value">${v.score??'—'} / 100</div></div>
+      <div class="status-note"><strong>${verified?'Fully live verified':partial?'Partial live':'Stored data'}</strong><span class="sub">${verifiedPoints}/${totalPoints} scoring points verified</span>${partial?'<span class="sub">Unavailable components are not guessed.</span>':''}</div>
+      <div class="notice"><strong>${esc(scoreSourceText(v))}</strong><br>The score remains on a 0–100 scale. Coverage tells you how much of the scoring model is currently verified by live data.${verifiedPoints<totalPoints?`<br><strong>${totalPoints-verifiedPoints} points are not yet verified.</strong>`:''}</div>
       <div class="grid">
         <section class="section"><h3>Model reasoning</h3>${reasons}</section>
         <section class="section"><h3>Score components</h3><div class="metrics">
           <div class="metric"><div class="label">Fundamentals</div><b>${v.components?.fundamentals??'—'}/40</b></div>
-          <div class="metric"><div class="label">Insider</div><b>${v.components?.insider==null?'—':v.components.insider+'/25'}</b></div>
+          <div class="metric"><div class="label">Insider</div><b class="${v.components?.insider==null?'muted':''}">${v.components?.insider==null?'Unavailable':v.components.insider+'/25'}</b></div>
           <div class="metric"><div class="label">Valuation</div><b>${v.components?.valuation??'—'}/20</b></div>
           <div class="metric"><div class="label">Sentiment</div><b>${v.components?.sentiment??'—'}/15</b></div>
         </div></section>
@@ -72,12 +92,13 @@ async function loadScoreAnalysis(ticker){
         </div><div class="sub" style="margin-top:12px">${verifiedDetails} insider disclosures have verified trade details. Source: ${esc(insider.source||"Unavailable")}</div></section>
       </div>
       ${insiderItems.length?`<section class="section" style="margin-top:17px"><div class="toolbar"><h3>Recent insider disclosures</h3><span class="sub">${insiderItems.length} found</span></div>${insiderItems.slice(0,8).map(item=>{const dir=item.direction||item.transaction_type||'unknown';const cls=dir==='buy'?'g':dir==='sell'?'r':'y';const detail=[item.insider,item.shares!=null?Number(item.shares).toLocaleString('no-NO')+' shares':null].filter(Boolean).join(' · ');return `<div class="signal"><strong class="${cls}">${esc(dir)}</strong><div class="sub">${esc(item.title||'Primary insider disclosure')} · ${esc(item.date||item.trade_date||'Date unavailable')}</div>${detail?`<div class="small">${esc(detail)}</div>`:''}${item.summary?`<div class="small" style="margin-top:4px">${esc(item.summary)}</div>`:''}</div>`}).join('')}</section>`:""}
-      <div class="sub" style="margin-top:14px">Data freshness: ${v.updated_at?esc(new Date(v.updated_at).toLocaleString('no-NO')):'—'}</div>`;
+      <div class="freshness"><span class="sub">Data freshness: ${v.updated_at?esc(new Date(v.updated_at).toLocaleString('no-NO')):'—'}</span><span class="sub">Source state: ${verified?'LIVE':partial?'PARTIAL LIVE':'STORED'}</span></div>`;
   }catch(e){box.innerHTML='<div class="notice">Score analysis temporarily unavailable.</div>';console.error(e)}
 }
 
 const originalShowStock=window.showStock;
 window.showStock=async function(t){
+  injectAnalysisStyles();
   await originalShowStock(t);
   const x=universe.find(a=>a.ticker===t);
   if(!x)return;
@@ -90,3 +111,5 @@ window.showStock=async function(t){
   host.appendChild(analysis);
   loadScoreAnalysis(t);
 };
+
+injectAnalysisStyles();
