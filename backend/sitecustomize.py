@@ -15,7 +15,7 @@ def _install_insider_patch():
     ISSUER_PAGES = {
         "LSG": "https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information",
     }
-    NEWS_ARCHIVE = "https://live.euronext.com/en/markets/oslo/equities/company-news"
+    NEWS_ARCHIVE = "https://live.euronext.com/en/listview/company-press-releases/1061"
 
     INSIDER_PHRASES = (
         "primary insider",
@@ -62,13 +62,7 @@ def _install_insider_patch():
             if any(x in low for x in ("buyback", "share buyback", "tilbakekjop")):
                 continue
             d = parse_date(line) or (parse_date(lines[idx - 1]) if idx else None)
-            rows.append({
-                "ticker": ticker,
-                "date": d,
-                "title": line,
-                "direction": "unknown",
-                "source": "Euronext Oslo Børs Newspoint",
-            })
+            rows.append({"ticker": ticker, "date": d, "title": line, "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
         return rows
 
     def extract_link_rows(parser, ticker):
@@ -83,10 +77,7 @@ def _install_insider_patch():
     def dedup(rows):
         out, seen = [], set()
         for row in rows:
-            date_key = row.get("date")
-            title_key = norm(row.get("title"))
-            # English/Norwegian duplicate publications on the same date are one disclosure.
-            key = date_key or title_key
+            key = row.get("date") or norm(row.get("title"))
             if key in seen:
                 continue
             seen.add(key)
@@ -99,58 +90,25 @@ def _install_insider_patch():
         urls = []
         if ticker in ISSUER_PAGES:
             urls.append((ISSUER_PAGES[ticker], None))
-        urls.append((NEWS_ARCHIVE, {
-            "keys": ticker,
-            "field_company_pr_pub_datetime_end": "now",
-            "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"),
-            "page": 0,
-        }))
+        urls.append((NEWS_ARCHIVE, {"keys": ticker, "field_company_pr_pub_datetime_end": "now", "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"), "page": 0}))
         last_error = None
-
         for url, params in urls:
             try:
                 html = self._html(url, params=params)
-                parser = _TextParser()
-                parser.feed(html)
-                rows = extract_rows(parser.text, ticker)
-                rows.extend(extract_link_rows(parser, ticker))
-                rows = dedup(rows)
-
-                # Parse table rows when the response is flattened into one text block.
+                parser = _TextParser(); parser.feed(html)
+                rows = dedup(extract_rows(parser.text, ticker) + extract_link_rows(parser, ticker))
                 if not rows:
                     flat = " ".join((parser.text or "").split())
                     date_pat = r"(?:\d{1,2}[./-]\d{1,2}[./-]20\d{2}|\d{1,2}\s+[A-Za-z]{3}\s+20\d{2})"
                     phrase_pat = r"(?:Primary Insider Transaction|Primærinsidetransaksjon|Mandatory Notification of Trade Primary Insiders|Meldepliktig handel for primærinnsidere|Notification of Trade by Primary Insider|Notification of Trade by PDMR)"
-                    pattern = re.compile(rf"({date_pat}).{{0,250}}?({phrase_pat})", re.I)
-                    for m in pattern.finditer(flat):
+                    for m in re.finditer(rf"({date_pat}).{{0,250}}?({phrase_pat})", flat, re.I):
                         rows.append({"ticker": ticker, "date": parse_date(m.group(1)), "title": m.group(2), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
                     rows = dedup(rows)
-
                 if rows:
-                    return {
-                        "ticker": ticker,
-                        "items": rows[:12],
-                        "source": "Euronext Oslo Børs Newspoint",
-                        "status": "live_disclosures",
-                        "buy_count": 0,
-                        "sell_count": 0,
-                        "unknown_count": len(rows[:12]),
-                        "signal": "activity",
-                        "updated_at": now.isoformat(),
-                    }
+                    return {"ticker": ticker, "items": rows[:12], "source": "Euronext Oslo Børs Newspoint", "status": "live_disclosures", "buy_count": 0, "sell_count": 0, "unknown_count": len(rows[:12]), "signal": "activity", "updated_at": now.isoformat()}
             except Exception as exc:
                 last_error = exc
-
-        result = {
-            "ticker": ticker,
-            "items": [],
-            "source": "Euronext Oslo Børs Newspoint",
-            "status": "no_recent_disclosures",
-            "buy_count": 0,
-            "sell_count": 0,
-            "signal": "unavailable",
-            "updated_at": now.isoformat(),
-        }
+        result = {"ticker": ticker, "items": [], "source": "Euronext Oslo Børs Newspoint", "status": "no_recent_disclosures", "buy_count": 0, "sell_count": 0, "signal": "unavailable", "updated_at": now.isoformat()}
         if last_error:
             result["debug"] = str(last_error)
         return result
