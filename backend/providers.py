@@ -40,28 +40,35 @@ class YahooProvider(MarketDataProvider):
         if need_crumb:
             self._bootstrap()
             params["crumb"] = self.crumb
-        response = self.session.get(url, params=params, timeout=15)
+        response = self.session.get(url, params=params, timeout=15, allow_redirects=True)
         if response.status_code in (401, 403) and need_crumb:
             self._bootstrap(force=True)
             params["crumb"] = self.crumb
-            response = self.session.get(url, params=params, timeout=15)
-        response.raise_for_status()
+            response = self.session.get(url, params=params, timeout=15, allow_redirects=True)
+        if response.status_code >= 400:
+            raise RuntimeError(f"Yahoo HTTP {response.status_code}: {response.text[:400]}")
         return response.json()
 
     def _bootstrap(self, force=False):
         if not force and self.crumb and time.time() - self._bootstrap_at < 1800:
             return
         self.crumb = None
-        # 404 from fc.yahoo.com is expected; the important part is retaining its cookie.
         try:
-            self.session.get("https://fc.yahoo.com", timeout=10)
+            self.session.cookies.clear()
         except Exception:
             pass
+        try:
+            self.session.get("https://fc.yahoo.com", timeout=10, allow_redirects=True)
+        except Exception:
+            pass
+        if not list(self.session.cookies):
+            raise RuntimeError("Yahoo did not provide a session cookie")
         last_error = None
         for base in self.BASES:
             try:
-                response = self.session.get(base + "/v1/test/getcrumb", headers={"Accept": "text/plain"}, timeout=10)
-                response.raise_for_status()
+                response = self.session.get(base + "/v1/test/getcrumb", headers={"Accept": "text/plain"}, timeout=10, allow_redirects=True)
+                if response.status_code >= 400:
+                    raise RuntimeError(f"crumb HTTP {response.status_code}: {response.text[:200]}")
                 crumb = response.text.strip()
                 if crumb and "unauthorised" not in crumb.lower() and "<html" not in crumb.lower():
                     self.crumb = crumb
@@ -94,15 +101,25 @@ class YahooProvider(MarketDataProvider):
         return rows
 
     def research(self, ticker):
-        modules = ",".join(["price", "summaryDetail", "defaultKeyStatistics", "financialData", "summaryProfile", "insiderTransactions", "insiderHolders", "institutionOwnership", "majorHoldersBreakdown", "netSharePurchaseActivity"])
+        # Keep this list deliberately small. Yahoo has intermittently disabled
+        # individual quoteSummary modules; one unsupported module can invalidate
+        # the whole response. These are the core modules used by our scoring engine.
+        modules = "price,summaryDetail,defaultKeyStatistics,financialData,insiderTransactions,insiderHolders"
         last_error = None
-        for base in self.BASES:
+        for attempt in range(2):
             try:
-                data = self._get(f"{base}/v10/finance/quoteSummary/{self.symbol(ticker)}", {"modules": modules, "formatted": "false", "lang": "en-US", "region": "US"}, need_crumb=True)
-                result = data.get("quoteSummary", {}).get("result") or []
-                if result: return result[0]
-                last_error = RuntimeError("Yahoo returned no quoteSummary result")
-            except Exception as exc: last_error = exc
+                self._bootstrap(force=attempt > 0)
+                params = {"modules": modules, "formatted": "false", "lang": "en-US", "region": "US", "crumb": self.crumb}
+                for base in self.BASES:
+                    try:
+                        data = self._get(f"{base}/v10/finance/quoteSummary/{self.symbol(ticker)}", params, need_crumb=False)
+                        result = data.get("quoteSummary", {}).get("result") or []
+                        if result: return result[0]
+                        last_error = RuntimeError("Yahoo returned no quoteSummary result")
+                    except Exception as exc:
+                        last_error = exc
+            except Exception as exc:
+                last_error = exc
         raise RuntimeError(f"Yahoo research failed for {self.symbol(ticker)}: {last_error}")
 
 
