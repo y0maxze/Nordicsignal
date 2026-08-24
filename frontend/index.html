@@ -38,12 +38,14 @@ async function load() {
       throw new Error("Stocks API failed");
     }
 
-    const data = await response.json();
-
     all = data.items;
-    universe = [...data.items];
+universe = [...data.items];
 
-    render(all);
+document.getElementById("count").textContent = data.items.length;
+document.getElementById("strong").textContent =
+  data.items.filter(x => x.score >= 80).length;
+
+render(data.items);
 
     const radarResponse = await fetch(API + "/api/radar");
 
@@ -61,11 +63,6 @@ async function load() {
   }
 }
 function render(items) {
-  document.getElementById("count").textContent = universe.length;
-
-document.getElementById("strong").textContent =
-  universe.filter(x => x.score >= 80).length;
-
   document.getElementById("stocks").innerHTML = items.map(x => `
     <div class="row">
       <span class="stock" onclick="stock('${x.ticker}')">
