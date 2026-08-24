@@ -68,27 +68,47 @@ def _positions(provider):
     starting = float(account['starting_cash']) if account else 100000.0
     cash = starting
     positions = {}
+    cost_layers = {}
+    realized = {}
     for t in trades:
-        ticker=t['ticker']; shares=float(t['shares']); gross=shares*float(t['price']); fee=float(t['fee'] or 0)
+        ticker=t['ticker']; shares=float(t['shares']); price=float(t['price']); gross=shares*price; fee=float(t['fee'] or 0)
         if t['side']=='buy':
-            cash -= gross + fee; positions[ticker]=positions.get(ticker,0)+shares
+            cash -= gross + fee
+            positions[ticker]=positions.get(ticker,0)+shares
+            cost_layers.setdefault(ticker, []).append([shares, gross + fee])
         else:
-            cash += gross - fee; positions[ticker]=positions.get(ticker,0)-shares
+            held=positions.get(ticker,0)
+            if shares > held + 1e-10:
+                # Historical data should never contain an invalid sell, but keep
+                # portfolio reconstruction deterministic if old data is present.
+                shares = held
+            cash += gross - fee
+            positions[ticker]=positions.get(ticker,0)-shares
+            remaining=shares; removed_cost=0.0
+            layers=cost_layers.setdefault(ticker, [])
+            while remaining > 1e-10 and layers:
+                layer_shares, layer_cost=layers[0]
+                take=min(remaining, layer_shares)
+                unit_cost=layer_cost/layer_shares if layer_shares else 0.0
+                removed_cost += take*unit_cost
+                layer_shares -= take; layer_cost -= take*unit_cost; remaining -= take
+                if layer_shares <= 1e-10: layers.pop(0)
+                else: layers[0]=[layer_shares, layer_cost]
+            realized[ticker]=realized.get(ticker,0.0)+(gross-fee-removed_cost)
     result=[]
     for ticker, shares in positions.items():
         if abs(shares) < 1e-10: continue
         try: q=_quote(provider,ticker); price=float(q['price'])
         except Exception: price=None
         value=shares*price if price is not None else None
-        cost=0.0
-        for t in trades:
-            if t['ticker']==ticker:
-                gross=float(t['shares'])*float(t['price']); fee=float(t['fee'] or 0)
-                cost += gross+fee if t['side']=='buy' else -(gross-fee)
+        layers=cost_layers.get(ticker,[])
+        cost=sum(layer[1] for layer in layers)
         pnl=(value-cost) if value is not None else None
-        result.append({'ticker':ticker,'shares':shares,'price':price,'value':value,'cost_basis':cost,'pnl':pnl,'change_pct':(pnl/cost*100 if pnl is not None and cost else None)})
+        result.append({'ticker':ticker,'shares':shares,'price':price,'value':value,'cost_basis':cost,'pnl':pnl,'realized_pnl':realized.get(ticker,0.0),'change_pct':(pnl/cost*100 if pnl is not None and cost else None)})
     market_value=sum(x['value'] or 0 for x in result)
-    return {'starting_cash':starting,'cash':cash,'positions':result,'market_value':market_value,'equity':cash+market_value,'pnl':cash+market_value-starting,'pnl_pct':(cash+market_value-starting)/starting*100}
+    total_realized=sum(realized.values())
+    equity=cash+market_value
+    return {'starting_cash':starting,'cash':cash,'positions':result,'market_value':market_value,'equity':equity,'pnl':equity-starting,'pnl_pct':(equity-starting)/starting*100,'realized_pnl':total_realized}
 
 
 def _dividends(provider, ticker, start_ts, end_ts):
@@ -102,6 +122,31 @@ def _dividends(provider, ticker, start_ts, end_ts):
     return sorted(out,key=lambda x:x['timestamp'])
 
 
+def _xirr(cashflows):
+    """Money-weighted annualized return for irregular cash flows."""
+    if len(cashflows)<2: return None
+    first=cashflows[0][0]
+    flows=[((dt-first).total_seconds()/31557600.0, float(amount)) for dt,amount in cashflows]
+    if not any(a<0 for _,a in flows) or not any(a>0 for _,a in flows): return None
+    def npv(rate):
+        base=1.0+rate
+        if base<=0: return float('inf')
+        return sum(amount/(base**years) for years,amount in flows)
+    lo,hi=-0.9999,10.0
+    nlo,nhi=npv(lo),npv(hi)
+    for _ in range(40):
+        if nlo*nhi<=0: break
+        hi=hi*2+1
+        nhi=npv(hi)
+    if nlo*nhi>0: return None
+    for _ in range(100):
+        mid=(lo+hi)/2; nm=npv(mid)
+        if abs(nm)<1e-7: return mid
+        if nlo*nm<=0: hi,nhi=mid,nm
+        else: lo,nlo=mid,nm
+    return (lo+hi)/2
+
+
 def _backtest(provider, ticker, start, end, initial_cash, monthly_investment, reinvest_dividends):
     history=provider.historical(ticker,'max')
     start_ts=int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp()) if 'T' not in start else int(datetime.fromisoformat(start.replace('Z','+00:00')).timestamp())
@@ -110,7 +155,7 @@ def _backtest(provider, ticker, start, end, initial_cash, monthly_investment, re
     if not rows: raise HTTPException(404,detail='No historical data for selected period')
     divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400)
     div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}
-    cash=float(initial_cash); shares=0.0; invested=0.0; last_month=None; points=[]; tx=[]
+    cash=float(initial_cash); shares=0.0; invested=0.0; last_month=None; points=[]; tx=[]; cashflows=[]
     for row in rows:
         d=datetime.fromtimestamp(int(row['timestamp']),timezone.utc).date(); price=float(row['close'])
         if last_month != (d.year,d.month):
@@ -120,6 +165,7 @@ def _backtest(provider, ticker, start, end, initial_cash, monthly_investment, re
             buy_shares=contribution/price if price else 0
             shares += buy_shares; cash -= buy_shares*price; invested += contribution
             tx.append({'date':d.isoformat(),'side':'buy','shares':buy_shares,'price':price,'amount':contribution})
+            cashflows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
             last_month=(d.year,d.month)
         div_per_share=div_by_day.get(d.isoformat(),0)
         if div_per_share and shares:
@@ -131,7 +177,8 @@ def _backtest(provider, ticker, start, end, initial_cash, monthly_investment, re
         equity=cash+shares*price
         points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':shares*price,'equity':equity,'invested':invested})
     end_equity=points[-1]['equity']; total_return=end_equity-invested
-    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total_return,'return_pct':total_return/invested*100 if invested else 0,'shares':shares,'cash':cash,'dividends':sum(x['amount'] for x in tx if x['side'].startswith('dividend')),'points':points,'transactions':tx[-30:]}
+    cashflows.append((datetime.fromisoformat(rows[-1]['date']).replace(tzinfo=timezone.utc),end_equity))
+    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total_return,'return_pct':total_return/invested*100 if invested else 0,'xirr':_xirr(cashflows),'shares':shares,'cash':cash,'dividends':sum(x['amount'] for x in tx if x['side'].startswith('dividend')),'points':points,'transactions':tx[-30:]}
 
 
 def install(app):
