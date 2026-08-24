@@ -20,7 +20,7 @@ class DemoProvider(MarketDataProvider):
 
 
 class YahooProvider(MarketDataProvider):
-    """Yahoo Finance adapter using a browser-like TLS session."""
+    """Yahoo Finance adapter using chart data plus browser-like research session."""
     BASES = ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com")
     BASE = BASES[0]
     UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36"
@@ -53,14 +53,10 @@ class YahooProvider(MarketDataProvider):
         if not force and self.crumb and time.time() - self._bootstrap_at < 1800:
             return
         self.crumb = None
-        try:
-            self.session.cookies.clear()
-        except Exception:
-            pass
-        try:
-            self.session.get("https://fc.yahoo.com", timeout=10, allow_redirects=True)
-        except Exception:
-            pass
+        try: self.session.cookies.clear()
+        except Exception: pass
+        try: self.session.get("https://fc.yahoo.com", timeout=10, allow_redirects=True)
+        except Exception: pass
         if not list(self.session.cookies):
             raise RuntimeError("Yahoo did not provide a session cookie")
         last_error = None
@@ -71,12 +67,9 @@ class YahooProvider(MarketDataProvider):
                     raise RuntimeError(f"crumb HTTP {response.status_code}: {response.text[:200]}")
                 crumb = response.text.strip()
                 if crumb and "unauthorised" not in crumb.lower() and "<html" not in crumb.lower():
-                    self.crumb = crumb
-                    self._bootstrap_at = time.time()
-                    return
+                    self.crumb = crumb; self._bootstrap_at = time.time(); return
                 last_error = RuntimeError("Yahoo returned an empty/invalid crumb")
-            except Exception as exc:
-                last_error = exc
+            except Exception as exc: last_error = exc
         raise RuntimeError(f"Yahoo crumb bootstrap failed: {last_error}")
 
     def quote(self, ticker):
@@ -100,10 +93,36 @@ class YahooProvider(MarketDataProvider):
             rows.append({"timestamp": ts, "date": datetime.fromtimestamp(ts, timezone.utc).isoformat(), "open": opens[i] if i < len(opens) else None, "high": highs[i] if i < len(highs) else None, "low": lows[i] if i < len(lows) else None, "close": closes[i], "volume": volumes[i] if i < len(volumes) else None})
         return rows
 
+    def fundamentals(self, ticker):
+        """Fetch fundamentals through Yahoo's timeseries endpoint, which does not use quoteSummary crumbs."""
+        symbol = self.symbol(ticker)
+        types = [
+            "annualTotalRevenue","annualEBITDA","annualEBIT","annualNetIncome",
+            "annualDilutedEPS","annualOperatingCashFlow","annualFreeCashFlow",
+            "annualTotalDebt","annualStockholdersEquity","annualGrossProfit",
+            "annualOperatingIncome","annualPretaxIncome","annualBasicAverageShares",
+            "quarterlyTotalRevenue","quarterlyEBITDA","quarterlyDilutedEPS",
+            "quarterlyOperatingCashFlow","quarterlyFreeCashFlow"
+        ]
+        params = {"symbol": symbol, "type": ",".join(types), "period1": "946684800", "period2": str(int(time.time()) + 86400)}
+        last_error = None
+        for base in self.BASES:
+            try:
+                data = self._get(f"{base}/ws/fundamentals-timeseries/v1/finance/timeseries/{symbol}", params)
+                result = data.get("timeseries", {}).get("result") or []
+                if result:
+                    latest = {}
+                    for series in result:
+                        for key, value in series.items():
+                            if key in ("meta", "timestamp"): continue
+                            if isinstance(value, list) and value:
+                                latest[key] = value
+                    return {"ticker": ticker.upper(), "symbol": symbol, "series": latest, "source": "Yahoo Finance Timeseries", "captured_at": datetime.now(timezone.utc).isoformat()}
+                last_error = RuntimeError("Yahoo returned no fundamentals timeseries")
+            except Exception as exc: last_error = exc
+        raise RuntimeError(f"Yahoo fundamentals failed for {symbol}: {last_error}")
+
     def research(self, ticker):
-        # Keep this list deliberately small. Yahoo has intermittently disabled
-        # individual quoteSummary modules; one unsupported module can invalidate
-        # the whole response. These are the core modules used by our scoring engine.
         modules = "price,summaryDetail,defaultKeyStatistics,financialData,insiderTransactions,insiderHolders"
         last_error = None
         for attempt in range(2):
@@ -116,10 +135,8 @@ class YahooProvider(MarketDataProvider):
                         result = data.get("quoteSummary", {}).get("result") or []
                         if result: return result[0]
                         last_error = RuntimeError("Yahoo returned no quoteSummary result")
-                    except Exception as exc:
-                        last_error = exc
-            except Exception as exc:
-                last_error = exc
+                    except Exception as exc: last_error = exc
+            except Exception as exc: last_error = exc
         raise RuntimeError(f"Yahoo research failed for {self.symbol(ticker)}: {last_error}")
 
 
