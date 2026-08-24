@@ -6,7 +6,7 @@ from database import connect, init_db
 from scoring import calculate_score, signal_label
 from providers import YahooProvider
 
-app = FastAPI(title="NordicSignal API", version="2.3.1")
+app = FastAPI(title="NordicSignal API", version="2.3.2")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 SEED = [("LSG", "Lerøy Seafood", "Seafood", 34, 24, 16, 12),("MPCC", "MPCC", "Shipping", 36, 15, 17, 12),("ELO", "Elopak", "Packaging", 30, 23, 16, 12),("PEXIP", "Pexip", "Technology", 33, 18, 15, 11),("XPLRA", "Xplora", "Technology", 32, 18, 14, 6)]
@@ -69,11 +69,47 @@ def refresh_one(ticker):
 
 def refresh_all(): return [refresh_one(t) for t in TICKERS]
 
+def timeseries_map(series):
+    """Normalize Yahoo fundamentals timeseries result into {type: [rows]}.
+    Yahoo returns a list of objects, one object per metric, not a dict keyed by metric.
+    """
+    if isinstance(series, dict):
+        return series
+    if not isinstance(series, list):
+        return {}
+    mapped={}
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        for key,value in item.items():
+            if key in ("meta", "timestamp"):
+                continue
+            if isinstance(value, list):
+                mapped[key]=value
+    return mapped
+
+def latest_timeseries_value(series, name):
+    values=timeseries_map(series).get(name, [])
+    if not isinstance(values, list):
+        return None
+    candidates=[]
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        value=item.get("reportedValue")
+        if isinstance(value, dict):
+            value=value.get("raw")
+        if isinstance(value,(int,float)):
+            candidates.append((item.get("asOfDate", ""), value))
+    if not candidates:
+        return None
+    return sorted(candidates,key=lambda x:x[0])[-1][1]
+
 @app.on_event("startup")
 def startup(): init_db(); seed_db(); refresh_all()
 
 @app.get("/api/health")
-def health(): return {"status":"ok","service":"NordicSignal API","version":"2.3.1","provider":"Yahoo Finance","score_policy":"live_only_or_explicit_stored"}
+def health(): return {"status":"ok","service":"NordicSignal API","version":"2.3.2","provider":"Yahoo Finance","score_policy":"live_only_or_explicit_stored"}
 
 @app.get("/api/refresh")
 def refresh(): return {"status":"ok","results":refresh_all()}
@@ -125,29 +161,15 @@ def research(ticker:str):
 def fundamentals(ticker:str):
     try:
         r=provider.fundamentals(ticker)
-        series=r.get("series",{}) if isinstance(r,dict) else {}
-        def latest(name):
-            values=series.get(name,[])
-            if not isinstance(values,list) or not values:return None
-            item=values[-1]
-            if isinstance(item,dict):
-                for k,v in item.items():
-                    if k not in ("asOfDate","periodType","currencyCode") and isinstance(v,(int,float)): return v
-            return None
-        return {"ticker":ticker.upper(),"source":r.get("source","Yahoo Finance Timeseries"),"captured_at":r.get("captured_at"),"data":{"revenue":latest("annualTotalRevenue"),"ebitda":latest("annualEBITDA"),"ebit":latest("annualEBIT"),"net_income":latest("annualNetIncome"),"eps":latest("annualDilutedEPS"),"operating_cashflow":latest("annualOperatingCashFlow"),"free_cashflow":latest("annualFreeCashFlow"),"debt":latest("annualTotalDebt"),"equity":latest("annualStockholdersEquity"),"gross_profit":latest("annualGrossProfit"),"operating_income":latest("annualOperatingIncome"),"pretax_income":latest("annualPretaxIncome")}}
+        series=r.get("series",[]) if isinstance(r,dict) else []
+        return {"ticker":ticker.upper(),"source":r.get("source","Yahoo Finance Timeseries"),"captured_at":r.get("captured_at"),"data":{"revenue":latest_timeseries_value(series,"annualTotalRevenue"),"ebitda":latest_timeseries_value(series,"annualEBITDA"),"ebit":latest_timeseries_value(series,"annualEBIT"),"net_income":latest_timeseries_value(series,"annualNetIncome"),"eps":latest_timeseries_value(series,"annualDilutedEPS"),"operating_cashflow":latest_timeseries_value(series,"annualOperatingCashFlow"),"free_cashflow":latest_timeseries_value(series,"annualFreeCashFlow"),"debt":latest_timeseries_value(series,"annualTotalDebt"),"equity":latest_timeseries_value(series,"annualStockholdersEquity"),"gross_profit":latest_timeseries_value(series,"annualGrossProfit"),"operating_income":latest_timeseries_value(series,"annualOperatingIncome"),"pretax_income":latest_timeseries_value(series,"annualPretaxIncome")}}
     except Exception as exc:return {"ticker":ticker.upper(),"source":"unavailable","data":{},"error":str(exc)}
 
 @app.get("/api/score-explanation/{ticker}")
 def score_explanation(ticker:str):
     try:
         r=provider.research(ticker); fd=r.get("financialData",{}) or {}; reasons=[]
-        growth=raw(fd.get("revenueGrowth")); margin=raw(fd.get("ebitdaMargins")); roe=raw(fd.get("returnOnEquity")); debt=raw(fd.get("debtToEquity")); fcf=None
-        try:
-            fr=provider.fundamentals(ticker); series=fr.get("series",{}); vals=series.get("annualFreeCashFlow",[]); item=vals[-1] if isinstance(vals,list) and vals else {}
-            if isinstance(item,dict):
-                for k,v in item.items():
-                    if k not in ("asOfDate","periodType","currencyCode") and isinstance(v,(int,float)): fcf=v; break
-        except Exception: pass
+        growth=raw(fd.get("revenueGrowth")); margin=raw(fd.get("ebitdaMargins")); roe=raw(fd.get("returnOnEquity")); debt=raw(fd.get("debtToEquity")); fcf=latest_timeseries_value(provider.fundamentals(ticker).get("series",[]),"annualFreeCashFlow")
         if fcf is not None and fcf>0: reasons.append({"type":"positive","text":"Free cash flow is positive."})
         if margin is not None and margin>=.10: reasons.append({"type":"positive","text":"EBITDA margin is at least 10%."})
         elif margin is not None and margin<0: reasons.append({"type":"negative","text":"Operating profitability is under pressure."})
