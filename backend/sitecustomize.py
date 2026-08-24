@@ -8,7 +8,6 @@ def _install_insider_patch():
         from providers import NordicRegulatoryProvider, _TextParser
     except Exception:
         return
-
     if getattr(NordicRegulatoryProvider, "_live_insider_patch", False):
         return
 
@@ -16,73 +15,67 @@ def _install_insider_patch():
         "LSG": "https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information",
     }
     NEWS_ARCHIVE = "https://live.euronext.com/en/listview/company-press-releases/1061"
-
-    INSIDER_PHRASES = (
-        "primary insider",
-        "primærinsidetransaksjon",
-        "mandatory notification of trade primary insiders",
-        "meldepliktig handel for primærinnsidere",
-        "notification of trade by primary insider",
-        "notification of trade by pdmr",
-        "pdmr",
+    PHRASES = (
+        "Primary Insider Transaction",
+        "Primærinsidetransaksjon",
+        "Mandatory Notification of Trade Primary Insiders",
+        "Meldepliktig handel for primærinnsidere",
+        "Notification of Trade by Primary Insider",
+        "Notification of Trade by PDMR",
     )
+    MONTHS = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"mai":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"okt":10,"nov":11,"dec":12,"des":12}
 
-    MONTHS = {
-        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "mai": 5,
-        "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "okt": 10,
-        "nov": 11, "dec": 12, "des": 12,
-    }
+    def norm(v):
+        v = (v or "").lower().replace("ø","o").replace("æ","ae").replace("å","a")
+        return re.sub(r"[^a-z0-9]+", " ", v).strip()
 
-    def norm(value):
-        value = (value or "").lower().replace("ø", "o").replace("æ", "ae").replace("å", "a")
-        return re.sub(r"[^a-z0-9]+", " ", value).strip()
-
-    def parse_date(value):
-        value = value or ""
-        m = re.search(r"\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b", value)
+    def parse_date(v):
+        v = v or ""
+        m = re.search(r"\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b", v)
         if m:
             return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
-        m = re.search(r"\b(\d{1,2})\s+([A-Za-z]{3})\s+(20\d{2})\b", value)
-        if not m:
+        m = re.search(r"\b(\d{1,2})\s+([A-Za-z]{3})\s+(20\d{2})\b", v)
+        if not m or m.group(2).lower() not in MONTHS:
             return None
-        month = MONTHS.get(m.group(2).lower())
-        return f"{m.group(3)}-{month:02d}-{int(m.group(1)):02d}" if month else None
+        return f"{m.group(3)}-{MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
 
-    def is_insider(text):
-        low = norm(text)
-        return any(norm(p) in low for p in INSIDER_PHRASES)
+    def clean_html(html):
+        p = _TextParser(); p.feed(html or "")
+        return " ".join((p.text or "").split()), p.links
 
-    def extract_rows(text, ticker):
-        lines = [" ".join(x.split()) for x in (text or "").splitlines() if x.strip()]
+    def extract(html, ticker):
+        text, links = clean_html(html)
+        flat = " ".join(text.split())
         rows = []
-        for idx, line in enumerate(lines):
-            if not is_insider(line):
-                continue
-            low = line.lower()
-            if any(x in low for x in ("buyback", "share buyback", "tilbakekjop")):
-                continue
-            d = parse_date(line) or (parse_date(lines[idx - 1]) if idx else None)
-            rows.append({"ticker": ticker, "date": d, "title": line, "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
-        return rows
-
-    def extract_link_rows(parser, ticker):
-        rows = []
-        for href, text in parser.links:
-            if not href or not text or not is_insider(text):
+        date_pat = r"(?:\d{1,2}[./-]\d{1,2}[./-]20\d{2}|\d{1,2}\s+[A-Za-z]{3}\s+20\d{2})"
+        phrase_pat = r"(?:Primary Insider Transaction|Primærinsidetransaksjon|Mandatory Notification of Trade Primary Insiders|Meldepliktig handel for primærinnsidere|Notification of Trade by Primary Insider|Notification of Trade by PDMR)"
+        # Euronext may render the date before the title or the title before the date.
+        patterns = [
+            rf"({date_pat}).{{0,700}}?({phrase_pat})",
+            rf"({phrase_pat}).{{0,700}}?({date_pat})",
+        ]
+        for pattern in patterns:
+            for m in re.finditer(pattern, flat, re.I):
+                date = parse_date(m.group(1)) or parse_date(m.group(2))
+                title = m.group(2) if is_phrase(m.group(2)) else m.group(1)
+                rows.append({"ticker": ticker, "date": date, "title": title.strip(), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
+        # Also inspect actual anchor text; issuer pages can split date/title into separate DOM nodes.
+        for href, label in links:
+            if not label or not any(norm(p) in norm(label) for p in PHRASES):
                 continue
             full = href if href.startswith("http") else "https://live.euronext.com" + href
-            rows.append({"ticker": ticker, "date": parse_date(text), "title": text.strip(), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint", "url": full})
-        return rows
-
-    def dedup(rows):
+            rows.append({"ticker": ticker, "date": parse_date(label), "title": label.strip(), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint", "url": full})
         out, seen = [], set()
         for row in rows:
-            key = row.get("date") or norm(row.get("title"))
+            key = (row.get("date"), norm(row.get("title")))
             if key in seen:
                 continue
-            seen.add(key)
-            out.append(row)
+            seen.add(key); out.append(row)
         return out
+
+    def is_phrase(v):
+        n = norm(v)
+        return any(norm(p) in n for p in PHRASES)
 
     def insider(self, ticker, company_name=""):
         ticker = (ticker or "").upper()
@@ -90,22 +83,24 @@ def _install_insider_patch():
         urls = []
         if ticker in ISSUER_PAGES:
             urls.append((ISSUER_PAGES[ticker], None))
-        urls.append((NEWS_ARCHIVE, {"keys": ticker, "field_company_pr_pub_datetime_end": "now", "field_company_pr_pub_datetime_start": (now - timedelta(days=365)).strftime("%Y-%m-%d 00:00:00"), "page": 0}))
+        urls.append((NEWS_ARCHIVE, {"keys": ticker, "page": 0}))
         last_error = None
         for url, params in urls:
             try:
                 html = self._html(url, params=params)
-                parser = _TextParser(); parser.feed(html)
-                rows = dedup(extract_rows(parser.text, ticker) + extract_link_rows(parser, ticker))
-                if not rows:
-                    flat = " ".join((parser.text or "").split())
-                    date_pat = r"(?:\d{1,2}[./-]\d{1,2}[./-]20\d{2}|\d{1,2}\s+[A-Za-z]{3}\s+20\d{2})"
-                    phrase_pat = r"(?:Primary Insider Transaction|Primærinsidetransaksjon|Mandatory Notification of Trade Primary Insiders|Meldepliktig handel for primærinnsidere|Notification of Trade by Primary Insider|Notification of Trade by PDMR)"
-                    for m in re.finditer(rf"({date_pat}).{{0,250}}?({phrase_pat})", flat, re.I):
-                        rows.append({"ticker": ticker, "date": parse_date(m.group(1)), "title": m.group(2), "direction": "unknown", "source": "Euronext Oslo Børs Newspoint"})
-                    rows = dedup(rows)
+                rows = extract(html, ticker)
                 if rows:
-                    return {"ticker": ticker, "items": rows[:12], "source": "Euronext Oslo Børs Newspoint", "status": "live_disclosures", "buy_count": 0, "sell_count": 0, "unknown_count": len(rows[:12]), "signal": "activity", "updated_at": now.isoformat()}
+                    return {
+                        "ticker": ticker,
+                        "items": rows[:12],
+                        "source": "Euronext Oslo Børs Newspoint",
+                        "status": "live_disclosures",
+                        "buy_count": sum(1 for r in rows if r.get("direction") == "buy"),
+                        "sell_count": sum(1 for r in rows if r.get("direction") == "sell"),
+                        "unknown_count": sum(1 for r in rows if r.get("direction") == "unknown"),
+                        "signal": "activity",
+                        "updated_at": now.isoformat(),
+                    }
             except Exception as exc:
                 last_error = exc
         result = {"ticker": ticker, "items": [], "source": "Euronext Oslo Børs Newspoint", "status": "no_recent_disclosures", "buy_count": 0, "sell_count": 0, "signal": "unavailable", "updated_at": now.isoformat()}
@@ -115,6 +110,5 @@ def _install_insider_patch():
 
     NordicRegulatoryProvider.insider = insider
     NordicRegulatoryProvider._live_insider_patch = True
-
 
 _install_insider_patch()
