@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 import json
 import time
+
+import requests
 
 
 class MarketDataProvider(ABC):
@@ -42,58 +44,55 @@ class YahooProvider(MarketDataProvider):
         self.cookie = None
         self.crumb = None
         self._bootstrap_at = 0
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": self.UA, "Accept": "application/json,text/plain,*/*"})
 
     def symbol(self, ticker: str) -> str:
         ticker = ticker.upper()
         return ticker if "." in ticker else ticker + ".OL"
 
     def _get(self, url, params=None, headers=None):
-        if params:
-            url += ("&" if "?" in url else "?") + urlencode(params)
-        req = Request(url, headers={"User-Agent": self.UA, **(headers or {})})
+        response = self.session.get(url, params=params, headers=headers, timeout=15)
         try:
-            with urlopen(req, timeout=12) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Yahoo HTTP {exc.code}: {body[:500]}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"Yahoo connection failed: {exc.reason}") from exc
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = response.text[:500]
+            raise RuntimeError(f"Yahoo HTTP {response.status_code}: {body}") from exc
+        return response.json()
 
     def _bootstrap(self):
         if self.crumb and self.cookie and time.time() - self._bootstrap_at < 1800:
             return
 
-        # Yahoo's fc.yahoo.com commonly responds with HTTP 404 while still
-        # setting the session cookie required to mint a valid crumb. The old
-        # implementation discarded that cookie because it treated the 404 as
-        # a complete failure, which caused every quoteSummary request to fail.
-        raw_cookies = []
-        req = Request("https://fc.yahoo.com", headers={"User-Agent": self.UA})
+        # Keep the cookie and crumb in the SAME requests.Session. Yahoo binds
+        # the crumb to the session cookie. fc.yahoo.com may return 404 by design,
+        # but the response still sets the A3 session cookie.
+        self.session.cookies.clear()
+        self.crumb = None
+        self.cookie = None
+
         try:
-            with urlopen(req, timeout=10) as response:
-                raw_cookies = response.headers.get_all("Set-Cookie") or []
-        except HTTPError as exc:
-            raw_cookies = exc.headers.get_all("Set-Cookie") or []
-        except URLError:
-            raw_cookies = []
+            self.session.get("https://fc.yahoo.com", timeout=12, allow_redirects=True)
+        except requests.RequestException:
+            pass
 
-        cookie_parts = []
-        for value in raw_cookies:
-            cookie_parts.append(value.split(";", 1)[0])
-        self.cookie = "; ".join(cookie_parts) or None
+        cookie_values = [f"{c.name}={c.value}" for c in self.session.cookies]
+        self.cookie = "; ".join(cookie_values) or None
+        if not self.cookie:
+            raise RuntimeError("Yahoo did not provide a session cookie")
 
-        headers = {"Cookie": self.cookie} if self.cookie else {}
         last_error = None
         for base in self.BASES:
-            crumb_req = Request(
-                base + "/v1/test/getcrumb",
-                headers={"User-Agent": self.UA, "Accept": "text/plain", **headers},
-            )
             try:
-                with urlopen(crumb_req, timeout=10) as response:
-                    crumb = response.read().decode("utf-8").strip()
-                if crumb and not crumb.lower().startswith("unauthorised"):
+                response = self.session.get(
+                    base + "/v1/test/getcrumb",
+                    headers={"Accept": "text/plain"},
+                    timeout=12,
+                    allow_redirects=True,
+                )
+                response.raise_for_status()
+                crumb = response.text.strip()
+                if crumb and not crumb.lower().startswith("unauthorised") and "<html" not in crumb.lower():
                     self.crumb = crumb
                     self._bootstrap_at = time.time()
                     return
@@ -101,8 +100,6 @@ class YahooProvider(MarketDataProvider):
             except Exception as exc:
                 last_error = exc
 
-        self.cookie = None
-        self.crumb = None
         raise RuntimeError(f"Yahoo crumb bootstrap failed: {last_error}")
 
     def quote(self, ticker):
@@ -129,31 +126,22 @@ class YahooProvider(MarketDataProvider):
 
     def historical(self, ticker, period="1y"):
         ranges = {
-            "now": ("1d", "5m"),
-            "1d": ("1d", "5m"),
-            "1w": ("5d", "1h"),
-            "1m": ("1mo", "1d"),
-            "3m": ("3mo", "1d"),
-            "6m": ("6mo", "1d"),
-            "1y": ("1y", "1d"),
-            "5y": ("5y", "1wk"),
-            "10y": ("10y", "1mo"),
+            "now": ("1d", "5m"), "1d": ("1d", "5m"), "1w": ("5d", "1h"),
+            "1m": ("1mo", "1d"), "3m": ("3mo", "1d"), "6m": ("6mo", "1d"),
+            "1y": ("1y", "1d"), "5y": ("5y", "1wk"), "10y": ("10y", "1mo"),
             "max": ("max", "1mo"),
         }
         rng, interval = ranges.get(period, ranges["1y"])
-        data = self._get(
-            f"{self.BASE}/v8/finance/chart/{self.symbol(ticker)}",
-            {"range": rng, "interval": interval, "events": "div,splits"},
-        )
+        data = self._get(f"{self.BASE}/v8/finance/chart/{self.symbol(ticker)}", {"range": rng, "interval": interval, "events": "div,splits"})
         result = data["chart"]["result"][0]
         timestamps = result.get("timestamp") or []
         quote = (result.get("indicators", {}).get("quote") or [{}])[0]
-        rows = []
         closes = quote.get("close") or []
         opens = quote.get("open") or []
         highs = quote.get("high") or []
         lows = quote.get("low") or []
         volumes = quote.get("volume") or []
+        rows = []
         for i, ts in enumerate(timestamps):
             if i >= len(closes) or closes[i] is None:
                 continue
@@ -175,29 +163,17 @@ class YahooProvider(MarketDataProvider):
             "summaryProfile", "insiderTransactions", "insiderHolders",
             "institutionOwnership", "majorHoldersBreakdown", "netSharePurchaseActivity"
         ])
-        params = {
-            "modules": modules,
-            "crumb": self.crumb,
-            "formatted": "false",
-            "lang": "en-US",
-            "region": "US",
-        }
-        headers = {"Cookie": self.cookie} if self.cookie else {}
+        params = {"modules": modules, "crumb": self.crumb, "formatted": "false", "lang": "en-US", "region": "US"}
         last_error = None
         for base in self.BASES:
             try:
-                data = self._get(
-                    f"{base}/v10/finance/quoteSummary/{self.symbol(ticker)}",
-                    params,
-                    headers,
-                )
+                data = self._get(f"{base}/v10/finance/quoteSummary/{self.symbol(ticker)}", params)
                 result = (data.get("quoteSummary", {}).get("result") or [])
                 if result:
                     return result[0]
                 last_error = RuntimeError("Yahoo returned no quoteSummary result")
             except Exception as exc:
                 last_error = exc
-
         raise RuntimeError(f"Yahoo research failed for {self.symbol(ticker)}: {last_error}")
 
 
