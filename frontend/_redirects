@@ -1,2 +1,4 @@
 /frontend/ /
 /frontend/* /:splat
+/paper /paper.html 200
+/paper/ /paper.html 200
