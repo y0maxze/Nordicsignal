@@ -1,140 +1,43 @@
 <!doctype html>
 <html lang="no">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NordicSignal</title>
 <style>
 :root{--bg:#07111f;--p:#0d1b2d;--p2:#10243a;--line:#20354d;--t:#eef5ff;--m:#91a5bd;--g:#35d49a;--y:#f3c95b;--r:#fb7185;--b:#65a9ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#112942,#07111f 45%);color:var(--t);font:14px system-ui}.app{display:flex;min-height:100vh}.side{width:235px;position:fixed;inset:0 auto 0 0;background:#081423;border-right:1px solid var(--line);padding:24px 15px}.logo{font-size:21px;font-weight:850;margin:0 10px 28px}.logo span{color:var(--g)}nav a{display:block;color:var(--m);padding:11px 13px;border-radius:10px;margin:4px 0;cursor:pointer}nav a.active,nav a:hover{background:var(--p2);color:#fff}.main{margin-left:235px;flex:1;padding:30px;max-width:1500px}.top{display:flex;justify-content:space-between;gap:20px}.search{background:var(--p);border:1px solid var(--line);border-radius:10px;padding:11px;color:#fff;width:280px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:25px 0 17px}.card,.section{background:rgba(13,27,45,.94);border:1px solid var(--line);border-radius:14px;padding:18px}.label,.sub{color:var(--m);font-size:12px}.value{font-size:25px;font-weight:800;margin-top:6px}.g{color:var(--g)}.y{color:var(--y)}.r{color:var(--r)}.b{color:var(--b)}.grid{display:grid;grid-template-columns:1.35fr .85fr;gap:17px}.row{display:grid;grid-template-columns:1.35fr .55fr .8fr .55fr auto;gap:10px;padding:13px 0;border-top:1px solid var(--line);align-items:center}.head{border:0;color:var(--m);font-size:11px}.stock{font-weight:750;cursor:pointer}.stock:hover{color:var(--g)}.badge{padding:5px 8px;border-radius:99px;background:#0c3027;color:var(--g);font-size:11px;font-weight:750;display:inline-block}.watch{color:var(--y);background:#30270d}.danger{color:var(--r);background:#35131d}.bar{height:6px;background:#1b2b40;border-radius:8px}.fill{height:100%;background:var(--g);border-radius:8px}.signal{padding:13px 0;border-top:1px solid var(--line)}.signal:first-of-type{border:0}.detail{display:none}.detail.show{display:block}.dash.hide{display:none}.back{color:var(--b);cursor:pointer;margin-bottom:16px}.big{font-size:44px;font-weight:850}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}.metric{background:#0a1727;border:1px solid var(--line);border-radius:12px;padding:15px}.metric b{font-size:19px}.chart{height:180px;margin-top:15px;background:linear-gradient(180deg,rgba(53,212,154,.08),transparent);border-radius:10px}.chart svg{width:100%;height:100%}.btn{border:1px solid var(--line);background:var(--p2);color:var(--t);padding:7px 10px;border-radius:8px;cursor:pointer}.btn:hover{border-color:var(--b)}.btn.primary{border-color:var(--g);color:var(--g)}.btn.remove{border-color:var(--r);color:var(--r)}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.notice{padding:14px;border:1px dashed var(--line);border-radius:10px;color:var(--m);background:#0a1727}.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.empty{text-align:center;padding:30px;color:var(--m)}
-@media(max-width:900px){.side{display:none}.main{margin:0;padding:20px}.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.row{grid-template-columns:1.4fr .6fr .8fr auto}.row>:nth-child(3){display:none}}
-@media(max-width:550px){.cards,.metrics,.statgrid{grid-template-columns:1fr}.top{flex-direction:column}.search{width:100%}.row{grid-template-columns:1.5fr .6fr auto}.row>:nth-child(3),.row>:nth-child(4){display:none}}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#112942,#07111f 45%);color:var(--t);font:14px system-ui,-apple-system,sans-serif}.app{display:flex;min-height:100vh}.side{width:235px;position:fixed;inset:0 auto 0 0;background:#081423;border-right:1px solid var(--line);padding:24px 15px}.logo{font-size:21px;font-weight:850;margin:0 10px 28px}.logo span{color:var(--g)}nav a{display:block;color:var(--m);padding:11px 13px;border-radius:10px;margin:4px 0;cursor:pointer}nav a.active,nav a:hover{background:var(--p2);color:#fff}.main{margin-left:235px;flex:1;padding:30px;max-width:1500px}.top{display:flex;justify-content:space-between;gap:20px;align-items:end}.search{background:var(--p);border:1px solid var(--line);border-radius:10px;padding:12px;color:#fff;width:300px;outline:0}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:25px 0 17px}.card,.section{background:rgba(13,27,45,.94);border:1px solid var(--line);border-radius:14px;padding:18px}.label,.sub{color:var(--m);font-size:12px}.value{font-size:25px;font-weight:800;margin-top:6px}.g{color:var(--g)}.y{color:var(--y)}.r{color:var(--r)}.b{color:var(--b)}.grid{display:grid;grid-template-columns:1.35fr .85fr;gap:17px}.row{display:grid;grid-template-columns:1.4fr .6fr .8fr .6fr;gap:10px;padding:13px 0;border-top:1px solid var(--line);align-items:center}.head{border:0;color:var(--m);font-size:11px}.stock{font-weight:750;cursor:pointer}.stock:hover{color:var(--g)}.badge{display:inline-block;padding:5px 8px;border-radius:99px;background:#0c3027;color:var(--g);font-size:11px;font-weight:750}.watch{color:var(--y);background:#30270d}.risk{color:var(--r);background:#351522}.bar{height:6px;background:#1b2b40;border-radius:8px}.fill{height:100%;background:var(--g);border-radius:8px}.signal{padding:13px 0;border-top:1px solid var(--line)}.signal:first-child{border:0}.detail{display:none}.detail.show{display:block}.dash.hide{display:none}.back{color:var(--b);cursor:pointer;margin-bottom:16px}.big{font-size:44px;font-weight:850}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}.metric{background:#0a1727;border:1px solid var(--line);border-radius:12px;padding:15px}.metric b{font-size:19px}.chart{height:210px;margin-top:15px;background:linear-gradient(180deg,rgba(53,212,154,.08),transparent);border-radius:10px;overflow:hidden}.chart svg{width:100%;height:100%}.toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px}.btn{border:1px solid var(--line);background:var(--p2);color:#fff;border-radius:9px;padding:8px 12px;cursor:pointer}.btn:hover{border-color:var(--g)}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:11px 8px;border-bottom:1px solid var(--line)}.table th{font-size:11px;color:var(--m)}.searchbox{position:relative}.searchResults{display:none;position:absolute;right:0;top:48px;width:380px;z-index:20}.result{padding:13px;border-top:1px solid var(--line);cursor:pointer}.result:hover{background:var(--p2)}.notice{padding:12px;border:1px solid var(--line);border-radius:10px;background:#0a1727;color:var(--m);margin-bottom:14px}.positive{color:var(--g)}.negative{color:var(--r)}@media(max-width:900px){.side{display:none}.main{margin:0;padding:20px}.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:550px){.cards,.metrics{grid-template-columns:1fr}.top{flex-direction:column;align-items:stretch}.search{width:100%}.row{grid-template-columns:1.5fr .6fr .7fr}.row>:nth-child(3){display:none}.searchResults{width:100%}}
 </style>
 </head>
 <body>
-<div class="app">
-<aside class="side"><div class="logo">Nordic<span>Signal</span></div><nav>
-<a class="active" onclick="page('Dashboard',this)">Dashboard</a>
-<a onclick="page('Stock Radar',this)">Stock Radar</a>
-<a onclick="page('Watchlist',this)">Watchlist</a>
-<a onclick="page('Insider Activity',this)">Insider Activity</a>
-<a onclick="page('Short Radar',this)">Short Radar</a>
-<a onclick="page('Markets',this)">Markets</a>
+<div class="app"><aside class="side"><div class="logo">Nordic<span>Signal</span></div><nav id="nav">
+<a class="active" data-page="Dashboard">Dashboard</a><a data-page="Stock Radar">Stock Radar</a><a data-page="Watchlist">Watchlist</a><a data-page="Insider Activity">Insider Activity</a><a data-page="Short Radar">Short Radar</a><a data-page="Markets">Markets</a>
 </nav></aside>
 <main class="main">
-<div class="top"><div><h1 id="title">Market Dashboard</h1><div class="sub" id="sub">Signal-driven stock intelligence</div></div><input id="search" class="search" placeholder="Search ticker or company…"></div>
-<div id="searchResults" style="display:none;position:absolute;right:30px;top:85px;width:380px;z-index:1000"><div class="section" style="padding:10px"><div class="sub" style="padding:8px 10px 10px">Search results</div><div id="searchResultsList"></div></div></div>
-<div id="dash"></div>
-<div id="detail" class="detail"></div>
+<div class="top"><div><h1 id="title">Market Dashboard</h1><div class="sub" id="sub">Live signal-driven stock intelligence</div></div><div class="searchbox"><input id="search" class="search" placeholder="Search ticker or company…"><div id="searchResults" class="section searchResults"><div class="sub" style="padding:4px 10px 10px">Search results</div><div id="searchResultsList"></div></div></div></div>
+<div id="appview"></div>
 </main></div>
 <script>
-const API="https://nordicsignal-api.onrender.com";
-let all=[];let universe=[];let watchlist=[];let radar=[];let searchTimer;
-
-async function load(){
-  try{
-    const [stockResponse,radarResponse,watchResponse]=await Promise.all([
-      fetch(API+"/api/stocks"),fetch(API+"/api/radar"),fetch(API+"/api/watchlist")
-    ]);
-    if(!stockResponse.ok)throw new Error("Stocks API failed");
-    const data=await stockResponse.json();
-    all=data.items||[];universe=[...all];
-    radar=radarResponse.ok?(await radarResponse.json()).items||[]:[];
-    watchlist=watchResponse.ok?(await watchResponse.json()).items||[]:[];
-    renderDashboard();
-  }catch(e){console.error(e);renderDemo();}
-}
-
-function signalClass(score){return score>=80?'g':score>=70?'y':'r'}
-function signalBadge(x){return `<span class="badge ${x.score<80?'watch':''}">${x.signal||'—'}</span>`}
-function isWatched(t){return watchlist.some(x=>x.ticker===t)}
-
-function stockRows(items,withWatch=true){
-  return items.map(x=>`<div class="row">
-    <span class="stock" onclick="stock('${x.ticker}')">${x.name}<span class="sub">${x.ticker} · ${x.sector}</span></span>
-    <span class="${signalClass(x.score)}">${x.score}</span>
-    <span><div class="bar"><div class="fill" style="width:${x.score}%"></div></div></span>
-    <span>${signalBadge(x)}</span>
-    ${withWatch?`<button class="btn ${isWatched(x.ticker)?'remove':''}" onclick="event.stopPropagation();toggleWatch('${x.ticker}')">${isWatched(x.ticker)?'Remove':'Watch'}</button>`:''}
-  </div>`).join('')
-}
-
-function renderDashboard(){
-  document.getElementById('dash').innerHTML=`
-    <section class="cards">
-      <div class="card"><div class="label">Market</div><div class="value g">OPEN</div><div class="sub">Oslo Børs</div></div>
-      <div class="card"><div class="label">Stocks tracked</div><div class="value">${universe.length}</div><div class="sub">Universe</div></div>
-      <div class="card"><div class="label">Strong signals</div><div class="value g">${universe.filter(x=>x.score>=80).length}</div><div class="sub">Score ≥ 80</div></div>
-      <div class="card"><div class="label">Signal engine</div><div class="value g">ACTIVE</div><div class="sub">4-factor model</div></div>
-    </section>
-    <div class="grid">
-      <section class="section"><h2>Top Stock Signals</h2><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span><span></span></div>${stockRows(universe)}</section>
-      <section class="section"><h2>Latest Signals</h2>${radar.map(x=>`<div class="signal"><strong class="${x.strength==='risk'?'r':'g'}">${x.ticker} · ${x.event}</strong><span class="sub">Model signal detected.</span></div>`).join('')}</section>
-    </div>`;
-}
-
-function renderRadarPage(){
-  const sorted=[...universe].sort((a,b)=>b.score-a.score);
-  document.getElementById('dash').innerHTML=`
-    <section class="section"><div class="toolbar"><div><h2>Stock Radar</h2><div class="sub">Market-wide ranking of the current model score.</div></div><span class="badge">${sorted.length} stocks</span></div>
-    <div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span><span></span></div>${stockRows(sorted)}</section>`;
-}
-
-async function renderWatchlist(){
-  try{const r=await fetch(API+'/api/watchlist');if(r.ok)watchlist=(await r.json()).items||[]}catch(e){console.error(e)}
-  const items=watchlist.map(w=>all.find(x=>x.ticker===w.ticker)).filter(Boolean);
-  document.getElementById('dash').innerHTML=`<section class="section"><div class="toolbar"><div><h2>Watchlist</h2><div class="sub">Saved companies and current score changes.</div></div><span class="badge">${items.length} saved</span></div>${items.length?`<div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span><span></span></div>${stockRows(items)}`:`<div class="empty">No stocks saved yet.<br><span class="sub">Use Watch beside a stock to add it here.</span></div>`}</section>`;
-}
-
-function renderInsider(){
-  const sorted=[...universe].sort((a,b)=>b.insider-a.insider);
-  document.getElementById('dash').innerHTML=`<section class="section"><div class="toolbar"><div><h2>Insider Activity</h2><div class="sub">Insider component of the 4-factor model. This is not a live insider-trade feed.</div></div></div><div class="row head"><span>Company</span><span>Insider</span><span>Score</span><span>Signal</span><span></span></div>${sorted.map(x=>`<div class="row"><span class="stock" onclick="stock('${x.ticker}')">${x.name}<span class="sub">${x.ticker} · ${x.sector}</span></span><span class="g">${x.insider}/25</span><span class="${signalClass(x.score)}">${x.score}</span><span>${signalBadge(x)}</span><span></span></div>`).join('')}</section>`;
-}
-
-function renderShort(){
-  document.getElementById('dash').innerHTML=`<section class="section"><h2>Short Radar</h2><div class="notice"><strong>Short-interest data is not connected yet.</strong><br><span class="sub">NordicSignal currently has the scoring framework, but no licensed short-interest provider is connected. No short figures are invented here.</span></div><div style="margin-top:18px"><h3>Available market-signal component</h3><div class="row head"><span>Company</span><span>Sentiment</span><span>Score</span><span>Signal</span><span></span></div>${[...universe].sort((a,b)=>b.sentiment-a.sentiment).map(x=>`<div class="row"><span class="stock" onclick="stock('${x.ticker}')">${x.name}<span class="sub">${x.ticker} · ${x.sector}</span></span><span>${x.sentiment}/15</span><span class="${signalClass(x.score)}">${x.score}</span><span>${signalBadge(x)}</span><span></span></div>`).join('')}</div></section>`;
-}
-
-function renderMarkets(){
-  const sectors={};universe.forEach(x=>{if(!sectors[x.sector])sectors[x.sector]={count:0,total:0,strong:0};sectors[x.sector].count++;sectors[x.sector].total+=x.score;if(x.score>=80)sectors[x.sector].strong++});
-  const rows=Object.entries(sectors).sort((a,b)=>b[1].total/b[1].count-a[1].total/b[1].count);
-  document.getElementById('dash').innerHTML=`<section class="section"><h2>Markets</h2><div class="sub">Sector overview calculated from the current NordicSignal universe.</div><div class="statgrid" style="margin-top:18px">${rows.map(([sector,v])=>`<div class="metric"><div class="label">${sector}</div><div class="big ${signalClass(v.total/v.count)}" style="font-size:30px">${Math.round(v.total/v.count)}</div><div class="sub">Average score · ${v.count} stocks · ${v.strong} strong</div></div>`).join('')}</div></section>`;
-}
-
-async function toggleWatch(t){
-  try{
-    const watched=isWatched(t);const r=await fetch(API+'/api/watchlist/'+t,{method:watched?'DELETE':'POST'});if(!r.ok)throw new Error('Watchlist update failed');
-    const w=await fetch(API+'/api/watchlist');watchlist=w.ok?(await w.json()).items||[]:watchlist;
-    const active=document.querySelector('nav a.active');const name=active?active.textContent:'Dashboard';page(name,active);
-  }catch(e){console.error(e);alert('Could not update watchlist.');}
-}
-
-async function stock(t){
-  let x=all.find(a=>a.ticker===t);if(!x)return;
-  try{const r=await fetch(API+'/api/stocks/'+t);if(r.ok)x=await r.json()}catch(e){}
-  document.getElementById('dash').classList.add('hide');document.getElementById('detail').classList.add('show');
-  document.getElementById('title').textContent=x.name;document.getElementById('sub').textContent='Stock intelligence · '+x.ticker;
-  document.getElementById('detail').innerHTML=`<div class="back" onclick="back()">← Back</div><section class="section"><div style="display:flex;justify-content:space-between;gap:20px"><div><h1>${x.name}</h1><div class="sub">${x.ticker} · ${x.sector}</div></div><div style="text-align:right"><div class="big ${signalClass(x.score)}">${x.score}</div><div class="sub">/100</div></div></div><div style="margin-top:12px">${signalBadge(x)} <button class="btn ${isWatched(x.ticker)?'remove':'primary'}" onclick="toggleWatch('${x.ticker}')" style="margin-left:8px">${isWatched(x.ticker)?'Remove from watchlist':'Add to watchlist'}</button></div><div class="chart"><svg viewBox="0 0 900 180" preserveAspectRatio="none"><polyline points="0,145 80,132 150,138 220,105 290,120 360,84 430,96 500,67 570,78 640,51 710,64 780,35 850,47 900,24" fill="none" stroke="#35d49a" stroke-width="3"/></svg></div><div class="metrics"><div class="metric"><div class="label">Fundamentals</div><b>${x.fundamentals}/40</b></div><div class="metric"><div class="label">Insider</div><b class="g">${x.insider}/25</b></div><div class="metric"><div class="label">Valuation</div><b>${x.valuation}/20</b></div></div><div class="metric" style="margin-top:14px"><div class="label">Sentiment</div><b>${x.sentiment}/15</b></div><h2>Why this score?</h2><p class="sub" style="font-size:14px;line-height:1.7">NordicSignal combines company fundamentals, insider/institutional activity, valuation and market sentiment into a single research score. It is a research aid, not an automatic buy/sell recommendation.</p></section>`;
-}
-
-function back(){document.getElementById('detail').classList.remove('show');document.getElementById('dash').classList.remove('hide');document.getElementById('title').textContent='Market Dashboard';document.getElementById('sub').textContent='Signal-driven stock intelligence';const active=document.querySelector('nav a.active');if(active)active.classList.remove('active');document.querySelector('nav a').classList.add('active');renderDashboard()}
-
-function page(name,el){
-  document.querySelectorAll('nav a').forEach(x=>x.classList.remove('active'));if(el)el.classList.add('active');
-  document.getElementById('detail').classList.remove('show');document.getElementById('dash').classList.remove('hide');
-  document.getElementById('title').textContent=name;
-  document.getElementById('sub').textContent=name==='Dashboard'?'Signal-driven stock intelligence':name==='Stock Radar'?'Market-wide ranking of model signals.':name==='Watchlist'?'Saved companies and score changes.':name==='Insider Activity'?'Insider component of the scoring model.':name==='Short Radar'?'Short-interest integration status.':'Market overview and sectors.';
-  if(name==='Dashboard')renderDashboard();else if(name==='Stock Radar')renderRadarPage();else if(name==='Watchlist')renderWatchlist();else if(name==='Insider Activity')renderInsider();else if(name==='Short Radar')renderShort();else renderMarkets();
-}
-
-document.getElementById('search').addEventListener('input',function(e){
-  const q=e.target.value.trim(),box=document.getElementById('searchResults'),list=document.getElementById('searchResultsList');clearTimeout(searchTimer);
-  if(!q){box.style.display='none';list.innerHTML='';return}
-  searchTimer=setTimeout(async()=>{try{const r=await fetch(API+'/api/search?q='+encodeURIComponent(q));if(!r.ok)throw new Error('Search failed');const data=await r.json();box.style.display='block';if(!data.items?.length){list.innerHTML=`<div class="sub" style="padding:12px">No stocks found for "${q}"</div>`;return}const results=await Promise.all(data.items.map(async item=>{try{const sr=await fetch(API+'/api/stocks/'+item.ticker);return sr.ok?await sr.json():item}catch(e){return item}}));list.innerHTML=results.map(x=>`<div onclick="stock('${x.ticker}')" style="padding:13px;border-top:1px solid var(--line);cursor:pointer"><strong>${x.name}</strong><div class="sub">${x.ticker} · ${x.sector||''} · ${x.exchange||'Oslo Børs'}</div>${x.score!==undefined?`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">${signalBadge(x)}<strong class="${signalClass(x.score)}">${x.score}/100</strong></div>`:''}</div>`).join('')}catch(e){console.error(e);box.style.display='block';list.innerHTML='<div class="sub" style="padding:12px">Search unavailable.</div>'}},250)
-});
-
-function renderDemo(){all=[{ticker:'LSG',name:'Lerøy Seafood',sector:'Seafood',score:86,fundamentals:34,insider:24,valuation:16,sentiment:12,signal:'Strong'},{ticker:'ELO',name:'Elopak',sector:'Packaging',score:81,fundamentals:30,insider:23,valuation:16,sentiment:12,signal:'Watch'},{ticker:'MPCC',name:'MPCC',sector:'Shipping',score:80,fundamentals:36,insider:15,valuation:17,sentiment:12,signal:'Watch'},{ticker:'PEXIP',name:'Pexip',sector:'Technology',score:77,fundamentals:33,insider:18,valuation:15,sentiment:11,signal:'Watch'},{ticker:'XPLRA',name:'Xplora',sector:'Technology',score:70,fundamentals:32,insider:18,valuation:14,sentiment:6,signal:'Neutral'}];universe=[...all];radar=all.map(x=>({ticker:x.ticker,event:x.signal+' signal',strength:x.score>=80?'strong':x.score>=70?'watch':'risk'}));renderDashboard()}
-
-load();
+const API="https://nordicsignal-api.onrender.com";let universe=[];let watchlist=new Set();let searchTimer;
+const esc=s=>String(s??"").replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const money=n=>n==null?"—":Number(n).toLocaleString("no-NO",{maximumFractionDigits:2});
+function badge(signal){const c=signal==="Strong"?"":" "+(signal==="Risk"?"risk":"watch");return `<span class="badge${c}">${esc(signal||"—")}</span>`}
+async function get(path){const r=await fetch(API+path);if(!r.ok)throw Error(path+" failed");return r.json()}
+async function init(){try{const [s,w]=await Promise.all([get("/api/stocks"),get("/api/watchlist")]);universe=s.items||[];watchlist=new Set((w.items||[]).map(x=>x.ticker));renderDashboard()}catch(e){document.getElementById("appview").innerHTML='<div class="notice">API is temporarily unavailable. The service will retry after refresh.</div>';console.error(e)}}
+function setTitle(name,sub){document.getElementById("title").textContent=name;document.getElementById("sub").textContent=sub}
+function rows(items){return items.map(x=>`<div class="row"><span class="stock" onclick="showStock('${esc(x.ticker)}')">${esc(x.name)}<span class="sub">${esc(x.ticker)} · ${esc(x.sector)}</span></span><span class="${x.score>=80?'g':'y'}">${x.score}</span><span><div class="bar"><div class="fill" style="width:${Math.max(0,Math.min(100,x.score))}%"></div></div></span><span>${badge(x.signal)}</span></div>`).join("")}
+async function renderDashboard(){setTitle("Market Dashboard","Live signal-driven stock intelligence");let radar=[];try{radar=(await get("/api/radar")).items||[]}catch{}document.getElementById("appview").innerHTML=`<section class="cards"><div class="card"><div class="label">Market</div><div class="value g">OPEN</div><div class="sub">Oslo Børs</div></div><div class="card"><div class="label">Stocks tracked</div><div class="value">${universe.length}</div><div class="sub">Universe</div></div><div class="card"><div class="label">Strong signals</div><div class="value g">${universe.filter(x=>x.score>=80).length}</div><div class="sub">Score ≥ 80</div></div><div class="card"><div class="label">Signal engine</div><div class="value g">ACTIVE</div><div class="sub">4-factor model</div></div></section><div class="grid"><section class="section"><div class="toolbar"><h2>Top Stock Signals</h2><span class="sub">Updated from API</span></div><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div>${rows(universe)}</section><section class="section"><h2>Latest Signals</h2>${radar.map(x=>`<div class="signal"><strong class="${x.strength==='risk'?'r':'g'}">${esc(x.ticker)} · ${esc(x.event)}</strong><div class="sub">Score ${x.score}/100 · Model signal</div></div>`).join("")}</section></div>`}
+async function renderRadar(){setTitle("Stock Radar","Market-wide ranking of model signals");const items=[...universe].sort((a,b)=>b.score-a.score);document.getElementById("appview").innerHTML=`<section class="section"><div class="toolbar"><h2>Stock Radar</h2><span class="sub">Highest conviction first</span></div><div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div>${rows(items)}</section>`}
+async function renderWatchlist(){setTitle("Watchlist","Saved companies and score changes");const items=universe.filter(x=>watchlist.has(x.ticker));document.getElementById("appview").innerHTML=`<section class="section"><div class="toolbar"><h2>Watchlist</h2><span class="sub">${items.length} saved</span></div>${items.length?items.map(x=>`<div class="row"><span class="stock" onclick="showStock('${esc(x.ticker)}')">${esc(x.name)}<span class="sub">${esc(x.ticker)} · ${esc(x.sector)}</span></span><span class="${x.score>=80?'g':'y'}">${x.score}</span><span>${badge(x.signal)}</span><button class="btn" onclick="toggleWatch('${esc(x.ticker)}')">Remove</button></div>`).join(""): '<div class="notice">No stocks saved yet. Open a stock and add it to your watchlist.</div>'}</section>`}
+async function renderInsider(){setTitle("Insider Activity","Recent insider transactions and ownership signals");document.getElementById("appview").innerHTML='<section class="section"><h2>Insider Activity</h2><div class="notice">Loading live insider data…</div><div id="insiderTable"></div></section>';const out=[];for(const x of universe){try{const d=await get('/api/insider/'+encodeURIComponent(x.ticker));out.push({x,items:d.items||[]})}catch{out.push({x,items:[]})}}document.getElementById("insiderTable").innerHTML=`<table class="table"><thead><tr><th>Company</th><th>Recent activity</th><th>Signal score</th></tr></thead><tbody>${out.map(o=>`<tr><td><strong class="stock" onclick="showStock('${esc(o.x.ticker)}')">${esc(o.x.name)}</strong><div class="sub">${esc(o.x.ticker)}</div></td><td>${o.items.length?esc(o.items[0].transactionText||o.items[0].filerName||"Transaction reported"):"No recent data returned"}</td><td>${badge(o.x.signal)}</td></tr>`).join("")}</tbody></table>`}
+async function renderShort(){setTitle("Short Radar","Short interest and pressure signals");document.getElementById("appview").innerHTML='<section class="section"><h2>Short Radar</h2><div class="notice">Loading short-interest data…</div><div id="shortTable"></div></section>';const out=[];for(const x of universe){try{const d=await get('/api/short/'+encodeURIComponent(x.ticker));out.push({x,d})}catch{out.push({x,d:{}})}}document.getElementById("shortTable").innerHTML=`<table class="table"><thead><tr><th>Company</th><th>Short % float</th><th>Short ratio</th><th>Pressure</th></tr></thead><tbody>${out.map(o=>{const p=o.d.short_percent_float;const pressure=p==null?'Unavailable':p>0.1?'High':p>0.05?'Elevated':'Low';return `<tr><td><strong>${esc(o.x.name)}</strong><div class="sub">${esc(o.x.ticker)}</div></td><td>${p==null?'—':(p*100).toFixed(2)+'%'}</td><td>${o.d.short_ratio==null?'—':money(o.d.short_ratio)}</td><td class="${pressure==='High'?'r':pressure==='Low'?'g':'y'}">${pressure}</td></tr>`}).join("")}</tbody></table>`}
+async function renderMarkets(){setTitle("Markets","Sector overview and model strength");let items=[];try{items=(await get('/api/markets')).items||[]}catch{}document.getElementById("appview").innerHTML=`<section class="section"><div class="toolbar"><h2>Sector Overview</h2><span class="sub">Average NordicSignal score</span></div><table class="table"><thead><tr><th>Sector</th><th>Stocks</th><th>Average score</th><th>Strength</th></tr></thead><tbody>${items.map(x=>`<tr><td><strong>${esc(x.sector)}</strong></td><td>${x.count}</td><td class="${x.avg_score>=80?'g':x.avg_score>=60?'y':'r'}">${x.avg_score}</td><td>${x.avg_score>=80?'Strong':x.avg_score>=70?'Watch':x.avg_score>=60?'Neutral':'Risk'}</td></tr>`).join("")}</tbody></table></section>`}
+async function showStock(t){const x=universe.find(a=>a.ticker===t);if(!x)return;setTitle(x.name,'Stock intelligence · '+x.ticker);document.getElementById("appview").innerHTML='<section class="section"><div class="back" onclick="renderDashboard()">← Back to dashboard</div><div class="toolbar"><div><h1>'+esc(x.name)+'</h1><div class="sub">'+esc(x.ticker)+' · '+esc(x.sector)+'</div></div><div style="text-align:right"><div class="big g">'+x.score+'</div><div class="sub">/100</div></div></div><div id="quoteBox" class="notice">Loading live quote…</div><div id="chart" class="chart"></div><div class="metrics"><div class="metric"><div class="label">Fundamentals</div><b>'+x.fundamentals+'/40</b></div><div class="metric"><div class="label">Insider</div><b class="g">'+x.insider+'/25</b></div><div class="metric"><div class="label">Valuation</div><b>'+x.valuation+'/20</b></div><div class="metric"><div class="label">Sentiment</div><b>'+x.sentiment+'/15</b></div></div><div style="margin-top:18px"><button class="btn" id="watchBtn" onclick="toggleWatch('${esc(x.ticker)}')">${watchlist.has(x.ticker)?'Remove from watchlist':'Add to watchlist'}</button></div><h2>Why this score?</h2><p class="sub" style="font-size:14px;line-height:1.7">NordicSignal combines fundamentals, insider activity, valuation and market sentiment into a 0–100 research score. It is a research aid, not an automatic buy/sell recommendation.</p></section>';try{const q=await get('/api/quote/'+encodeURIComponent(t));document.getElementById('quoteBox').innerHTML=`<strong>${q.price==null?'—':money(q.price)} ${q.currency||''}</strong> <span class="${(q.change_pct||0)>=0?'positive':'negative'}">${q.change_pct==null?'':(q.change_pct>=0?'+':'')+q.change_pct.toFixed(2)+'%'}</span><div class="sub">Volume ${q.volume==null?'—':Number(q.volume).toLocaleString('no-NO')} · ${esc(q.source||'')}</div>`}catch{}try{const h=await get('/api/history/'+encodeURIComponent(t)+'?period=1y');drawChart(h.items||[])}catch{}}
+function drawChart(items){if(items.length<2){document.getElementById('chart').innerHTML='<div class="notice">Historical chart unavailable.</div>';return}const vals=items.map(x=>x.close).filter(Number.isFinite);const min=Math.min(...vals),max=Math.max(...vals),w=900,h=210;const pts=vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-20-((v-min)/(max-min||1))*(h-35)}`).join(' ');document.getElementById('chart').innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#35d49a" stroke-width="3"/></svg>`}
+async function toggleWatch(t){if(watchlist.has(t)){await fetch(API+'/api/watchlist/'+encodeURIComponent(t),{method:'DELETE'});watchlist.delete(t)}else{await fetch(API+'/api/watchlist/'+encodeURIComponent(t),{method:'POST'});watchlist.add(t)}renderWatchlist()}
+function navigate(name){document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='Dashboard')renderDashboard();else if(name==='Stock Radar')renderRadar();else if(name==='Watchlist')renderWatchlist();else if(name==='Insider Activity')renderInsider();else if(name==='Short Radar')renderShort();else renderMarkets()}
+document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>navigate(a.dataset.page));
+document.getElementById('search').addEventListener('input',e=>{const q=e.target.value.trim().toLowerCase(),box=document.getElementById('searchResults'),list=document.getElementById('searchResultsList');clearTimeout(searchTimer);if(!q){box.style.display='none';list.innerHTML='';return}searchTimer=setTimeout(async()=>{try{const d=await get('/api/search?q='+encodeURIComponent(q));box.style.display='block';list.innerHTML=(d.items||[]).map(x=>`<div class="result" onclick="showStock('${esc(x.ticker)}');document.getElementById('searchResults').style.display='none'"><strong>${esc(x.name)}</strong><div class="sub">${esc(x.ticker)} · ${esc(x.sector)} · ${esc(x.exchange||'Oslo Børs')}</div></div>`).join('')||'<div class="sub" style="padding:12px">No stocks found</div>'}catch{list.innerHTML='<div class="sub" style="padding:12px">Search unavailable</div>'}},250)});
+document.addEventListener('click',e=>{if(!e.target.closest('.searchbox'))document.getElementById('searchResults').style.display='none'});
+init();
 </script>
 </body></html>
