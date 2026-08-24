@@ -540,9 +540,12 @@ async function loadWatchlist() {
           /100
         </span>
 
-        <span>
-          ★
-        </span>
+       <button
+  onclick="event.stopPropagation(); removeFromWatchlist('${x.ticker}')"
+  style="background:#321722;border:1px solid #5a2633;color:var(--r);border-radius:8px;padding:7px 10px;cursor:pointer;font-weight:700"
+>
+  Remove
+</button>
 
       </div>
     `).join("");
