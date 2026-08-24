@@ -462,6 +462,26 @@ async function toggleWatchlist() {
     btn.textContent = "Could not add";
   }
 }
+    async function removeFromWatchlist(ticker) {
+  try {
+    const response = await fetch(
+      API + "/api/watchlist/" + ticker,
+      {
+        method: "DELETE"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to remove from watchlist");
+    }
+
+    await loadWatchlist();
+
+  } catch (error) {
+    console.error(error);
+    alert("Could not remove " + ticker + " from watchlist.");
+  }
+}
   
 function back() {
   document.getElementById("detail").classList.remove("show");
