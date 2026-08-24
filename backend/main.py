@@ -6,7 +6,7 @@ from database import connect, init_db
 from scoring import calculate_score, signal_label
 from providers import YahooProvider
 
-app = FastAPI(title="NordicSignal API", version="2.0.0")
+app = FastAPI(title="NordicSignal API", version="2.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 SEED = [
@@ -37,7 +37,7 @@ def seed_db():
         conn.execute("INSERT OR IGNORE INTO stocks(ticker,name,sector,exchange) VALUES(?,?,?,?)", (ticker, name, sector, "Oslo Børs"))
         if not conn.execute("SELECT 1 FROM scores WHERE ticker=? LIMIT 1", (ticker,)).fetchone():
             total = calculate_score(f, i, v, s)
-            conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at) VALUES(?,?,?,?,?,?,?)", (ticker, f, i, v, s, total, now))
+            conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, f, i, v, s, total, now, "stored"))
     conn.commit(); conn.close()
 
 
@@ -83,8 +83,8 @@ def insider_score(r):
         return clamp_score(12.5 + ratio * 12.5, 0, 25)
     tx = r.get("insiderTransactions", {}).get("transactions", [])
     if tx:
-        buys = sum(1 for x in tx if str(x.get("transactionText", "")).lower().find("buy") >= 0)
-        sells = sum(1 for x in tx if str(x.get("transactionText", "")).lower().find("sell") >= 0)
+        buys = sum(1 for x in tx if "buy" in str(x.get("transactionText", "")).lower())
+        sells = sum(1 for x in tx if "sell" in str(x.get("transactionText", "")).lower())
         return clamp_score(12.5 + (buys - sells) * 2.5, 0, 25)
     return 12
 
@@ -110,9 +110,9 @@ def refresh_one(ticker):
         total = calculate_score(f, i, v, s)
         now = datetime.now(timezone.utc).isoformat()
         conn = connect()
-        conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at) VALUES(?,?,?,?,?,?,?)", (ticker, f, i, v, s, total, now))
+        conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, f, i, v, s, total, now, "live"))
         conn.commit(); conn.close()
-        return {"ticker": ticker, "score": total, "source": "live"}
+        return {"ticker": ticker, "score": total, "source": "live", "updated_at": now}
     except Exception as exc:
         return {"ticker": ticker, "source": "stored", "error": str(exc)}
 
@@ -130,7 +130,7 @@ def startup():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "NordicSignal API", "version": "2.0.0", "provider": "Yahoo Finance"}
+    return {"status": "ok", "service": "NordicSignal API", "version": "2.1.0", "provider": "Yahoo Finance"}
 
 
 @app.get("/api/refresh")
@@ -141,10 +141,10 @@ def refresh():
 @app.get("/api/stocks")
 def stocks():
     conn = connect()
-    rows = conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total
+    rows = conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source
         FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker)
         WHERE s.active=1 ORDER BY sc.total DESC""").fetchall(); conn.close()
-    return {"items": [{"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"])} for r in rows]}
+    return {"items": [{"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"score_updated_at":r["created_at"]} for r in rows]}
 
 
 @app.get("/api/search")
@@ -157,15 +157,21 @@ def search(q: str = ""):
 
 @app.get("/api/stocks/{ticker}")
 def stock(ticker: str):
-    conn=connect(); r=conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total FROM stocks s JOIN scores sc ON sc.ticker=s.ticker WHERE s.ticker=? ORDER BY sc.id DESC LIMIT 1""",(ticker.upper(),)).fetchone(); conn.close()
+    conn=connect(); r=conn.execute("""SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source FROM stocks s JOIN scores sc ON sc.ticker=s.ticker WHERE s.ticker=? ORDER BY sc.id DESC LIMIT 1""",(ticker.upper(),)).fetchone(); conn.close()
     if not r: return {"error":"Ticker not found"}
-    return {"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"])}
+    return {"ticker":r["ticker"],"name":r["name"],"sector":r["sector"],"score":r["total"],"fundamentals":r["fundamentals"],"insider":r["insider"],"valuation":r["valuation"],"sentiment":r["sentiment"],"signal":signal_label(r["total"]),"score_source":r["source"],"score_updated_at":r["created_at"]}
 
 
 @app.get("/api/quote/{ticker}")
 def quote(ticker: str):
-    try: return provider.quote(ticker)
-    except Exception as exc: return {"ticker":ticker.upper(),"source":"unavailable","error":str(exc)}
+    try:
+        data = provider.quote(ticker)
+        conn = connect()
+        conn.execute("INSERT INTO quotes(ticker,price,change_pct,volume,captured_at) VALUES(?,?,?,?,?)", (ticker.upper(), data.get("price"), data.get("change_pct"), data.get("volume"), data.get("captured_at") or datetime.now(timezone.utc).isoformat()))
+        conn.commit(); conn.close()
+        return data
+    except Exception as exc:
+        return {"ticker":ticker.upper(),"source":"unavailable","error":str(exc)}
 
 
 @app.get("/api/history/{ticker}")
@@ -189,13 +195,13 @@ def insider(ticker: str):
         r=provider.research(ticker)
         tx=r.get("insiderTransactions",{}).get("transactions",[])
         return {"ticker":ticker.upper(),"items":tx[:25],"source":"Yahoo Finance"}
-    except Exception as exc: return {"ticker":ticker.upper(),"items":[],"error":str(exc)}
+    except Exception as exc: return {"ticker":ticker.upper(),"items":[],"source":"unavailable","error":str(exc)}
 
 
 @app.get("/api/short/{ticker}")
 def short(ticker: str):
     try:
-        r=provider.research(ticker); ks=r.get("defaultKeyStatistics",{}); sd=r.get("summaryDetail",{})
+        r=provider.research(ticker); ks=r.get("defaultKeyStatistics",{})
         return {"ticker":ticker.upper(),"shares_short":raw(ks.get("sharesShort")),"short_percent_float":raw(ks.get("shortPercentOfFloat")),"short_ratio":raw(ks.get("shortRatio")),"shares_outstanding":raw(ks.get("sharesOutstanding")),"source":"Yahoo Finance"}
     except Exception as exc: return {"ticker":ticker.upper(),"source":"unavailable","error":str(exc)}
 
@@ -214,8 +220,7 @@ def radar():
 
 @app.get("/api/markets")
 def markets():
-    conn=connect(); rows=conn.execute("SELECT sector,COUNT(*) count,ROUND(AVG(total),1) avg_score FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker) WHERE s.active=1 GROUP BY sector ORDER BY avg_score DESC").fetchall(); conn.close()
-    return {"items":[dict(r) for r in rows]}
+    conn=connect(); rows=conn.execute("SELECT sector,COUNT(*) count,ROUND(AVG(total),1) avg_score FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker) WHERE s.active=1 GROUP BY sector ORDER BY avg_score DESC").fetchall(); conn.close(); return {"items":[dict(r) for r in rows]}
 
 
 @app.get("/api/watchlist")
