@@ -30,9 +30,36 @@
 const API="https://nordicsignal-api.onrender.com";
 let all = [];
 let universe = [];
-async function load(){try{const s=await fetch(API+"/api/stocks");all = s.items;
-universe = [...s.items];
-render(all);const r=await fetch(API+"/api/radar");renderRadar((await r.json()).items)}catch(e){renderDemo();}}
+async function load() {
+  try {
+    const response = await fetch(API + "/api/stocks");
+
+    if (!response.ok) {
+      throw new Error("Stocks API failed");
+    }
+
+    const data = await response.json();
+
+    all = data.items;
+    universe = [...data.items];
+
+    render(all);
+
+    const radarResponse = await fetch(API + "/api/radar");
+
+    if (!radarResponse.ok) {
+      throw new Error("Radar API failed");
+    }
+
+    const radarData = await radarResponse.json();
+
+    renderRadar(radarData.items);
+
+  } catch (e) {
+    console.error(e);
+    renderDemo();
+  }
+}
 function render(items) {
   document.getElementById("count").textContent = universe.length;
 
