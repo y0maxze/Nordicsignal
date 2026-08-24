@@ -111,8 +111,12 @@ def insider_score(data):
 def seed_db():
     conn = connect(); now = datetime.now(timezone.utc).isoformat()
     for ticker, name, sector in UNIVERSE:
-        conn.execute("INSERT OR IGNORE INTO stocks(ticker,name,sector,exchange) VALUES(?,?,?,?)", (ticker, name, sector, "Oslo Børs"))
+        conn.execute("INSERT OR IGNORE INTO stocks(ticker,name,sector,exchange,active) VALUES(?,?,?,?,1)", (ticker, name, sector, "Oslo Børs"))
+        conn.execute("UPDATE stocks SET name=?,sector=?,exchange=?,active=1 WHERE ticker=?", (name, sector, "Oslo Børs", ticker))
         if not conn.execute("SELECT 1 FROM scores WHERE ticker=? LIMIT 1", (ticker,)).fetchone(): conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, 20, 12, 10, 8, 50, now, "seed"))
+    # Deactivate legacy/delisted symbols that are no longer in the live universe.
+    placeholders=','.join('?' for _ in TICKERS)
+    conn.execute(f"UPDATE stocks SET active=0 WHERE ticker NOT IN ({placeholders})", TICKERS)
     conn.commit(); conn.close()
 
 
