@@ -10,8 +10,6 @@ from database import connect, init_db
 from scoring import signal_label
 from providers import YahooProvider, NordicRegulatoryProvider
 
-# Render does not always auto-load sitecustomize. Load the backend patch explicitly
-# after providers so it patches the exact NordicRegulatoryProvider class in use.
 try:
     import sitecustomize as _nordicsignal_runtime_patch
 except Exception:
@@ -20,9 +18,6 @@ except Exception:
 app = FastAPI(title="NordicSignal API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# Golden Ocean completed its merger with CMB.TECH on 20 Aug 2025 and GOGL
-# stopped trading on 19 Aug 2025. The live Oslo listing is now CMB.TECH's
-# CMBTO ticker, so the universe must not keep a delisted GOGL row.
 UNIVERSE = [("LSG", "Lerøy Seafood", "Seafood"), ("MPCC", "MPC Container Ships", "Shipping"), ("ELO", "Elopak", "Packaging"), ("PEXIP", "Pexip", "Technology"), ("XPLRA", "Xplora Technologies", "Technology"), ("EQNR", "Equinor", "Energy"), ("DNB", "DNB", "Financials"), ("NHY", "Norsk Hydro", "Materials"), ("YAR", "Yara International", "Chemicals"), ("MOWI", "Mowi", "Seafood"), ("SALM", "SalMar", "Seafood"), ("GJF", "Gjensidige Forsikring", "Financials"), ("TEL", "Telenor", "Telecom"), ("ORK", "Orkla", "Consumer"), ("TOM", "Tomra Systems", "Industrials"), ("KOG", "Kongsberg Gruppen", "Industrials"), ("NAS", "Norwegian Air Shuttle", "Airlines"), ("AKRBP", "Aker BP", "Energy"), ("AKSO", "Aker Solutions", "Energy"), ("SUBC", "Subsea 7", "Energy"), ("BWLPG", "BW LPG", "Shipping"), ("HAUTO", "Höegh Autoliners", "Shipping"), ("CMBTO", "CMB.TECH", "Shipping"), ("VAR", "Vår Energi", "Energy")]
 TICKERS = [x[0] for x in UNIVERSE]
 provider = YahooProvider()
@@ -101,12 +96,22 @@ def sentiment_score(history):
 
 
 def insider_score(data):
-    # A successful official Euronext query with no recent disclosures is still
-    # verified insider coverage; it gets the neutral baseline rather than
-    # incorrectly downgrading the whole stock to partial_live.
-    if not data or data.get("status") not in ("live", "no_recent_disclosures"): return None
+    """Return a score only when insider coverage is actually verified.
+
+    A clean provider check with zero disclosures is verified no-activity and
+    receives the neutral baseline. Disclosures whose issuer is verified but
+    whose trade direction/quantity could not be parsed are not enough to claim
+    a fully verified insider score; those stocks remain partial_live.
+    """
+    if not data or data.get("status") not in ("live", "no_recent_disclosures", "partial_live"):
+        return None
+    items = data.get("items") or []
+    verified_detail_count = int(data.get("verified_detail_count") or 0)
     buys, sells = int(data.get("buy_count") or 0), int(data.get("sell_count") or 0)
-    if buys == 0 and sells == 0: return 12
+    if not items:
+        return 12 if data.get("provider_checked", True) else None
+    if verified_detail_count <= 0:
+        return None
     return clamp_score(12 + (buys - sells) * 2.5, 0, 25)
 
 
@@ -133,9 +138,9 @@ def refresh_one(ticker, include_insider=True):
             except Exception as exc: insider = {"status": "unavailable", "error": str(exc), "items": []}
         else:
             insider = {"status": "deferred", "items": [], "source": "Euronext Oslo Børs / Oslo Børs Newspoint"}
-        i = insider_score(insider); verified_max, verified_sum = 75 + (25 if i is not None else 0), f + v + s + (i or 0); normalized = clamp_score((verified_sum / verified_max) * 100, 0, 100); source, now = ("live" if i is not None else "partial_live"), datetime.now(timezone.utc).isoformat()
+        i = insider_score(insider); insider_verified = i is not None; verified_max, verified_sum = 75 + (25 if insider_verified else 0), f + v + s + (i or 0); normalized = clamp_score((verified_sum / verified_max) * 100, 0, 100); source, now = ("live" if insider_verified else "partial_live"), datetime.now(timezone.utc).isoformat()
         conn = connect(); conn.execute("INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) VALUES(?,?,?,?,?,?,?,?)", (ticker, f, i or 0, v, s, normalized, now, source)); conn.commit(); conn.close()
-        return {"ticker": ticker, "name": company_name, "score": normalized, "source": source, "live_verified": source == "live", "coverage": {"verified_points": verified_max, "total_points": 100, "missing": [] if i is not None else ["insider"]}, "updated_at": now, "components": {"fundamentals": f, "fundamentals_max": 40, "insider": i, "insider_max": 25, "valuation": v, "valuation_max": 20, "sentiment": s, "sentiment_max": 15}, "metrics": metrics, "insider": insider}
+        return {"ticker": ticker, "name": company_name, "score": normalized, "source": source, "live_verified": source == "live", "coverage": {"verified_points": verified_max, "total_points": 100, "missing": [] if insider_verified else ["insider"]}, "updated_at": now, "components": {"fundamentals": f, "fundamentals_max": 40, "insider": i, "insider_max": 25, "valuation": v, "valuation_max": 20, "sentiment": s, "sentiment_max": 15}, "metrics": metrics, "insider": insider}
     except Exception as exc: return {"ticker": ticker, "source": "stored", "live_verified": False, "error": str(exc)}
 
 
@@ -148,8 +153,6 @@ def refresh_all(limit=None, include_insider=True):
 
 
 def _background_live_refresh():
-    # Boot quickly with a Yahoo-only snapshot, then replace it with the full
-    # coverage-aware live snapshot once Render has finished accepting traffic.
     time.sleep(2)
     try:
         refresh_all(include_insider=True)
