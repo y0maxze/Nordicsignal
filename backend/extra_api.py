@@ -100,6 +100,8 @@ def _buy_with_cash(cash, price, fee_pct, fixed_fee):
     if cash<=0 or price<=0:return 0.,0.,0.
     pct=max(0.,fee_pct)/100.; fixed=max(0.,fixed_fee)
     gross=max(0.,(cash-fixed)/(1.+pct)); fee=_fee_for_gross(gross,fee_pct,fixed)
+    if gross <= 1e-12 or gross + fee > cash + 1e-9:
+        return 0.,0.,0.
     return gross/price, gross, fee
 
 def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends,fee_pct=0.,fixed_fee=0.,strategy='dca',benchmark='^OSEBX'):
@@ -127,20 +129,25 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
         if dividend_per and shares:
             dividend=shares*dividend_per; dividend_total+=dividend; dividend_events+=1
             if reinvest_dividends and price>0:
-                add,gross,fee=_buy_with_cash(dividend,price,fee_pct,fixed_fee); shares+=add; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend,'fee':fee})
+                add,gross,fee=_buy_with_cash(dividend,price,fee_pct,fixed_fee)
+                if add>0:
+                    shares+=add; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend,'fee':fee})
+                else:
+                    cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend,'fee':0.})
             else:
                 cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend,'fee':0.})
         signal=True
         if strategy=='sma_cross':
             fast=sum(closes[-50:])/min(50,len(closes)); slow=sum(closes[-200:])/min(200,len(closes)); signal=len(closes)>=200 and fast>slow
-        if strategy in ('dca','lump_sum'):
-            signal=True
-        # DCA/lump-sum deploy only the new contribution. SMA may deploy accumulated cash when its signal turns on.
+        if strategy in ('dca','lump_sum'): signal=True
         deploy_cash=(contribution_added>0) if strategy in ('dca','lump_sum') else (signal and cash>0)
         if deploy_cash and price>0:
-            bought,gross,fee=_buy_with_cash(contribution_added if strategy in ('dca','lump_sum') else cash,price,fee_pct,fixed_fee)
+            source_cash=contribution_added if strategy in ('dca','lump_sum') else cash
+            bought,gross,fee=_buy_with_cash(source_cash,price,fee_pct,fixed_fee)
             if bought>0:
                 shares+=bought; cash-=gross+fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':gross,'fee':fee})
+            elif strategy in ('dca','lump_sum'):
+                cash-=0
         elif strategy=='sma_cross' and not signal and shares>0:
             gross=shares*price; fee=_fee_for_gross(gross,fee_pct,fixed_fee); cash+=gross-fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'sell','shares':shares,'price':price,'amount':gross,'fee':fee}); shares=0.
         value=shares*price; equity=cash+value; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':value,'equity':equity,'invested':invested})
@@ -159,6 +166,7 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
         except Exception:
             benchmark_result=None
     return {'ticker':ticker,'strategy':strategy,'strategy_label':{'dca':'Månedlig investering','lump_sum':'Alt inn med en gang','sma_cross':'50/200 SMA trendstrategi'}[strategy],'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'fee_pct':fee_pct,'fixed_fee':fixed_fee,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'dividend_events':dividend_events,'fees_paid':fees_paid,'benchmark':benchmark_result,'points':points,'transactions':tx[-300:]}
+
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
