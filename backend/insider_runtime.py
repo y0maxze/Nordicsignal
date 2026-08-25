@@ -50,6 +50,7 @@ ISSUER_ARCHIVES={
 PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
 BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|ervervet|ervervelse)\b',re.I)
 SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendelse)\b',re.I)
+TRADE_VERB=r'(?:purchased|purchase|bought|buy|acquired|acquisition|sold|sell|sale|disposed(?:\s+of)?|avhendet|solgt|solgte|salg|kjøpt|kjøpte|kjøp|ervervet|ervervelse)'
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 
 _CACHE={}
@@ -78,10 +79,15 @@ def parse_trade(body,ticker,title,source,url):
     if m:
         d=re.sub(r'[^0-9]','',m.group(1)); shares=int(d) if d else None
     person=None
-    patterns=(r'\b([A-Z][A-Za-zÀ-ÿ .\'-]{2,80}),\s*(?:CEO|CFO|Chair|Chairman|Board member|Styremedlem|Konsernsjef)\b',r'\b(?:CEO|CFO)\s+([A-Z][A-Za-zÀ-ÿ .\'-]{2,80})')
+    # Require a transaction verb (or punctuation before one) after role-first names.
+    # This prevents greedy captures such as "CEO John Example purchased".
+    patterns=(
+        rf'\b([A-Z][A-Za-zÀ-ÿ .\'-]{{2,80}}?),\s*(?:CEO|CFO|Chair|Chairman|Board member|Styremedlem|Konsernsjef)\b',
+        rf'\b(?:CEO|CFO|Chair|Chairman|Board member|Styremedlem|Konsernsjef)\s+([A-Z][A-Za-zÀ-ÿ .\'-]{{2,80}}?)(?=\s*(?:,|-|–|—)?\s*{TRADE_VERB}\b)',
+    )
     for p in patterns:
         mm=re.search(p,body,re.I)
-        if mm: person=mm.group(1).strip(); break
+        if mm: person=mm.group(1).strip(' ,.-–—'); break
     return {'ticker':ticker,'date':date_of(body) or date_of(title),'trade_date':date_of(body),'title':title or 'Primary insider transaction','direction':direction,'transaction_type':direction if direction in ('buy','sell') else 'other','shares':shares,'insider':person,'source':source,'verified_detail':direction in ('buy','sell') or shares is not None,'issuer_verified':True,'summary':' '.join(body.split())[:1000],'url':url}
 
 
@@ -114,7 +120,7 @@ def canonical_url(url):
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v6',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v7',False): return
 
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
@@ -160,9 +166,6 @@ def install():
                 items.append(parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url))
         except Exception: pass
 
-        # Deduplicate translated Euronext copies of the same disclosure.
-        # URL alone is insufficient because the same notice exists at /en/,
-        # /nb/, /fr/, etc. Use disclosure facts instead.
         dedup={}
         for x in items:
             k=(x.get('date'),x.get('direction'),x.get('shares'),norm(x.get('insider')),norm(x.get('summary',''))[:240])
@@ -177,6 +180,6 @@ def install():
         return result
 
     NordicRegulatoryProvider.insider=insider
-    NordicRegulatoryProvider._robust_insider_patch_v6=True
+    NordicRegulatoryProvider._robust_insider_patch_v7=True
 
 install()
