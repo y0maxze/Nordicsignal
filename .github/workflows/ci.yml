@@ -26,3 +26,40 @@ jobs:
         run: python -m compileall -q .
       - name: Run unit tests
         run: python -m unittest discover -p 'test_*.py' -v
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract inline JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          out = Path('/tmp/nordicsignal-js')
+          out.mkdir(parents=True, exist_ok=True)
+          count = 0
+          for html in sorted(Path('frontend').glob('*.html')):
+              text = html.read_text(encoding='utf-8')
+              scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.I | re.S)
+              for index, script in enumerate(scripts):
+                  if not script.strip():
+                      continue
+                  target = out / f'{html.stem}-{index}.js'
+                  target.write_text(script, encoding='utf-8')
+                  print(f'{html} -> {target}')
+                  count += 1
+          if count == 0:
+              raise SystemExit('No inline frontend JavaScript found')
+          PY
+      - name: Check frontend JavaScript syntax
+        run: |
+          set -e
+          for file in /tmp/nordicsignal-js/*.js; do
+            echo "Checking $file"
+            node --check "$file"
+          done
