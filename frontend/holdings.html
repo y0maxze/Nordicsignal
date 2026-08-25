@@ -17,7 +17,7 @@
 <nav class="nav">
 <a href="/app">Dashboard</a>
 <a href="/stock">Stock Intelligence</a>
-<a class="active" href="/holdings">Beholdning</a>
+<a class="active" href="/frontend/holdings.html">Beholdning</a>
 <a href="/paper">Paper Trading</a>
 <a href="/news">News</a>
 </nav>
@@ -42,7 +42,7 @@
 <div class="formgrid">
 <div class="field"><label>Ticker</label><input id="ticker" maxlength="20" placeholder="LSG" required></div>
 <div class="field"><label>Antall aksjer</label><input id="shares" type="number" min="0.000001" step="any" placeholder="1000" required></div>
-<div class="field"><label>Gjennomsnittlig kjøpspris (NOK)</label><input id="avg" type="number" min="0.000001" step="any" placeholder="42,50" required></div>
+<div class="field"><label>Gjennomsnittlig kjøpspris (NOK)</label><input id="avg" type="number" min="0.000001" step="any" placeholder="42.50" required></div>
 <div class="field"><label>Megler</label><input id="broker" value="Nordnet" maxlength="60" required></div>
 <div class="field full"><label>Kontotype</label><select id="accountType"><option>ASK</option><option>Aksje- og fondskonto</option><option>Investeringskonto</option><option>IPS</option><option>Annet</option></select></div>
 <div class="field full"><label>Notat (valgfritt)</label><textarea id="note" maxlength="240" placeholder="F.eks. langsiktig utbytteposisjon"></textarea></div>
