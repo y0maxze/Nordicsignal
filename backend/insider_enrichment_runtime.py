@@ -99,8 +99,10 @@ def _role(text, current=None):
 def _entity(text, current=None):
     if current:
         return current
+    prefix=r'(?:closely\s+associated\s+(?:person|company|entity)|person\s+closely\s+associated|nærstående\s+(?:foretak|selskap)|through|via|gjennom)\s*[:\-]?\s*'
     return _first((
-        r'(?:closely\s+associated\s+(?:person|company|entity)|person\s+closely\s+associated|nærstående\s+(?:foretak|selskap)|through|via|gjennom)\s*[:\-]?\s*([A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{1,100}?\s(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC|Holding(?:s)?|Invest(?:ment)?(?:s)?))\b',
+        prefix+r'([A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{1,100}?\s(?:ASA|AS|AB|A/S|Ltd\.?|Limited|PLC))\b',
+        prefix+r'([A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{1,100}?\s(?:Holding(?:s)?|Investments?))\b',
     ),text)
 
 
