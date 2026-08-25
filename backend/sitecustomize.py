@@ -13,3 +13,10 @@ try:
 except Exception:
     # Keep API startup independent of the optional backtest patch.
     pass
+
+try:
+    from stock_intelligence_runtime import install
+    install()
+except Exception:
+    # Reports/dividends are additive; never block API startup if unavailable.
+    pass
