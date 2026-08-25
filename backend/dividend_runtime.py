@@ -40,28 +40,12 @@ def _extract_events(data):
 
 
 def fetch_dividend_events(provider, ticker, start_ts, end_ts):
-    """Fetch dividend events from Yahoo with provider/parameter fallbacks.
-
-    Yahoo's chart endpoint normally returns events.dividends as a timestamp-keyed
-    object. Some symbols/hosts have returned an empty event block for a bounded
-    period even though the same symbol exposes the events through another Yahoo
-    host or a max-range request. Try those variants before declaring no dividends.
-    """
+    """Fetch Yahoo dividend events, including bounded and max-range fallbacks."""
     symbol = provider.symbol(ticker)
-    bases = tuple(getattr(provider, "BASES", (provider.BASE,)))
+    bases = tuple(getattr(provider, "BASES", (getattr(provider, "BASE", "https://query1.finance.yahoo.com"),)))
     variants = [
-        ({
-            "period1": int(start_ts) - 86400,
-            "period2": int(end_ts) + 86400,
-            "interval": "1d",
-            "events": "div|split",
-        }),
-        ({
-            "period1": int(start_ts) - 86400,
-            "period2": int(end_ts) + 86400,
-            "interval": "1d",
-            "events": "div,splits",
-        }),
+        {"period1": int(start_ts) - 7 * 86400, "period2": int(end_ts) + 7 * 86400, "interval": "1d", "events": "div|split"},
+        {"period1": int(start_ts) - 7 * 86400, "period2": int(end_ts) + 7 * 86400, "interval": "1d", "events": "div,splits"},
     ]
 
     found = {}
@@ -70,13 +54,13 @@ def fetch_dividend_events(provider, ticker, start_ts, end_ts):
             try:
                 data = provider._get(f"{base}/v8/finance/chart/{symbol}", params)
                 for item in _extract_events(data):
-                    found[(item["timestamp"], item["amount"])] = item
+                    if int(start_ts) - 7 * 86400 <= item["timestamp"] <= int(end_ts) + 7 * 86400:
+                        found[(item["timestamp"], item["amount"])] = item
             except Exception:
                 continue
         if found:
             break
 
-    # Last resort: request the complete daily event history and filter locally.
     if not found:
         for base in bases:
             try:
@@ -85,7 +69,7 @@ def fetch_dividend_events(provider, ticker, start_ts, end_ts):
                     {"range": "max", "interval": "1d", "events": "div|split"},
                 )
                 for item in _extract_events(data):
-                    if int(start_ts) - 86400 <= item["timestamp"] <= int(end_ts) + 86400:
+                    if int(start_ts) - 7 * 86400 <= item["timestamp"] <= int(end_ts) + 7 * 86400:
                         found[(item["timestamp"], item["amount"])] = item
                 if found:
                     break
