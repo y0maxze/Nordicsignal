@@ -12,7 +12,7 @@ RUNTIME_MODULES = (
     "stock_intelligence_runtime",
     "short_alert_runtime",
     "paper_history_runtime",
-    "news_runtime",
+    "news_routes",
 )
 
 
