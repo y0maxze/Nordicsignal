@@ -13,6 +13,7 @@ RUNTIME_MODULES = (
     "short_alert_runtime",
     "paper_history_runtime",
     "news_routes",
+    "holdings_routes",
 )
 
 
