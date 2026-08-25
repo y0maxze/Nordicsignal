@@ -10,6 +10,7 @@ from providers import YahooProvider
 
 def _now(): return datetime.now(timezone.utc).isoformat()
 
+
 def _ensure_schema():
     conn=connect()
     schema = '''
@@ -83,35 +84,78 @@ def _parse_date(value, field):
     if dt.tzinfo is None: dt=dt.replace(tzinfo=timezone.utc)
     return dt
 
-def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends):
-    from dividend_runtime import fetch_dividend_events
-    start_dt=_parse_date(start,'start'); end_dt=_parse_date(end,'end')
-    if end_dt<=start_dt: raise HTTPException(400,detail='End date must be after start date')
-    start_ts=int(start_dt.timestamp()); end_ts=int(end_dt.timestamp())+86399
-    symbol=provider.symbol(ticker); data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':start_ts,'period2':end_ts,'interval':'1d','events':'div|split'})
+def _historical_rows(provider, ticker, start_ts, end_ts):
+    symbol=ticker if ticker.startswith('^') or '.' in ticker else provider.symbol(ticker)
+    data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':int(start_ts),'period2':int(end_ts),'interval':'1d','events':'div|split'})
     result=((data.get('chart') or {}).get('result') or [])
     if not result: raise HTTPException(404,detail=f'No historical data for {ticker}')
     result=result[0]; timestamps=result.get('timestamp') or []; quote=(result.get('indicators',{}).get('quote') or [{}])[0]; closes=quote.get('close') or []
     rows=[{'timestamp':int(ts),'date':datetime.fromtimestamp(ts,timezone.utc).isoformat(),'close':closes[i]} for i,ts in enumerate(timestamps) if i<len(closes) and closes[i] is not None]
-    if not rows: raise HTTPException(404,detail='No historical data for selected period')
+    if not rows: raise HTTPException(404,detail=f'No historical data for {ticker}')
+    return rows
+
+def _fee_for_gross(gross, fee_pct, fixed_fee): return max(0.,gross)*max(0.,fee_pct)/100.+max(0.,fixed_fee)
+
+def _buy_with_cash(cash, price, fee_pct, fixed_fee):
+    if cash<=0 or price<=0:return 0.,0.,0.
+    pct=max(0.,fee_pct)/100.; fixed=max(0.,fixed_fee)
+    gross=max(0.,(cash-fixed)/(1.+pct))
+    fee=_fee_for_gross(gross,fee_pct,fixed)
+    return gross/price, gross, fee
+
+def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends,fee_pct=0.,fixed_fee=0.,strategy='dca',benchmark='^OSEBX'):
+    from dividend_runtime import fetch_dividend_events
+    strategy=(strategy or 'dca').lower()
+    if strategy not in ('dca','lump_sum','sma_cross'): raise HTTPException(400,detail='strategy must be dca, lump_sum or sma_cross')
+    start_dt=_parse_date(start,'start'); end_dt=_parse_date(end,'end')
+    if end_dt<=start_dt: raise HTTPException(400,detail='End date must be after start date')
+    start_ts=int(start_dt.timestamp()); end_ts=int(end_dt.timestamp())+86399
+    rows=_historical_rows(provider,ticker.upper(),start_ts,end_ts)
     div_by_day={}
-    for d in fetch_dividend_events(provider,ticker,start_ts-86400,end_ts+86400): div_by_day[d['date']]=div_by_day.get(d['date'],0.)+float(d['amount'])
-    cash=0.; shares=0.; invested=0.; dividend_total=0.; last_month=None; points=[]; tx=[]; flows=[]
+    if not ticker.startswith('^'):
+        for d in fetch_dividend_events(provider,ticker,start_ts-86400,end_ts+86400): div_by_day[d['date']]=div_by_day.get(d['date'],0.)+float(d['amount'])
+    cash=0.; shares=0.; invested=0.; fees_paid=0.; dividend_total=0.; last_month=None; points=[]; tx=[]; flows=[]; closes=[]
     for row in rows:
-        d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close'])
-        if last_month!=(d.year,d.month):
+        d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close']); closes.append(price)
+        if strategy in ('dca','sma_cross') and last_month!=(d.year,d.month):
             contribution=float(initial_cash) if last_month is None else float(monthly_investment)
             if contribution>0:
-                bought=contribution/price; shares+=bought; invested+=contribution; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
+                cash+=contribution; invested+=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution})
             last_month=(d.year,d.month)
+        elif strategy=='lump_sum' and last_month is None:
+            contribution=float(initial_cash); cash+=contribution; invested+=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution}); last_month=(d.year,d.month)
         dividend_per=div_by_day.get(d.isoformat(),0.)
         if dividend_per and shares:
             dividend=shares*dividend_per; dividend_total+=dividend
-            if reinvest_dividends and price>0: add=dividend/price; shares+=add; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend})
-            else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
+            if reinvest_dividends and price>0:
+                add,gross,fee=_buy_with_cash(dividend,price,fee_pct,fixed_fee); shares+=add; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend,'fee':fee})
+            else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend,'fee':0.})
+        signal=True
+        if strategy=='sma_cross':
+            fast=sum(closes[-50:])/min(50,len(closes)); slow=sum(closes[-200:])/min(200,len(closes)); signal=len(closes)>=200 and fast>slow
+        if strategy in ('dca','lump_sum'):
+            signal=True
+        if signal and cash>0 and price>0:
+            bought,gross,fee=_buy_with_cash(cash,price,fee_pct,fixed_fee)
+            if bought>0: shares+=bought; cash-=gross+fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':gross,'fee':fee})
+        elif strategy=='sma_cross' and not signal and shares>0:
+            gross=shares*price; fee=_fee_for_gross(gross,fee_pct,fixed_fee); cash+=gross-fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'sell','shares':shares,'price':price,'amount':gross,'fee':fee}); shares=0.
         value=shares*price; equity=cash+value; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':value,'equity':equity,'invested':invested})
     end_equity=points[-1]['equity']; total=end_equity-invested; flows.append((datetime.fromtimestamp(rows[-1]['timestamp'],timezone.utc),end_equity))
-    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'points':points,'transactions':tx[-100:]}
+    benchmark_result=None
+    if benchmark and benchmark.upper()!=ticker.upper():
+        try:
+            b_rows=_historical_rows(provider,benchmark,start_ts,end_ts); b_cash=0.; b_shares=0.; b_last=None
+            for row in b_rows:
+                d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close'])
+                if b_last!=(d.year,d.month):
+                    contribution=float(initial_cash) if b_last is None else (0. if strategy=='lump_sum' else float(monthly_investment)); b_cash+=contribution; b_last=(d.year,d.month)
+                    if b_cash>0 and price>0:
+                        bought,gross,fee=_buy_with_cash(b_cash,price,fee_pct,fixed_fee); b_shares+=bought; b_cash-=gross+fee
+            benchmark_equity=b_cash+b_shares*float(b_rows[-1]['close']); benchmark_result={'ticker':benchmark,'final_equity':benchmark_equity,'return':benchmark_equity-invested,'return_pct':(benchmark_equity-invested)/invested*100 if invested else 0.}
+        except Exception:
+            benchmark_result=None
+    return {'ticker':ticker,'strategy':strategy,'strategy_label':{'dca':'Månedlig investering','lump_sum':'Alt inn med en gang','sma_cross':'50/200 SMA trendstrategi'}[strategy],'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'fee_pct':fee_pct,'fixed_fee':fixed_fee,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'fees_paid':fees_paid,'benchmark':benchmark_result,'points':points,'transactions':tx[-300:]}
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
@@ -148,9 +192,9 @@ def install(app):
     def paper_reset():
         conn=connect(); conn.execute('DELETE FROM paper_trades WHERE account_id=1'); conn.commit(); conn.close(); return {'status':'ok','portfolio':_positions(provider)}
     @app.get('/api/paper/backtest')
-    def paper_backtest(ticker:str,start:str,end:str,initial_cash:float=100000,monthly_investment:float=0,reinvest_dividends:bool=True):
-        if initial_cash<=0 or monthly_investment<0:raise HTTPException(400,detail='Invalid investment amounts')
-        return _backtest(provider,ticker.upper(),start,end,initial_cash,monthly_investment,reinvest_dividends)
+    def paper_backtest(ticker:str,start:str,end:str,initial_cash:float=100000,monthly_investment:float=0,reinvest_dividends:bool=True,fee_pct:float=0.,fixed_fee:float=0.,strategy:str='dca',benchmark:str='^OSEBX'):
+        if initial_cash<=0 or monthly_investment<0 or fee_pct<0 or fixed_fee<0:raise HTTPException(400,detail='Invalid investment amounts or fees')
+        return _backtest(provider,ticker.upper(),start,end,initial_cash,monthly_investment,reinvest_dividends,fee_pct,fixed_fee,strategy,benchmark)
     @app.get('/api/news/{ticker}')
     def stock_news(ticker:str,limit:int=12):
         ticker=ticker.upper(); limit=max(1,min(limit,20)); items=[]
