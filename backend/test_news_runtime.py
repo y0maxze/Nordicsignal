@@ -44,7 +44,7 @@ class MultiSourceNewsTests(unittest.TestCase):
 
     def test_short_generic_ticker_is_not_enough_for_issuer_match(self):
         html = '''<table><tr><td>22 Aug 2026 06:30 CEST</td><td>Some Company</td>
-        <td><a href="/en/products/equities/company-news/2026-08-22-other">LSG market note unrelated to Lerøy</a></td></tr></table>'''
+        <td><a href="/en/products/equities/company-news/2026-08-22-other">LSG market note for another issuer</a></td></tr></table>'''
         self.assertEqual(parse_euronext_html(html, 'LSG', 'Lerøy Seafood', 10), [])
 
 
