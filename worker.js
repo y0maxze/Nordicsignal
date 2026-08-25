@@ -45,7 +45,9 @@ async function searchUpstream(request, searchTerm) {
   const upstream = new URL(`${API_ORIGIN}/api/search`);
   upstream.searchParams.set("q", searchTerm);
   const response = await fetch(upstream.toString(), request);
-  if (!response.ok) return { items: [] };
+  if (!response.ok) {
+    throw new Error(`Search upstream returned HTTP ${response.status}`);
+  }
   const data = await response.json();
   return { items: Array.isArray(data.items) ? data.items : [] };
 }
@@ -68,18 +70,10 @@ export default {
       if (!q) return json({ items: [] });
 
       try {
-        // The API currently uses PostgreSQL LIKE, which is case-sensitive.
-        // Query the common ticker/name casing variants at the edge so that
-        // searches such as "lsg", "LSG", "lerøy", and "Lerøy" all work.
-        const variants = [...new Set([q, q.toUpperCase(), q.charAt(0).toUpperCase() + q.slice(1).toLowerCase()])];
-        const responses = await Promise.all(variants.map(term => searchUpstream(request, term)));
-        const merged = new Map();
-        for (const response of responses) {
-          for (const item of response.items) {
-            if (item?.ticker) merged.set(item.ticker, item);
-          }
-        }
-        return json({ items: [...merged.values()].slice(0, 30) });
+        // The Render API performs case-insensitive ticker/name matching.
+        // Keep this proxy to one upstream request so search stays fast and
+        // does not multiply load on the free Render service.
+        return json(await searchUpstream(request, q));
       } catch (error) {
         return json({ status: "error", code: "API_UPSTREAM_UNAVAILABLE", message: String(error) }, 502);
       }
