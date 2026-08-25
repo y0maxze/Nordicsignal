@@ -52,6 +52,38 @@ const STOCK_PRESSURE_UI = `
 })();
 </script>`;
 
+const STOCK_INSIDER_UI = `
+<style>
+.insiderSummary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0 16px}.insiderSummary .metric b{font-size:17px}.actorBadge,.sourceBadge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;margin-left:6px}.actorBadge.person{background:#102f46;color:#83c5ff}.actorBadge.company{background:#2d2410;color:#ffd36a}.sourceBadge.disclosed{background:#0c3027;color:#35d49a}.sourceBadge.estimated{background:#30260d;color:#f5c451}.ownershipCell small{display:block;color:#91a5bd;margin-top:3px}@media(max-width:900px){.insiderSummary{grid-template-columns:repeat(2,1fr)}}@media(max-width:550px){.insiderSummary{grid-template-columns:1fr}}
+</style>
+<script>
+(function(){
+  if(typeof window.insider!=='function')return;
+  var h=function(v){return String(v==null?'—':v).replace(/[&<>\"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]})};
+  var n=function(v,d){return v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:d==null?2:d})};
+  var kr=function(v){return v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:2})+' kr'};
+  var pct=function(v){return v==null?'—':Number(v).toLocaleString('no-NO',{minimumFractionDigits:2,maximumFractionDigits:4})+'%'};
+  window.insider=function(){
+    var d=(window.data&&window.data.insider)||{};
+    var a=d.items||[];
+    var summary='<div class="insiderSummary"><div class="metric"><span class="muted">Kjøp</span><b class="positive">'+h(d.buy_count||0)+'</b></div><div class="metric"><span class="muted">Salg</span><b class="negative">'+h(d.sell_count||0)+'</b></div><div class="metric"><span class="muted">Verifiserte handler</span><b>'+h(d.verified_detail_count||0)+'</b></div><div class="metric"><span class="muted">Kilde</span><b style="font-size:12px">'+h(d.source||'Euronext / Oslo Børs')+'</b></div></div>';
+    var note='<div class="notice">Kun offentlige og verifiserbare opplysninger vises. Eierandel merkes <b>oppgitt</b> når den står direkte i meldingen, eller <b>estimert</b> når den beregnes fra oppgitt beholdning etter handel og tilgjengelig aksjetall.</div>';
+    if(!a.length)return '<section class="card"><h2>Insider · hvem kjøpte og solgte?</h2>'+summary+note+'<div class="notice">Ingen detaljerte offentlige insiderhandler tilgjengelig akkurat nå.</div></section>';
+    var rows=a.map(function(x){
+      var actor=x.person||x.entity||x.insider||x.holder||'Ikke oppgitt i kilden';
+      var actorType=x.actor_type==='company'?'company':x.actor_type==='person'?'person':'';
+      var actorLabel=actorType==='company'?'FORETAK':actorType==='person'?'PERSON':'';
+      var value=x.transaction_value!=null?x.transaction_value:(x.shares!=null&&x.price!=null?x.shares*x.price:null);
+      var ownSource=x.ownership_pct_source||'';
+      var ownBadge=ownSource==='disclosed'?'<span class="sourceBadge disclosed">OPPGITT</span>':ownSource?'<span class="sourceBadge estimated">ESTIMERT</span>':'';
+      var ownNote=ownSource==='estimated_from_latest_annual_share_count'?'<small>Basert på siste tilgjengelige aksjetall</small>':'';
+      return '<tr><td>'+h(x.trade_date||x.date||'—')+'</td><td><span class="pill '+(x.transaction_type==='sell'?'sell':'')+'">'+h(x.transaction_type==='buy'?'KJØP':x.transaction_type==='sell'?'SALG':'ANNET')+'</span></td><td><b>'+h(actor)+'</b>'+(actorLabel?'<span class="actorBadge '+actorType+'">'+actorLabel+'</span>':'')+'</td><td>'+h(x.role||'—')+'</td><td>'+n(x.shares,0)+'</td><td>'+kr(x.price)+'</td><td>'+kr(value)+'</td><td>'+n(x.holding_after_shares,0)+'</td><td class="ownershipCell"><b>'+pct(x.ownership_pct)+'</b>'+ownBadge+ownNote+'</td><td>'+(x.url?'<a href="'+h(x.url)+'" target="_blank" rel="noopener">Original</a>':'—')+'</td></tr>';
+    }).join('');
+    return '<section class="card"><h2>Insider · hvem kjøpte og solgte?</h2>'+summary+note+'<div class="tablewrap"><table><thead><tr><th>Dato</th><th>Handling</th><th>Person / foretak</th><th>Rolle</th><th>Antall</th><th>Pris</th><th>Verdi</th><th>Eier etter</th><th>Eierandel</th><th>Kilde</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>';
+  };
+})();
+</script>`;
+
 function assetRequest(request, pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;
@@ -95,8 +127,9 @@ async function serveAsset(request, env, pathname) {
     const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a>';
     if (!html.includes('href="/paper"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   }
-  if (pathname === "/stock.html" && !html.includes('id="pressureAlertBar"')) {
-    html = html.replace("</body>", `${STOCK_PRESSURE_UI}</body>`);
+  if (pathname === "/stock.html") {
+    if (!html.includes('id="pressureAlertBar"')) html = html.replace("</body>", `${STOCK_PRESSURE_UI}</body>`);
+    if (!html.includes('class="insiderSummary"')) html = html.replace("</body>", `${STOCK_INSIDER_UI}</body>`);
   }
 
   const headers = new Headers(response.headers);
