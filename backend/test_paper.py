@@ -6,6 +6,9 @@ from extra_api import _backtest, _xirr
 
 
 class FakeProvider:
+    def symbol(self, ticker):
+        return ticker
+
     def historical(self, ticker, period='max'):
         return [
             {'timestamp': 1672531200, 'date': '2023-01-01T00:00:00+00:00', 'close': 100},
