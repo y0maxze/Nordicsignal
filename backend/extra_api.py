@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
+import re
+import unicodedata
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -9,6 +11,37 @@ from providers import YahooProvider
 
 
 def _now(): return datetime.now(timezone.utc).isoformat()
+
+
+def _norm_text(value):
+    text=unicodedata.normalize('NFKD',str(value or '')).encode('ascii','ignore').decode('ascii').lower()
+    return re.sub(r'[^a-z0-9]+',' ',text).strip()
+
+
+def _company_name(ticker):
+    conn=connect()
+    try:
+        row=conn.execute('SELECT name FROM stocks WHERE ticker=? LIMIT 1',(ticker.upper(),)).fetchone()
+        return row['name'] if row else ticker.upper()
+    finally:
+        conn.close()
+
+
+def news_matches_ticker(item,ticker,company_name=''):
+    """Reject Yahoo search spillover that is not actually about the selected issuer."""
+    ticker=ticker.upper(); symbol=ticker+'.OL'
+    related=[str(x).upper() for x in (item.get('relatedTickers') or [])]
+    if ticker in related or symbol in related:
+        return True
+    title=_norm_text(item.get('title'))
+    company=_norm_text(company_name)
+    if company and company in title:
+        return True
+    # Match distinctive company-name tokens, but never a short/generic ticker by itself.
+    tokens=[x for x in company.split() if len(x)>=5 and x not in {'group','holding','international','systems','technologies','seafood'}]
+    if tokens and any(x in title for x in tokens):
+        return True
+    return False
 
 
 def _ensure_schema():
@@ -208,18 +241,22 @@ def install(app):
         return _backtest(provider,ticker.upper(),start,end,initial_cash,monthly_investment,reinvest_dividends,fee_pct,fixed_fee,strategy,benchmark)
     @app.get('/api/news/{ticker}')
     def stock_news(ticker:str,limit:int=12):
-        ticker=ticker.upper(); limit=max(1,min(limit,20)); items=[]
+        ticker=ticker.upper(); limit=max(1,min(limit,20)); items=[]; company=_company_name(ticker)
         try:
-            data=provider._get(f'{provider.BASE}/v1/finance/search?q={quote_plus(ticker)}&quotesCount=1&newsCount={limit}')
+            query=f'{company} {ticker}' if company and company.upper()!=ticker else ticker
+            data=provider._get(f'{provider.BASE}/v1/finance/search?q={quote_plus(query)}&quotesCount=3&newsCount={min(limit*4,80)}')
             for n in data.get('news') or []:
+                if not news_matches_ticker(n,ticker,company):
+                    continue
                 title=n.get('title') or ''; publisher=n.get('publisher') or 'Unknown'; link=n.get('link') or ''; ts=n.get('providerPublishTime'); dt=datetime.fromtimestamp(ts,timezone.utc).isoformat() if ts else None; low=title.lower(); category='Nyhet'
                 if any(k in low for k in ('insider','primary insider','mandatory notification')):category='Insider'
                 elif any(k in low for k in ('report','results','quarter','q1','q2','q3','q4','earnings')):category='Rapport'
                 elif any(k in low for k in ('dividend','ex-dividend')):category='Utbytte'
                 elif any(k in low for k in ('acqui','merger','contract','order','agreement')):category='Selskap'
-                items.append({'ticker':ticker,'title':title,'publisher':publisher,'url':link,'published_at':dt,'category':category,'summary':title})
+                items.append({'ticker':ticker,'title':title,'publisher':publisher,'url':link,'published_at':dt,'category':category,'summary':title,'related_tickers':n.get('relatedTickers') or []})
+                if len(items)>=limit: break
         except Exception as exc:return {'ticker':ticker,'items':[],'status':'unavailable','source':'Yahoo Finance search','error':str(exc)}
-        return {'ticker':ticker,'items':items,'status':'live_news' if items else 'no_news','source':'Yahoo Finance search'}
+        return {'ticker':ticker,'company':company,'items':items,'status':'live_news' if items else 'no_company_news','source':'Yahoo Finance search','strict_issuer_filter':True}
     @app.get('/api/news/{ticker}/summary')
     def news_summary(ticker:str):
         d=stock_news(ticker,8); items=d.get('items') or []; counts={}
