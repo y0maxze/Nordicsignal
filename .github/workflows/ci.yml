@@ -21,3 +21,5 @@ jobs:
         run: pip install -r requirements.txt
       - name: Compile backend
         run: python -m compileall -q .
+      - name: Run unit tests
+        run: python -m unittest discover -p 'test_*.py' -v
