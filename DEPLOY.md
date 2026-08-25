@@ -41,6 +41,28 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 
 The frontend uses the Render API directly today, while the Cloudflare Worker also exposes the same `/api/*` paths as a proxy.
 
+### Persistent SQLite storage
+
+The backend now supports the `NORDICSIGNAL_DB_PATH` environment variable. This is required if SQLite data such as watchlists and paper trades must survive Render restarts and deploys.
+
+Recommended Render setup for the current single-instance SQLite architecture:
+
+1. Attach a Render Persistent Disk to the API service.
+2. Use mount path `/var/data`.
+3. Set the environment variable:
+
+```text
+NORDICSIGNAL_DB_PATH=/var/data/nordicsignal.db
+```
+
+4. Keep the service at one instance. Render persistent disks are single-instance storage and cannot be combined with autoscaling.
+
+If `NORDICSIGNAL_DB_PATH` is not set, local development continues to use `backend/nordicsignal.db`.
+
+## Paper trading integrity
+
+Starting capital cannot be changed after the first paper trade. Reset the paper account first if a new starting balance is required. This prevents historical trades from being revalued against a different starting-capital assumption.
+
 ## Important
 
 Do not put API keys in the frontend repository. Market-data redistribution rights and provider terms must be validated before public/commercial launch.
