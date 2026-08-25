@@ -136,6 +136,48 @@ const STOCK_TAB_DEEPLINK_UI = `
 })();
 </script>`;
 
+const DASHBOARD_METRIC_UI = `
+<style>
+.cards>.card.nsMetricCard{cursor:pointer;transition:transform .12s ease,border-color .12s ease,background .12s ease}.cards>.card.nsMetricCard:hover,.cards>.card.nsMetricCard:focus{transform:translateY(-2px);border-color:#65a9ff;background:#10243a;outline:none}.cards>.card.nsMetricCard:after{content:'Klikk for å se liste';display:block;color:#65a9ff;font-size:10px;margin-top:8px}.nsMetricBack{margin-bottom:14px}.nsMetricEmpty{padding:14px;border:1px solid #20354d;border-radius:10px;color:#91a5bd;background:#0a1727}
+.logo.nsHomeLogo{cursor:pointer}.logo.nsHomeLogo:hover{opacity:.85}
+</style>
+<script>
+(function(){
+  function setDashboardNavActive(){document.querySelectorAll('#nav a').forEach(function(a){a.classList.toggle('active',a.dataset.page==='Dashboard')})}
+  function goDashboard(){setDashboardNavActive();if(typeof renderDashboard==='function')renderDashboard();else location.href='/app'}
+  function metricItems(kind){
+    var all=(typeof universe!=='undefined'&&Array.isArray(universe))?universe:[];
+    if(kind==='strong')return all.filter(function(x){return Number(x.score)>=80});
+    if(kind==='live')return all.filter(function(x){return !!x.live_verified});
+    if(kind==='partial')return all.filter(function(x){return !!x.partial_live});
+    return all;
+  }
+  function openMetric(kind,title,subtitle){
+    var items=metricItems(kind);
+    if(typeof setTitle==='function')setTitle(title,subtitle);
+    var view=document.getElementById('appview');if(!view)return;
+    var body=items.length&&typeof rows==='function'?rows(items):'<div class="nsMetricEmpty">Ingen aksjer i denne kategorien akkurat nå.</div>';
+    view.innerHTML='<button class="btn nsMetricBack" id="nsMetricBack">← Tilbake til dashboard</button><section class="section"><div class="toolbar"><div><h2 style="margin:0">'+title+'</h2><div class="sub">'+items.length+' aksjer</div></div></div>'+(items.length?'<div class="row head"><span>Company</span><span>Score</span><span>Strength</span><span>Signal</span></div>':'')+body+'</section>';
+    var back=document.getElementById('nsMetricBack');if(back)back.onclick=goDashboard;
+  }
+  function mountCards(){
+    var cards=document.querySelectorAll('.cards>.card');
+    if(cards.length<4)return;
+    var defs=[['tracked','Alle aksjer','Hele Oslo Børs-universet som NordicSignal følger'],['strong','Strong signals','Aksjer med score ≥ 80'],['live','Live verified','Aksjer med 100/100 live-datadekning'],['partial','Partial live','Aksjer med delvis live-datadekning']];
+    cards.forEach(function(card,i){if(i>3)return;card.classList.add('nsMetricCard');card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Åpne '+defs[i][1]);card.onclick=function(){openMetric(defs[i][0],defs[i][1],defs[i][2])};card.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click()}}});
+  }
+  function mountLogo(){var logo=document.querySelector('.logo');if(!logo)return;if(logo.dataset.homeReady)return;logo.dataset.homeReady='1';logo.classList.add('nsHomeLogo');logo.title='Til dashboard';logo.setAttribute('role','link');logo.tabIndex=0;logo.onclick=goDashboard;logo.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();goDashboard()}}}
+  var pending=false;function mount(){if(pending)return;pending=true;setTimeout(function(){pending=false;mountCards();mountLogo()},50)}
+  new MutationObserver(mount).observe(document.documentElement,{childList:true,subtree:true});mount();
+})();
+</script>`;
+
+const GLOBAL_HOME_UI = `
+<style>
+.nsGlobalHome{position:fixed;top:12px;left:12px;z-index:9999;text-decoration:none;background:#081423;border:1px solid #20354d;border-radius:10px;padding:9px 12px;color:#eef5ff!important;font:800 14px system-ui,-apple-system,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25)}.nsGlobalHome span{color:#35d49a}.nsGlobalHome:hover{border-color:#65a9ff;background:#10243a}@media(max-width:650px){.nsGlobalHome{position:static;display:inline-block;margin:10px 12px 0}}
+</style>
+<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>`;
+
 function assetRequest(request, pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;
@@ -172,18 +214,23 @@ async function serveAsset(request, env, pathname) {
   if (request.method === "HEAD" || !response.ok) return response;
   const type = response.headers.get("content-type") || "";
   if (!type.includes("text/html")) return response;
-  if (pathname !== "/index.html" && pathname !== "/stock.html") return response;
+  const enhancedPages = new Set(["/index.html","/stock.html","/paper.html","/history.html"]);
+  if (!enhancedPages.has(pathname)) return response;
 
   let html = await response.text();
   if (pathname === "/index.html") {
     const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a>';
     if (!html.includes('href="/paper"')) html = html.replace("</nav>", `${navExtras}</nav>`);
     if (!html.includes('id="nsStockActions"')) html = html.replace("</body>", `${DASHBOARD_STOCK_ACTIONS_UI}</body>`);
+    if (!html.includes('nsMetricCard')) html = html.replace("</body>", `${DASHBOARD_METRIC_UI}</body>`);
   }
   if (pathname === "/stock.html") {
     if (!html.includes('id="pressureAlertBar"')) html = html.replace("</body>", `${STOCK_PRESSURE_UI}</body>`);
     if (!html.includes('class="insiderSummary"')) html = html.replace("</body>", `${STOCK_INSIDER_UI}</body>`);
     if (!html.includes('STOCK_TAB_DEEPLINK_MARKER')) html = html.replace("</body>", `${STOCK_TAB_DEEPLINK_UI.replace('<script>','<script>/* STOCK_TAB_DEEPLINK_MARKER */')}</body>`);
+  }
+  if (pathname !== "/index.html" && !html.includes('class="nsGlobalHome"')) {
+    html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
   }
 
   const headers = new Headers(response.headers);
