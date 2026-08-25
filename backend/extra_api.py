@@ -99,8 +99,7 @@ def _fee_for_gross(gross, fee_pct, fixed_fee): return max(0.,gross)*max(0.,fee_p
 def _buy_with_cash(cash, price, fee_pct, fixed_fee):
     if cash<=0 or price<=0:return 0.,0.,0.
     pct=max(0.,fee_pct)/100.; fixed=max(0.,fixed_fee)
-    gross=max(0.,(cash-fixed)/(1.+pct))
-    fee=_fee_for_gross(gross,fee_pct,fixed)
+    gross=max(0.,(cash-fixed)/(1.+pct)); fee=_fee_for_gross(gross,fee_pct,fixed)
     return gross/price, gross, fee
 
 def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends,fee_pct=0.,fixed_fee=0.,strategy='dca',benchmark='^OSEBX'):
@@ -114,30 +113,34 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
     div_by_day={}
     if not ticker.startswith('^'):
         for d in fetch_dividend_events(provider,ticker,start_ts-86400,end_ts+86400): div_by_day[d['date']]=div_by_day.get(d['date'],0.)+float(d['amount'])
-    cash=0.; shares=0.; invested=0.; fees_paid=0.; dividend_total=0.; last_month=None; points=[]; tx=[]; flows=[]; closes=[]
+    cash=0.; shares=0.; invested=0.; fees_paid=0.; dividend_total=0.; last_month=None; points=[]; tx=[]; flows=[]; closes=[]; dividend_events=0
     for row in rows:
-        d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close']); closes.append(price)
+        d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close']); closes.append(price); contribution_added=0.
         if strategy in ('dca','sma_cross') and last_month!=(d.year,d.month):
             contribution=float(initial_cash) if last_month is None else float(monthly_investment)
             if contribution>0:
-                cash+=contribution; invested+=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution})
+                cash+=contribution; invested+=contribution; contribution_added=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution})
             last_month=(d.year,d.month)
         elif strategy=='lump_sum' and last_month is None:
-            contribution=float(initial_cash); cash+=contribution; invested+=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution}); last_month=(d.year,d.month)
+            contribution=float(initial_cash); cash+=contribution; invested+=contribution; contribution_added=contribution; flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); tx.append({'date':d.isoformat(),'side':'contribution','amount':contribution}); last_month=(d.year,d.month)
         dividend_per=div_by_day.get(d.isoformat(),0.)
         if dividend_per and shares:
-            dividend=shares*dividend_per; dividend_total+=dividend
+            dividend=shares*dividend_per; dividend_total+=dividend; dividend_events+=1
             if reinvest_dividends and price>0:
                 add,gross,fee=_buy_with_cash(dividend,price,fee_pct,fixed_fee); shares+=add; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend,'fee':fee})
-            else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend,'fee':0.})
+            else:
+                cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend,'fee':0.})
         signal=True
         if strategy=='sma_cross':
             fast=sum(closes[-50:])/min(50,len(closes)); slow=sum(closes[-200:])/min(200,len(closes)); signal=len(closes)>=200 and fast>slow
         if strategy in ('dca','lump_sum'):
             signal=True
-        if signal and cash>0 and price>0:
-            bought,gross,fee=_buy_with_cash(cash,price,fee_pct,fixed_fee)
-            if bought>0: shares+=bought; cash-=gross+fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':gross,'fee':fee})
+        # DCA/lump-sum deploy only the new contribution. SMA may deploy accumulated cash when its signal turns on.
+        deploy_cash=(contribution_added>0) if strategy in ('dca','lump_sum') else (signal and cash>0)
+        if deploy_cash and price>0:
+            bought,gross,fee=_buy_with_cash(contribution_added if strategy in ('dca','lump_sum') else cash,price,fee_pct,fixed_fee)
+            if bought>0:
+                shares+=bought; cash-=gross+fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':gross,'fee':fee})
         elif strategy=='sma_cross' and not signal and shares>0:
             gross=shares*price; fee=_fee_for_gross(gross,fee_pct,fixed_fee); cash+=gross-fee; fees_paid+=fee; tx.append({'date':d.isoformat(),'side':'sell','shares':shares,'price':price,'amount':gross,'fee':fee}); shares=0.
         value=shares*price; equity=cash+value; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':value,'equity':equity,'invested':invested})
@@ -155,7 +158,7 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
             benchmark_equity=b_cash+b_shares*float(b_rows[-1]['close']); benchmark_result={'ticker':benchmark,'final_equity':benchmark_equity,'return':benchmark_equity-invested,'return_pct':(benchmark_equity-invested)/invested*100 if invested else 0.}
         except Exception:
             benchmark_result=None
-    return {'ticker':ticker,'strategy':strategy,'strategy_label':{'dca':'Månedlig investering','lump_sum':'Alt inn med en gang','sma_cross':'50/200 SMA trendstrategi'}[strategy],'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'fee_pct':fee_pct,'fixed_fee':fixed_fee,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'fees_paid':fees_paid,'benchmark':benchmark_result,'points':points,'transactions':tx[-300:]}
+    return {'ticker':ticker,'strategy':strategy,'strategy_label':{'dca':'Månedlig investering','lump_sum':'Alt inn med en gang','sma_cross':'50/200 SMA trendstrategi'}[strategy],'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'fee_pct':fee_pct,'fixed_fee':fixed_fee,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'dividend_events':dividend_events,'fees_paid':fees_paid,'benchmark':benchmark_result,'points':points,'transactions':tx[-300:]}
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
