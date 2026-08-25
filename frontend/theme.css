@@ -20,7 +20,7 @@ a:hover{color:#fff!important}
 h1,h2,h3{letter-spacing:-.025em}
 h1{font-weight:760!important}h2{font-weight:720!important}h3{font-weight:680!important}
 .side{width:252px!important;background:#090909!important;border-right:1px solid #242424!important;padding:24px 18px!important;box-shadow:12px 0 40px rgba(0,0,0,.18)}
-.main{margin-left:252px!important}
+.app>.main{margin-left:252px!important}
 .logo{display:inline-flex;align-items:center;gap:0;font-weight:820!important;letter-spacing:-.04em;color:#fff!important;user-select:none}
 .logo span{color:#18c984!important}
 .side .logo{margin:2px 10px 30px!important;font-size:22px!important}
@@ -61,5 +61,5 @@ table tbody tr:hover,.table tbody tr:hover{background:#111!important}
 .actorBadge.person{background:#151515!important;color:#ddd!important}.actorBadge.company{background:#17130b!important;color:#e7c16b!important}
 .sourceBadge.disclosed{background:#0d1712!important;color:#55dca8!important}.sourceBadge.estimated{background:#17130b!important;color:#e7c16b!important}
 .toolbar{gap:12px!important}.top{gap:18px!important}
-@media(max-width:900px){.side{display:none!important}.main{margin-left:0!important}}
+@media(max-width:900px){.side{display:none!important}.app>.main{margin-left:0!important}}
 @media(max-width:650px){.card,.section{border-radius:10px!important}.nsGlobalHome{margin:10px 12px 0!important}}
