@@ -1,2 +1,9 @@
-/app /
-/frontend/ /
+/app /index.html 200
+/dashboard /index.html 200
+/stock /stock.html 200
+/stock-intelligence /stock.html 200
+/paper /paper.html 200
+/paper-trading /paper.html 200
+/history /history.html 200
+/news /news.html 200
+/frontend/ /index.html 200
