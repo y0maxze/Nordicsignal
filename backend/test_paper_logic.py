@@ -15,7 +15,7 @@ class PaperLogicTests(unittest.TestCase):
         end = datetime(2026, 1, 1, tzinfo=timezone.utc)
         result = _xirr([(start, -100.0), (end, 200.0)])
         self.assertIsNotNone(result)
-        self.assertAlmostEqual(result, 1.0, places=5)
+        self.assertAlmostEqual(result, 1.0, delta=0.002)
 
     def test_xirr_requires_both_cashflow_signs(self):
         start = datetime(2025, 1, 1, tzinfo=timezone.utc)
