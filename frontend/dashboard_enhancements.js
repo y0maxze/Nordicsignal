@@ -2,11 +2,12 @@
   const TYPE_ORDER=['Aksjer','Fond','ETF','Kontanter','Øvrig'];
   const esc=v=>String(v==null?'':v).replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const typeLabel=x=>x.asset_class||x.instrument_type||x.type||'Aksjer';
+  const currentUniverse=()=>{
+    try{return typeof universe!=='undefined'&&Array.isArray(universe)?universe:[]}catch{return []}
+  };
   const fullName=t=>{
-    try{
-      const u=(window.universe||[]).find(x=>String(x.ticker||'').toUpperCase()===String(t||'').toUpperCase());
-      return u?.name||t;
-    }catch{return t;}
+    const u=currentUniverse().find(x=>String(x.ticker||'').toUpperCase()===String(t||'').toUpperCase());
+    return u?.name||t;
   };
 
   function addStyles(){
@@ -27,16 +28,16 @@
 
   function isTracked(item){
     if(item.tracked)return true;
-    const t=String(item.ticker||'').toUpperCase();
-    return Array.isArray(window.universe)&&(window.universe||[]).some(x=>String(x.ticker||'').toUpperCase()===t);
+    const t=String(item.ticker||'').toUpperCase().replace(/\.OL$/,'');
+    return currentUniverse().some(x=>String(x.ticker||'').toUpperCase()===t);
   }
 
   function openSearchItem(item){
-    const ticker=String(item.ticker||item.symbol||'').toUpperCase();
+    const ticker=String(item.ticker||item.symbol||'').toUpperCase().replace(/\.OL$/,'');
     const panel=document.getElementById('searchResults');
     if(panel)panel.style.display='none';
-    if(isTracked(item)&&typeof window.showStock==='function'){
-      window.showStock(ticker.replace(/\.OL$/,''));
+    if(isTracked(item)&&typeof showStock==='function'){
+      showStock(ticker);
       return;
     }
     const symbol=item.symbol||item.market_symbol||ticker;
