@@ -90,9 +90,12 @@ class PaperBacktestTests(unittest.TestCase):
         dividend = [{'timestamp': 1675209600, 'date': '2023-02-01', 'amount': 0.01}]
         with patch('dividend_runtime.fetch_dividend_events', return_value=dividend):
             result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 0, True, fixed_fee=1.0, benchmark=None)
-        self.assertAlmostEqual(result['dividends'], 0.10, places=8)
+        # The initial 1 NOK fixed fee leaves 9.99 shares, so the 0.01 NOK/share
+        # dividend is 0.0999 NOK. It must remain cash because reinvestment cannot
+        # cover the 1 NOK fixed fee.
+        self.assertAlmostEqual(result['dividends'], 0.0999, places=8)
         self.assertTrue(any(x['side'] == 'dividend_cash' for x in result['transactions']))
-        self.assertAlmostEqual(result['cash'], 0.10, places=8)
+        self.assertAlmostEqual(result['cash'], 0.0999, places=8)
 
     def test_no_data_period_is_rejected(self):
         provider = FakeProvider()
