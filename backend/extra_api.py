@@ -79,13 +79,17 @@ def _xirr(cashflows):
 def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends):
     history=provider.historical(ticker,'max'); start_ts=int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp()) if 'T' not in start else int(datetime.fromisoformat(start.replace('Z','+00:00')).timestamp()); end_ts=int(datetime.fromisoformat(end).replace(tzinfo=timezone.utc).timestamp())+86399 if 'T' not in end else int(datetime.fromisoformat(end.replace('Z','+00:00')).timestamp()); rows=[x for x in history if start_ts<=int(x['timestamp'])<=end_ts]
     if not rows:raise HTTPException(404,detail='No historical data for selected period')
-    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}; cash=float(initial_cash); shares=0.; invested=0.; last_month=None; points=[]; tx=[]; flows=[]
+    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}; cash=0.; shares=0.; invested=0.; last_month=None; points=[]; tx=[]; flows=[]
     for row in rows:
         d=datetime.fromtimestamp(int(row['timestamp']),timezone.utc).date(); price=float(row['close'])
         if last_month!=(d.year,d.month):
-            contribution=float(initial_cash if last_month is None and monthly_investment<=0 else monthly_investment)
-            if last_month is None and monthly_investment>0: contribution+=float(initial_cash)
-            cash+=contribution; bought=contribution/price if price else 0; shares+=bought; cash-=bought*price; invested+=contribution; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution)); last_month=(d.year,d.month)
+            if last_month is None:
+                contribution=float(initial_cash)
+            else:
+                contribution=float(monthly_investment)
+            if contribution>0:
+                cash+=contribution; bought=contribution/price if price else 0; shares+=bought; cash-=bought*price; invested+=contribution; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
+            last_month=(d.year,d.month)
         div_per=div_by_day.get(d.isoformat(),0)
         if div_per and shares:
             dividend=shares*div_per
@@ -105,11 +109,9 @@ def install(app):
         conn=connect()
         try:
             has_trades=conn.execute('SELECT 1 FROM paper_trades WHERE account_id=1 LIMIT 1').fetchone() is not None
-            if has_trades:
-                raise HTTPException(409,detail='Starting capital cannot be changed after a paper trade. Reset the paper account first.')
+            if has_trades: raise HTTPException(409,detail='Starting capital cannot be changed after a paper trade. Reset the paper account first.')
             conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,_now())); conn.commit()
-        finally:
-            conn.close()
+        finally: conn.close()
         return paper_account()
     @app.get('/api/paper/portfolio')
     def paper_portfolio():return _positions(provider)
