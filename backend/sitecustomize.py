@@ -22,6 +22,13 @@ except Exception:
     pass
 
 try:
+    from short_alert_runtime import install
+    install()
+except Exception:
+    # Short alerts and volume-pressure proxies are additive.
+    pass
+
+try:
     from paper_history_runtime import install
     install()
 except Exception:
