@@ -2,7 +2,7 @@ import unittest
 
 from stock_intelligence_runtime import classify_news_title
 from dividend_runtime import _extract_events
-from extra_api import news_matches_ticker
+from news_routes import news_matches_ticker
 
 
 class StockIntelligenceRuntimeTests(unittest.TestCase):
