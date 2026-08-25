@@ -289,7 +289,8 @@ class NordicRegulatoryProvider:
         latest = max(matches, key=lambda x: x.get("date") or "")
         return {"ticker": ticker.upper(), "source": "Finanstilsynet Short Sale Register", "items": matches[:10], "short_percent_float": latest.get("short_percent"), "short_ratio": None, "shares": latest.get("shares"), "latest_date": latest.get("date"), "status": "public_position", "updated_at": datetime.now(timezone.utc).isoformat()}
 
-    def insider(self, ticker):
+    def insider(self, ticker, company_name=""):
+        """Fetch primary-insider disclosures; company_name is accepted for callers that already know the issuer."""
         ticker = ticker.upper()
         html_text = self._html(self.EURONEXT_NEWS, {"keys": ticker, "page": 0})
         parser = _TextParser(); parser.feed(html_text)
