@@ -30,6 +30,9 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/paper/backtest',
             '/api/holdings',
             '/api/holdings/{holding_id}',
+            '/api/holdings/account-tax',
+            '/api/holdings/transactions',
+            '/api/holdings/transactions/{transaction_id}',
         }
         missing = sorted(required - paths)
         self.assertFalse(missing, f'Missing runtime API routes: {missing}')
