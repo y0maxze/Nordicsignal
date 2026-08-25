@@ -8,6 +8,13 @@ except Exception:
     pass
 
 try:
+    from insider_enrichment_runtime import install
+    install()
+except Exception:
+    # Rich insider parsing is additive; keep core insider feed available if unavailable.
+    pass
+
+try:
     from backtest_runtime import install
     install()
 except Exception:
