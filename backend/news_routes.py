@@ -13,6 +13,23 @@ from news_runtime import aggregate_news
 from providers import YahooProvider
 
 
+def news_matches_ticker(item, ticker, company_name=''):
+    """Return True only when a media item belongs to the selected issuer."""
+    ticker = ticker.upper()
+    related = [str(x).upper() for x in (item.get('relatedTickers') or [])]
+    if ticker in related or f'{ticker}.OL' in related:
+        return True
+    title = (item.get('title') or '').lower()
+    company = (company_name or '').lower().strip()
+    if company and company in title:
+        return True
+    tokens = [
+        x for x in company.split()
+        if len(x) >= 5 and x not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}
+    ]
+    return bool(tokens and any(token in title for token in tokens))
+
+
 def _yahoo_news(provider, ticker, company, limit):
     """Return strictly issuer-matched Yahoo items as the media fallback."""
     ticker = ticker.upper()
@@ -24,20 +41,11 @@ def _yahoo_news(provider, ticker, company, limit):
             f'{provider.BASE}/v1/finance/search?q={quote_plus(query)}&quotesCount=3&newsCount={min(limit * 4, 100)}'
         )
         for item in data.get('news') or []:
-            related = [str(x).upper() for x in (item.get('relatedTickers') or [])]
-            title = item.get('title') or ''
-            normalized_title = title.lower()
-            company_tokens = [
-                x.lower() for x in (company or '').split()
-                if len(x) >= 5 and x.lower() not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}
-            ]
-            matched = ticker in related or f'{ticker}.OL' in related
-            if not matched and company:
-                matched = company.lower() in normalized_title or any(token in normalized_title for token in company_tokens)
-            if not matched:
+            if not news_matches_ticker(item, ticker, company):
                 continue
+            title = item.get('title') or ''
             ts = item.get('providerPublishTime')
-            low = normalized_title
+            low = title.lower()
             category = 'Nyhet'
             if any(k in low for k in ('insider', 'primary insider', 'mandatory notification')):
                 category = 'Insider'
