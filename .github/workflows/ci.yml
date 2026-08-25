@@ -79,6 +79,7 @@ jobs:
           test -s frontend/theme.css
           test -s frontend/index.html
           test -s frontend/stock.html
+          test -s frontend/instrument.html
           test -s frontend/paper.html
           test -s frontend/history.html
           test -s frontend/news.html
@@ -88,6 +89,8 @@ jobs:
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
+          grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
+          grep -q '/api/instrument/' frontend/instrument.html
           grep -q 'theme.css' worker.js
           grep -q 'Stock Intelligence' worker.js
           grep -q 'Paper Trading' worker.js
@@ -98,3 +101,7 @@ jobs:
           grep -q 'nsGlobalHome' worker.js
           grep -q 'nsMetricCard' worker.js
           grep -q 'STOCK_TAB_DEEPLINK_MARKER' worker.js
+          if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then
+            echo 'Global search must open instrument intelligence, not Holdings'
+            exit 1
+          fi
