@@ -90,6 +90,23 @@ def _positions(provider):
     market=sum(x['value'] or 0 for x in result); equity=cash+market
     return {'starting_cash':starting,'cash':cash,'positions':result,'market_value':market,'equity':equity,'pnl':equity-starting,'pnl_pct':(equity-starting)/starting*100,'realized_pnl':sum(realized.values())}
 
+def _dividends(provider,ticker,start_ts,end_ts):
+    from dividend_runtime import fetch_dividend_events
+    return fetch_dividend_events(provider,ticker,start_ts,end_ts)
+
+def _historical_between(provider,ticker,start_ts,end_ts):
+    symbol=provider.symbol(ticker)
+    data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':int(start_ts),'period2':int(end_ts),'interval':'1d','events':'div|split'})
+    result=((data.get('chart') or {}).get('result') or [])
+    if not result: raise HTTPException(404,detail=f'No historical data for {ticker}')
+    result=result[0]; timestamps=result.get('timestamp') or []; quote=(result.get('indicators',{}).get('quote') or [{}])[0]
+    closes=quote.get('close') or []; opens=quote.get('open') or []; highs=quote.get('high') or []; lows=quote.get('low') or []; volumes=quote.get('volume') or []
+    rows=[]
+    for i,ts in enumerate(timestamps):
+        if i>=len(closes) or closes[i] is None: continue
+        rows.append({'timestamp':int(ts),'date':datetime.fromtimestamp(ts,timezone.utc).isoformat(),'open':opens[i] if i<len(opens) else None,'high':highs[i] if i<len(highs) else None,'low':lows[i] if i<len(lows) else None,'close':closes[i],'volume':volumes[i] if i<len(volumes) else None})
+    return rows
+
 def _xirr(cashflows):
     if len(cashflows)<2:return None
     first=cashflows[0][0]; flows=[((dt-first).total_seconds()/31557600.,float(amount)) for dt,amount in cashflows]
@@ -117,38 +134,84 @@ def _parse_date(value, field):
     return dt
 
 def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends):
-    from dividend_runtime import fetch_dividend_events
     start_dt=_parse_date(start,'start'); end_dt=_parse_date(end,'end')
     if end_dt<=start_dt: raise HTTPException(400,detail='End date must be after start date')
     start_ts=int(start_dt.timestamp()); end_ts=int(end_dt.timestamp())+86399
-    symbol=provider.symbol(ticker)
-    data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':start_ts,'period2':end_ts,'interval':'1d','events':'div|split'})
-    result=((data.get('chart') or {}).get('result') or [])
-    if not result: raise HTTPException(404,detail=f'No historical data for {ticker}')
-    result=result[0]; timestamps=result.get('timestamp') or []; quote=(result.get('indicators',{}).get('quote') or [{}])[0]; closes=quote.get('close') or []
-    rows=[]
-    for i,ts in enumerate(timestamps):
-        if i<len(closes) and closes[i] is not None: rows.append({'timestamp':int(ts),'date':datetime.fromtimestamp(ts,timezone.utc).isoformat(),'close':closes[i]})
-    if not rows: raise HTTPException(404,detail='No historical data for selected period')
-    divs=fetch_dividend_events(provider,ticker,start_ts-86400,end_ts+86400)
-    div_by_day={}
-    for d in divs: div_by_day[d['date']]=div_by_day.get(d['date'],0.0)+float(d['amount'])
+    rows=_historical_between(provider,ticker,start_ts,end_ts)
+    if not rows:raise HTTPException(404,detail='No historical data for selected period')
+    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={}
+    for d in divs: div_by_day[d['date']]=div_by_day.get(d['date'],0.)+float(d['amount'])
     cash=0.; shares=0.; invested=0.; dividend_total=0.; last_month=None; points=[]; tx=[]; flows=[]
     for row in rows:
-        d=datetime.fromtimestamp(row['timestamp'],timezone.utc).date(); price=float(row['close'])
+        d=datetime.fromtimestamp(int(row['timestamp']),timezone.utc).date(); price=float(row['close'])
         if last_month!=(d.year,d.month):
             contribution=float(initial_cash) if last_month is None else float(monthly_investment)
             if contribution>0:
-                cash+=contribution; bought=contribution/price; shares+=bought; cash-=bought*price; invested+=contribution
-                tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
+                cash+=contribution; bought=contribution/price if price else 0; shares+=bought; cash-=bought*price; invested+=contribution; tx.append({'date':d.isoformat(),'side':'buy','shares':bought,'price':price,'amount':contribution}); flows.append((datetime(d.year,d.month,d.day,tzinfo=timezone.utc),-contribution))
             last_month=(d.year,d.month)
-        dividend_per=div_by_day.get(d.isoformat(),0.)
-        if dividend_per and shares:
-            dividend=shares*dividend_per; dividend_total+=dividend
-            if reinvest_dividends:
-                added=dividend/price; shares+=added; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':added,'price':price,'amount':dividend})
-            else:
-                cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
+        div_per=div_by_day.get(d.isoformat(),0.)
+        if div_per and shares:
+            dividend=shares*div_per; dividend_total+=dividend
+            if reinvest_dividends and price>0: add=dividend/price; shares+=add; tx.append({'date':d.isoformat(),'side':'dividend_reinvest','shares':add,'price':price,'amount':dividend})
+            else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
         value=shares*price; equity=cash+value; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':value,'equity':equity,'invested':invested})
-    end_equity=points[-1]['equity']; total=end_equity-invested; flows.append((datetime.fromtimestamp(rows[-1]['timestamp'],timezone.utc),end_equity))
+    end_equity=points[-1]['equity']; total=end_equity-invested; flows.append((datetime.fromtimestamp(int(rows[-1]['timestamp']),timezone.utc),end_equity))
     return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'points':points,'transactions':tx[-100:]}
+
+def install(app):
+    _ensure_schema(); provider=YahooProvider()
+    @app.get('/api/search')
+    def case_insensitive_search(q:str=''):
+        q=q.strip()
+        if not q:return {'items':[]}
+        conn=connect(); pattern=f'%{q}%'; rows=conn.execute("SELECT ticker,name,sector,exchange FROM stocks WHERE active=1 AND (LOWER(ticker) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?)) ORDER BY name LIMIT 30",(pattern,pattern)).fetchall(); conn.close(); return {'items':[dict(r) for r in rows]}
+    @app.get('/api/paper/account')
+    def paper_account():
+        conn=connect(); row=conn.execute('SELECT * FROM paper_accounts WHERE id=1').fetchone(); conn.close(); return dict(row) if row else {'id':1,'starting_cash':100000}
+    @app.post('/api/paper/account')
+    def set_paper_account(payload:AccountIn):
+        conn=connect()
+        try:
+            if conn.execute('SELECT 1 FROM paper_trades WHERE account_id=1 LIMIT 1').fetchone(): raise HTTPException(409,detail='Starting capital cannot be changed after a paper trade. Reset the paper account first.')
+            conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,_now())); conn.commit()
+        finally: conn.close()
+        return paper_account()
+    @app.get('/api/paper/portfolio')
+    def paper_portfolio():return _positions(provider)
+    @app.get('/api/paper/trades')
+    def paper_trades(limit:int=100):
+        conn=connect(); rows=conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id DESC LIMIT ?',(min(max(limit,1),500),)).fetchall(); conn.close(); return {'items':[dict(r) for r in rows]}
+    @app.post('/api/paper/trades')
+    def paper_trade(payload:TradeIn):
+        side=payload.side.lower(); ticker=payload.ticker.upper()
+        if side not in ('buy','sell'):raise HTTPException(400,detail='side must be buy or sell')
+        price=payload.price or float(_quote(provider,ticker)['price']); shares=float(payload.shares); fee=float(payload.fee); port=_positions(provider); position=next((p for p in port['positions'] if p['ticker']==ticker),None); held=position['shares'] if position else 0
+        if side=='buy' and port['cash']<shares*price+fee:raise HTTPException(400,detail='Insufficient paper cash')
+        if side=='sell' and held<shares-1e-10:raise HTTPException(400,detail=f'Insufficient paper shares; holding {held:g}')
+        conn=connect(); conn.execute('INSERT INTO paper_trades(account_id,ticker,side,shares,price,fee,executed_at,note) VALUES(1,?,?,?,?,?,?,?)',(ticker,side,shares,price,fee,_now(),payload.note)); conn.commit(); conn.close(); return {'status':'ok','trade':{'ticker':ticker,'side':side,'shares':shares,'price':price,'fee':fee},'portfolio':_positions(provider)}
+    @app.post('/api/paper/reset')
+    def paper_reset():
+        conn=connect(); conn.execute('DELETE FROM paper_trades WHERE account_id=1'); conn.commit(); conn.close(); return {'status':'ok','portfolio':_positions(provider)}
+    @app.get('/api/paper/backtest')
+    def paper_backtest(ticker:str,start:str,end:str,initial_cash:float=100000,monthly_investment:float=0,reinvest_dividends:bool=True):
+        if initial_cash<=0 or monthly_investment<0:raise HTTPException(400,detail='Invalid investment amounts')
+        return _backtest(provider,ticker.upper(),start,end,initial_cash,monthly_investment,reinvest_dividends)
+    @app.get('/api/news/{ticker}')
+    def stock_news(ticker:str,limit:int=12):
+        ticker=ticker.upper(); limit=max(1,min(limit,20)); items=[]
+        try:
+            data=provider._get(f'{provider.BASE}/v1/finance/search?q={quote_plus(ticker)}&quotesCount=1&newsCount={limit}')
+            for n in data.get('news') or []:
+                title=n.get('title') or ''; publisher=n.get('publisher') or 'Unknown'; link=n.get('link') or ''; ts=n.get('providerPublishTime'); dt=datetime.fromtimestamp(ts,timezone.utc).isoformat() if ts else None; low=title.lower(); category='Nyhet'
+                if any(k in low for k in ('insider','primary insider','mandatory notification')):category='Insider'
+                elif any(k in low for k in ('report','results','quarter','q1','q2','q3','q4','earnings')):category='Rapport'
+                elif any(k in low for k in ('dividend','ex-dividend')):category='Utbytte'
+                elif any(k in low for k in ('acqui','merger','contract','order','agreement')):category='Selskap'
+                items.append({'ticker':ticker,'title':title,'publisher':publisher,'url':link,'published_at':dt,'category':category,'summary':title})
+        except Exception as exc:return {'ticker':ticker,'items':[],'status':'unavailable','source':'Yahoo Finance search','error':str(exc)}
+        return {'ticker':ticker,'items':items,'status':'live_news' if items else 'no_news','source':'Yahoo Finance search'}
+    @app.get('/api/news/{ticker}/summary')
+    def news_summary(ticker:str):
+        d=stock_news(ticker,8); items=d.get('items') or []; counts={}
+        for x in items:counts[x['category']]=counts.get(x['category'],0)+1
+        return {'ticker':ticker.upper(),'headline_count':len(items),'categories':counts,'summary':(' · '.join(x['title'] for x in items[:3]) if items else 'Ingen nye offentlige nyheter funnet.'),'items':items}
