@@ -27,15 +27,18 @@ def _yahoo_news(provider, ticker, company, limit):
             related = [str(x).upper() for x in (item.get('relatedTickers') or [])]
             title = item.get('title') or ''
             normalized_title = title.lower()
-            company_tokens = [x.lower() for x in (company or '').split() if len(x) >= 5 and x.lower() not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}]
+            company_tokens = [
+                x.lower() for x in (company or '').split()
+                if len(x) >= 5 and x.lower() not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}
+            ]
             matched = ticker in related or f'{ticker}.OL' in related
             if not matched and company:
                 matched = company.lower() in normalized_title or any(token in normalized_title for token in company_tokens)
             if not matched:
                 continue
             ts = item.get('providerPublishTime')
-            category = 'Nyhet'
             low = normalized_title
+            category = 'Nyhet'
             if any(k in low for k in ('insider', 'primary insider', 'mandatory notification')):
                 category = 'Insider'
             elif any(k in low for k in ('report', 'results', 'quarter', 'q1', 'q2', 'q3', 'q4', 'earnings', 'annual report', 'interim report')):
@@ -68,7 +71,7 @@ def _yahoo_news(provider, ticker, company, limit):
     }
 
 
-def install(app):
+def install_routes(app):
     provider = YahooProvider()
 
     def base_news(ticker, limit=20):
@@ -111,3 +114,20 @@ def install(app):
             'sources': data.get('sources'),
             'strict_issuer_filter': True,
         }
+
+
+def install():
+    """Attach canonical news/report routes to the existing feature chain."""
+    if getattr(extra_api, '_canonical_news_routes_v1', False):
+        return
+    original = extra_api.install
+
+    def patched_install(app):
+        original(app)
+        install_routes(app)
+
+    extra_api.install = patched_install
+    extra_api._canonical_news_routes_v1 = True
+
+
+install()
