@@ -41,23 +41,23 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 
 The frontend uses the Render API directly today, while the Cloudflare Worker also exposes the same `/api/*` paths as a proxy.
 
-### Persistent SQLite storage
+### PostgreSQL storage
 
-The backend now supports the `NORDICSIGNAL_DB_PATH` environment variable. This is required if SQLite data such as watchlists and paper trades must survive Render restarts and deploys.
+The backend now supports Render PostgreSQL through the `DATABASE_URL` environment variable. PostgreSQL is the recommended production datastore because the current Render Free web service cannot attach a persistent disk. Render supports connecting Free web services to a Render Postgres database, but Free Postgres databases expire after 30 days. For permanent production data, use a paid Postgres plan before the expiration deadline.
 
-Recommended Render setup for the current single-instance SQLite architecture:
+Recommended setup:
 
-1. Attach a Render Persistent Disk to the API service.
-2. Use mount path `/var/data`.
-3. Set the environment variable:
+1. Create a Render Postgres database in the same region as the API service.
+2. Add its **internal connection string** to the API as:
 
 ```text
-NORDICSIGNAL_DB_PATH=/var/data/nordicsignal.db
+DATABASE_URL=<Render internal PostgreSQL connection string>
 ```
 
-4. Keep the service at one instance. Render persistent disks are single-instance storage and cannot be combined with autoscaling.
+3. Keep the API at one instance for the current application architecture.
+4. Deploy the API and verify `/api/health`, `/api/stocks`, `/api/watchlist` and `/api/paper/*` after the database connection is active.
 
-If `NORDICSIGNAL_DB_PATH` is not set, local development continues to use `backend/nordicsignal.db`.
+The backend retains SQLite as a local-development fallback when `DATABASE_URL` is not set. No production SQLite data is stored in Git.
 
 ## Paper trading integrity
 
