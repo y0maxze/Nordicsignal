@@ -2,6 +2,7 @@ import unittest
 
 from stock_intelligence_runtime import classify_news_title
 from dividend_runtime import _extract_events
+from extra_api import news_matches_ticker
 
 
 class StockIntelligenceRuntimeTests(unittest.TestCase):
@@ -11,6 +12,18 @@ class StockIntelligenceRuntimeTests(unittest.TestCase):
         self.assertEqual(classify_news_title('Board proposes NOK 2.50 dividend'), 'Utbytte')
         self.assertEqual(classify_news_title('Company wins major contract'), 'Selskap')
         self.assertEqual(classify_news_title('General market update'), 'Nyhet')
+
+    def test_news_relevance_accepts_related_oslo_ticker(self):
+        item={'title':'Sector outlook improves','relatedTickers':['LSG.OL','MOWI.OL']}
+        self.assertTrue(news_matches_ticker(item,'LSG','Lerøy Seafood'))
+
+    def test_news_relevance_accepts_company_name(self):
+        item={'title':'Lerøy Seafood reports stronger quarterly earnings','relatedTickers':[]}
+        self.assertTrue(news_matches_ticker(item,'LSG','Lerøy Seafood'))
+
+    def test_news_relevance_rejects_generic_ticker_spillover(self):
+        self.assertFalse(news_matches_ticker({'title':'Skanska wins £282m London contract','relatedTickers':['SKA-B.ST']},'LSG','Lerøy Seafood'))
+        self.assertFalse(news_matches_ticker({'title':'Landsec faces analyst target changes','relatedTickers':['LAND.L']},'LSG','Lerøy Seafood'))
 
     def test_dividend_event_extraction_sorts_and_ignores_bad_rows(self):
         data={'chart':{'result':[{'events':{'dividends':{
