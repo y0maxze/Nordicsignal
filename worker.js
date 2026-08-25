@@ -6,6 +6,10 @@ const ASSET_ROUTES = new Map([
   ["/app/", "/index.html"],
   ["/dashboard", "/index.html"],
   ["/dashboard/", "/index.html"],
+  ["/stock", "/stock.html"],
+  ["/stock/", "/stock.html"],
+  ["/stock-intelligence", "/stock.html"],
+  ["/stock-intelligence/", "/stock.html"],
   ["/paper", "/paper.html"],
   ["/paper/", "/paper.html"],
   ["/paper-trading", "/paper.html"],
@@ -34,9 +38,6 @@ function json(body, status = 200) {
 
 function assetPath(pathname) {
   if (ASSET_ROUTES.has(pathname)) return ASSET_ROUTES.get(pathname);
-  // Older frontend code used /frontend/<asset>. Keep those URLs working even
-  // though ./frontend is the configured asset root and therefore the public
-  // asset URL is /<asset>.
   if (pathname.startsWith("/frontend/")) return pathname.slice("/frontend".length);
   return pathname;
 }
@@ -45,9 +46,7 @@ async function searchUpstream(request, searchTerm) {
   const upstream = new URL(`${API_ORIGIN}/api/search`);
   upstream.searchParams.set("q", searchTerm);
   const response = await fetch(upstream.toString(), request);
-  if (!response.ok) {
-    throw new Error(`Search upstream returned HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Search upstream returned HTTP ${response.status}`);
   const data = await response.json();
   return { items: Array.isArray(data.items) ? data.items : [] };
 }
@@ -57,26 +56,14 @@ export default {
     const url = new URL(request.url);
 
     if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-      return json({
-        status: "error",
-        code: "ASSETS_BINDING_MISSING",
-        message: "Cloudflare ASSETS binding is not available in this deployment.",
-        path: url.pathname,
-      }, 500);
+      return json({status:"error",code:"ASSETS_BINDING_MISSING",message:"Cloudflare ASSETS binding is not available in this deployment.",path:url.pathname},500);
     }
 
     if (url.pathname === "/api/search") {
       const q = (url.searchParams.get("q") || "").trim();
       if (!q) return json({ items: [] });
-
-      try {
-        // The Render API performs case-insensitive ticker/name matching.
-        // Keep this proxy to one upstream request so search stays fast and
-        // does not multiply load on the free Render service.
-        return json(await searchUpstream(request, q));
-      } catch (error) {
-        return json({ status: "error", code: "API_UPSTREAM_UNAVAILABLE", message: String(error) }, 502);
-      }
+      try { return json(await searchUpstream(request, q)); }
+      catch (error) { return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:String(error)},502); }
     }
 
     if (url.pathname.startsWith("/api/")) {
@@ -89,14 +76,11 @@ export default {
         headers.set("cache-control", "no-store");
         return new Response(response.body, { status: response.status, headers });
       } catch (error) {
-        return json({ status: "error", code: "API_UPSTREAM_UNAVAILABLE", message: String(error) }, 502);
+        return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:String(error)},502);
       }
     }
 
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      return json({ status: "error", code: "METHOD_NOT_ALLOWED" }, 405);
-    }
-
+    if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
     return env.ASSETS.fetch(assetRequest(request, assetPath(url.pathname)));
   },
 };
