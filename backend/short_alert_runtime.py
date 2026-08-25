@@ -49,13 +49,43 @@ def _short_change_from_cache(provider, result):
     return result
 
 
+def _long_proxy(volume_ratio, change_pct, short):
+    """Classify transparent bullish pressure without pretending to observe real long orders."""
+    ratio=float(volume_ratio) if volume_ratio is not None else None
+    change=float(change_pct) if change_pct is not None else None
+    short_delta=short.get('short_change_pp') if isinstance(short,dict) else None
+    reasons=[]
+    score=0
+    if ratio is not None and ratio>=3.0:
+        score+=2; reasons.append(f'volum {ratio:.1f}× 20-dagers snitt')
+    elif ratio is not None and ratio>=2.0:
+        score+=1; reasons.append(f'volum {ratio:.1f}× 20-dagers snitt')
+    if change is not None and change>=2.0:
+        score+=2; reasons.append(f'kurs +{change:.2f}%')
+    elif change is not None and change>=1.0:
+        score+=1; reasons.append(f'kurs +{change:.2f}%')
+    if short_delta is not None and short_delta<=-0.25:
+        score+=1; reasons.append(f'offentlig short ned {abs(short_delta):.2f} pp')
+    if ratio is None or change is None or change<=0:
+        return {'level':'none','message':None,'score':0,'reasons':reasons,'is_proxy':True}
+    if score>=4:
+        level='high'
+    elif score>=2:
+        level='elevated'
+    else:
+        level='none'
+    message=(f'LONG-proxy: sterk kjøpsinteresse indikert av {", ".join(reasons)}.' if level=='high' else
+             f'LONG-proxy: mulig kjøpspress ({", ".join(reasons)}).' if level=='elevated' else None)
+    return {'level':level,'message':message,'score':score,'reasons':reasons,'is_proxy':True}
+
+
 def install():
     try:
         import extra_api
         from providers import NordicRegulatoryProvider, YahooProvider
     except Exception:
         return
-    if getattr(extra_api,'_market_pressure_patch_v1',False):
+    if getattr(extra_api,'_market_pressure_patch_v2',False):
         return
 
     if not getattr(NordicRegulatoryProvider,'_short_alert_patch_v1',False):
@@ -93,14 +123,18 @@ def install():
                 pressure='buying_proxy'; pressure_text='Høyt omsatt volum samtidig med kursoppgang – mulig kjøpspress-proxy.'
             elif volume_ratio is not None and volume_ratio>=2 and change is not None and change<=-1:
                 pressure='selling_proxy'; pressure_text='Høyt omsatt volum samtidig med kursfall – mulig salgspress-proxy.'
+            long_signal=_long_proxy(volume_ratio,change,short)
             alerts=[]
             if short.get('short_alert'):
                 alerts.append({'type':'short','level':short.get('short_alert_level'),'message':short.get('short_alert')})
+            if long_signal.get('message'):
+                alerts.append({'type':'long','level':long_signal.get('level'),'message':long_signal.get('message')})
             if volume_ratio is not None and volume_ratio>=2:
                 alerts.append({'type':'volume','level':'elevated','message':f'Volum er ca. {volume_ratio:.1f}× 20-dagers snitt.'})
             return {
                 'ticker':ticker,
                 'short':short,
+                'long_proxy':long_signal,
                 'price_change_pct':change,
                 'current_volume':current_volume,
                 'average_volume_20d':avg_volume,
@@ -109,11 +143,11 @@ def install():
                 'pressure_text':pressure_text,
                 'alerts':alerts,
                 'order_book_available':False,
-                'order_book_note':'Dette er ikke Level 2 ordrebok. Reelle ventende kjøps-/salgsordre krever lisensiert Euronext Oslo Børs markedsdybde.',
+                'order_book_note':'Dette er ikke Level 2 ordrebok. LONG-/SHORT-proxyene bruker offentlig shortdata, kurs og volum. Reelle ventende kjøps-/salgsordre krever lisensiert Euronext Oslo Børs markedsdybde.',
             }
 
     extra_api.install=patched_install
-    extra_api._market_pressure_patch_v1=True
+    extra_api._market_pressure_patch_v2=True
 
 
 install()
