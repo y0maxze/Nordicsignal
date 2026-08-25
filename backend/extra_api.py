@@ -138,6 +138,13 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
+    @app.get('/api/search')
+    def case_insensitive_search(q:str=''):
+        q=q.strip()
+        if not q:return {'items':[]}
+        conn=connect(); pattern=f'%{q}%'
+        rows=conn.execute("SELECT ticker,name,sector,exchange FROM stocks WHERE active=1 AND (LOWER(ticker) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?)) ORDER BY name LIMIT 30",(pattern,pattern)).fetchall(); conn.close()
+        return {'items':[dict(r) for r in rows]}
     @app.get('/api/paper/account')
     def paper_account():
         conn=connect(); row=conn.execute('SELECT * FROM paper_accounts WHERE id=1').fetchone(); conn.close(); return dict(row) if row else {'id':1,'starting_cash':100000}
