@@ -1,50 +1,32 @@
-"""Runtime loaders for NordicSignal integrations."""
+"""Load optional NordicSignal runtime integrations without blocking API startup."""
 
-try:
-    from insider_runtime import install
-    install()
-except Exception:
-    # The API must still start if an optional market-data patch is unavailable.
-    pass
+import importlib
+import logging
 
-try:
-    from insider_enrichment_runtime import install
-    install()
-except Exception:
-    # Rich insider parsing is additive; keep core insider feed available if unavailable.
-    pass
+log = logging.getLogger("nordicsignal.runtime")
 
-try:
-    from backtest_runtime import install
-    install()
-except Exception:
-    # Keep API startup independent of the optional backtest patch.
-    pass
+RUNTIME_MODULES = (
+    "insider_runtime",
+    "insider_enrichment_runtime",
+    "backtest_runtime",
+    "stock_intelligence_runtime",
+    "short_alert_runtime",
+    "paper_history_runtime",
+    "news_runtime",
+)
 
-try:
-    from stock_intelligence_runtime import install
-    install()
-except Exception:
-    # Reports/dividends are additive; never block API startup if unavailable.
-    pass
 
-try:
-    from short_alert_runtime import install
-    install()
-except Exception:
-    # Short alerts and volume-pressure proxies are additive.
-    pass
+def _install(module_name):
+    try:
+        module = importlib.import_module(module_name)
+        install = getattr(module, "install", None)
+        if callable(install):
+            install()
+    except Exception:
+        # Optional integrations must not stop the core FastAPI service, but the
+        # failure must be visible in Render logs so production gaps are debuggable.
+        log.exception("Optional runtime module failed: %s", module_name)
 
-try:
-    from paper_history_runtime import install
-    install()
-except Exception:
-    # Paper journal endpoints are additive; keep core API available if unavailable.
-    pass
 
-try:
-    from news_runtime import install
-    install()
-except Exception:
-    # Multi-source news is additive; Yahoo/core endpoints must still start if unavailable.
-    pass
+for _module_name in RUNTIME_MODULES:
+    _install(_module_name)
