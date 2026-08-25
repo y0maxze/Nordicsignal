@@ -20,3 +20,10 @@ try:
 except Exception:
     # Reports/dividends are additive; never block API startup if unavailable.
     pass
+
+try:
+    from paper_history_runtime import install
+    install()
+except Exception:
+    # Paper journal endpoints are additive; keep core API available if unavailable.
+    pass
