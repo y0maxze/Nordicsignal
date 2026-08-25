@@ -34,3 +34,10 @@ try:
 except Exception:
     # Paper journal endpoints are additive; keep core API available if unavailable.
     pass
+
+try:
+    from news_runtime import install
+    install()
+except Exception:
+    # Multi-source news is additive; Yahoo/core endpoints must still start if unavailable.
+    pass
