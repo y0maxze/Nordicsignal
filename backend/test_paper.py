@@ -12,6 +12,10 @@ class FakeProvider:
         return ticker
 
     def _get(self, url, params):
+        # Return no chart data for periods after the final fake data point.
+        if int(params.get('period1', 0)) > 1677628800:
+            return {'chart': {'result': []}}
+
         # Match the Yahoo chart payload consumed by _backtest.
         return {
             'chart': {
