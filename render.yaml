@@ -8,10 +8,6 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     numInstances: 1
-    disk:
-      name: nordicsignal-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: NORDICSIGNAL_DB_PATH
-        value: /var/data/nordicsignal.db
+      - key: DATABASE_URL
+        sync: false
