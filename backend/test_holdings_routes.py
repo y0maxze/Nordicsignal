@@ -63,11 +63,15 @@ class HoldingsRouteTests(unittest.TestCase):
             {'id': 3, 'transaction_date': '2026-03-01', 'broker': 'Nordnet', 'account_type': 'Aksje- og fondskonto', 'transaction_type': 'sell', 'ticker': 'LSG', 'shares': 150, 'price': 70, 'amount': 10500},
         ]
         result = fifo_realized_analysis(tx, 2026)
-        self.assertEqual(result['year_realized_trades'][0]['cost_basis'], 7000)
+        trade = result['year_realized_trades'][0]
+        self.assertEqual(trade['cost_basis'], 7000)
+        self.assertEqual(len(trade['matched_fifo_lots']), 2)
         self.assertEqual(result['net_realized_gain_loss'], 3500)
         self.assertAlmostEqual(result['estimated_tax_payable'], 1324.4)
+        self.assertAlmostEqual(result['net_after_estimated_tax'], 2175.6)
         self.assertEqual(result['remaining_fifo_lots'][0]['shares'], 50)
         self.assertEqual(result['remaining_fifo_lots'][0]['average_fifo_cost'], 60)
+        self.assertTrue(result['is_complete'])
 
     def test_fifo_does_not_tax_internal_ask_sale(self):
         tx = [
@@ -77,6 +81,19 @@ class HoldingsRouteTests(unittest.TestCase):
         result = fifo_realized_analysis(tx, 2026)
         self.assertEqual(result['year_realized_trades'], [])
         self.assertEqual(result['estimated_tax_payable'], 0)
+
+    def test_incomplete_fifo_history_does_not_invent_cost_basis(self):
+        tx = [
+            {'id': 1, 'transaction_date': '2026-01-01', 'broker': 'Nordnet', 'account_type': 'Aksje- og fondskonto', 'transaction_type': 'buy', 'ticker': 'LSG', 'shares': 50, 'price': 40, 'amount': 2000},
+            {'id': 2, 'transaction_date': '2026-02-01', 'broker': 'Nordnet', 'account_type': 'Aksje- og fondskonto', 'transaction_type': 'sell', 'ticker': 'LSG', 'shares': 100, 'price': 70, 'amount': 7000},
+        ]
+        result = fifo_realized_analysis(tx, 2026)
+        self.assertEqual(result['year_realized_trades'], [])
+        self.assertEqual(result['net_realized_gain_loss'], 0)
+        self.assertEqual(result['estimated_tax_payable'], 0)
+        self.assertFalse(result['is_complete'])
+        self.assertEqual(result['warnings'][0]['unmatched_shares'], 50)
+        self.assertEqual(result['remaining_fifo_lots'][0]['shares'], 50)
 
 
 if __name__ == '__main__':
