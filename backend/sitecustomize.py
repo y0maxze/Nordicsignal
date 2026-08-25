@@ -15,6 +15,7 @@ RUNTIME_MODULES = (
     "news_routes",
     "holdings_routes",
     "holdings_tax_runtime",
+    "portfolio_instruments_runtime",
 )
 
 
