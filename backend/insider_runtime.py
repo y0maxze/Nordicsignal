@@ -129,6 +129,9 @@ def parse_trade(body,ticker,title,source,url):
         mm=re.search(p,body or '',re.I)
         if mm:
             candidate=mm.group('entity').strip(' ,.-–—')
+            # Greedy company-name matches can include the preceding issuer sentence.
+            # Keep only the final sentence fragment nearest the trade verb.
+            candidate=re.split(r'[.!?]\s+',candidate)[-1].strip(' ,.-–—')
             issuer_name=ISSUERS.get(ticker,(ticker,()))[0]
             if norm(candidate)!=norm(issuer_name): entity=candidate
             break
@@ -177,7 +180,7 @@ def canonical_url(url):
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v8',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v9',False): return
 
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
@@ -237,6 +240,6 @@ def install():
         return result
 
     NordicRegulatoryProvider.insider=insider
-    NordicRegulatoryProvider._robust_insider_patch_v8=True
+    NordicRegulatoryProvider._robust_insider_patch_v9=True
 
 install()
