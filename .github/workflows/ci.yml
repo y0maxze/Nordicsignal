@@ -45,6 +45,8 @@ jobs:
           count = 0
           for html in sorted(Path('frontend').glob('*.html')):
               text = html.read_text(encoding='utf-8')
+              if '<html' not in text.lower() or '</html>' not in text.lower():
+                  raise SystemExit(f'Malformed HTML shell: {html}')
               scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.I | re.S)
               for index, script in enumerate(scripts):
                   if not script.strip():
@@ -63,13 +65,34 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+          for file in frontend/*.js; do
+            [ -e "$file" ] || continue
+            echo "Checking $file"
+            node --check "$file"
+          done
       - name: Check Cloudflare Worker syntax
         run: |
           cp worker.js /tmp/nordicsignal-worker.mjs
           node --check /tmp/nordicsignal-worker.mjs
-      - name: Check production asset routes
+      - name: Check production assets and routes
         run: |
+          test -s frontend/theme.css
+          test -s frontend/index.html
+          test -s frontend/stock.html
+          test -s frontend/paper.html
+          test -s frontend/history.html
+          test -s frontend/news.html
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
+          grep -q '\["/history", "/history.html"\]' worker.js
+          grep -q '\["/news", "/news.html"\]' worker.js
+          grep -q 'theme.css' worker.js
           grep -q 'Stock Intelligence' worker.js
           grep -q 'Paper Trading' worker.js
+          grep -q 'Market Pressure' worker.js
+      - name: Check navigation invariants
+        run: |
+          grep -q 'href="/app"' worker.js
+          grep -q 'nsGlobalHome' worker.js
+          grep -q 'nsMetricCard' worker.js
+          grep -q 'STOCK_TAB_DEEPLINK_MARKER' worker.js
