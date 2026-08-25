@@ -36,7 +36,7 @@ class PaperBacktestTests(unittest.TestCase):
     def test_backtest_monthly_contributions(self):
         provider = FakeProvider()
         with patch('dividend_runtime.fetch_dividend_events', return_value=[]):
-            result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 500, False)
+            result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 500, False, benchmark=None)
         self.assertEqual(result['invested'], 2000)
         contributions = [x for x in result['transactions'] if x['side'] == 'contribution']
         self.assertEqual([x['date'] for x in contributions], ['2023-01-01', '2023-02-01', '2023-03-01'])
@@ -46,7 +46,7 @@ class PaperBacktestTests(unittest.TestCase):
     def test_transaction_fee_is_applied(self):
         provider = FakeProvider()
         with patch('dividend_runtime.fetch_dividend_events', return_value=[]):
-            result = _backtest(provider, 'LSG', '2023-01-01', '2023-01-31', 1000, 0, False, fee_pct=1.0)
+            result = _backtest(provider, 'LSG', '2023-01-01', '2023-01-31', 1000, 0, False, fee_pct=1.0, benchmark=None)
         self.assertGreater(result['fees_paid'], 0)
         self.assertLess(result['shares'], 10)
 
@@ -65,10 +65,39 @@ class PaperBacktestTests(unittest.TestCase):
         self.assertEqual(result['strategy'], 'sma_cross')
         self.assertEqual(result['invested'], 2000)
 
+    def test_dividend_reinvests_into_new_shares(self):
+        provider = FakeProvider()
+        dividend = [{'timestamp': 1675209600, 'date': '2023-02-01', 'amount': 2.0}]
+        with patch('dividend_runtime.fetch_dividend_events', return_value=dividend):
+            result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 0, True, benchmark=None)
+        self.assertEqual(result['dividend_events'], 1)
+        self.assertAlmostEqual(result['dividends'], 20.0, places=8)
+        self.assertTrue(any(x['side'] == 'dividend_reinvest' for x in result['transactions']))
+        self.assertGreater(result['shares'], 10)
+
+    def test_dividend_can_remain_as_cash(self):
+        provider = FakeProvider()
+        dividend = [{'timestamp': 1675209600, 'date': '2023-02-01', 'amount': 2.0}]
+        with patch('dividend_runtime.fetch_dividend_events', return_value=dividend):
+            result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 0, False, benchmark=None)
+        self.assertEqual(result['dividend_events'], 1)
+        self.assertAlmostEqual(result['dividends'], 20.0, places=8)
+        self.assertTrue(any(x['side'] == 'dividend_cash' for x in result['transactions']))
+        self.assertAlmostEqual(result['cash'], 20.0, places=8)
+
+    def test_small_dividend_does_not_disappear_when_fixed_fee_is_larger(self):
+        provider = FakeProvider()
+        dividend = [{'timestamp': 1675209600, 'date': '2023-02-01', 'amount': 0.01}]
+        with patch('dividend_runtime.fetch_dividend_events', return_value=dividend):
+            result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 0, True, fixed_fee=1.0, benchmark=None)
+        self.assertAlmostEqual(result['dividends'], 0.10, places=8)
+        self.assertTrue(any(x['side'] == 'dividend_cash' for x in result['transactions']))
+        self.assertAlmostEqual(result['cash'], 0.10, places=8)
+
     def test_no_data_period_is_rejected(self):
         provider = FakeProvider()
         with self.assertRaises(Exception):
-            _backtest(provider, 'LSG', '2023-04-01', '2023-05-01', 1000, 0, False)
+            _backtest(provider, 'LSG', '2023-04-01', '2023-05-01', 1000, 0, False, benchmark=None)
 
 
 if __name__ == '__main__':
