@@ -102,7 +102,15 @@ def install(app):
         conn=connect(); row=conn.execute('SELECT * FROM paper_accounts WHERE id=1').fetchone(); conn.close(); return dict(row) if row else {'id':1,'starting_cash':100000}
     @app.post('/api/paper/account')
     def set_paper_account(payload:AccountIn):
-        conn=connect(); conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,_now())); conn.commit(); conn.close(); return paper_account()
+        conn=connect()
+        try:
+            has_trades=conn.execute('SELECT 1 FROM paper_trades WHERE account_id=1 LIMIT 1').fetchone() is not None
+            if has_trades:
+                raise HTTPException(409,detail='Starting capital cannot be changed after a paper trade. Reset the paper account first.')
+            conn.execute('UPDATE paper_accounts SET starting_cash=?,updated_at=? WHERE id=1',(payload.starting_cash,_now())); conn.commit()
+        finally:
+            conn.close()
+        return paper_account()
     @app.get('/api/paper/portfolio')
     def paper_portfolio():return _positions(provider)
     @app.get('/api/paper/trades')
