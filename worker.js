@@ -51,6 +51,22 @@ async function searchUpstream(request, searchTerm) {
   return { items: Array.isArray(data.items) ? data.items : [] };
 }
 
+async function serveAsset(request, env, pathname) {
+  const response = await env.ASSETS.fetch(assetRequest(request, pathname));
+  if (request.method === "HEAD" || pathname !== "/index.html" || !response.ok) return response;
+  const type = response.headers.get("content-type") || "";
+  if (!type.includes("text/html")) return response;
+
+  let html = await response.text();
+  const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a>';
+  if (!html.includes('href="/paper"')) html = html.replace("</nav>", `${navExtras}</nav>`);
+
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status: response.status, headers });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -81,6 +97,6 @@ export default {
     }
 
     if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
-    return env.ASSETS.fetch(assetRequest(request, assetPath(url.pathname)));
+    return serveAsset(request, env, assetPath(url.pathname));
   },
 };
