@@ -18,6 +18,7 @@ RUNTIME_MODULES = (
     "portfolio_instruments_runtime",
     "instrument_search_runtime",
     "global_search_runtime",
+    "instrument_detail_runtime",
 )
 
 
