@@ -8,6 +8,7 @@ metadata continue to work unchanged.
 from datetime import datetime, timezone
 import time
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 import extra_api
@@ -179,7 +180,7 @@ def _fx_to_nok(provider, currency):
 
 def search_instruments(provider, query, limit=12):
     query = _clean(query)
-    if len(query) < 1:
+    if not query:
         return []
     limit = max(1, min(int(limit or 12), 25))
     response = provider.session.get(
@@ -197,19 +198,17 @@ def search_instruments(provider, query, limit=12):
     if response.status_code >= 400:
         raise RuntimeError(f'Instrument search HTTP {response.status_code}')
     data = response.json()
-    out = []
-    seen = set()
+    out, seen = [], set()
     for row in data.get('quotes') or []:
         quote_type = str(row.get('quoteType') or '').upper()
         symbol = str(row.get('symbol') or '').strip()
         if quote_type not in _ALLOWED_QUOTE_TYPES or not symbol or symbol in seen:
             continue
         seen.add(symbol)
-        name = row.get('longname') or row.get('shortname') or symbol
         out.append({
             'symbol': symbol,
             'ticker': symbol,
-            'name': name,
+            'name': row.get('longname') or row.get('shortname') or symbol,
             'quote_type': quote_type,
             'asset_class': asset_class_for(quote_type),
             'exchange': row.get('exchDisp') or row.get('exchange'),
@@ -278,7 +277,7 @@ def build_holdings_snapshot_with_instruments(provider=None):
                 native_price = float(q['price'])
                 nok_price = native_price * fx
                 shares = float(item.get('shares') or 0)
-                invested_nok = float(item.get('shares') or 0) * float(item.get('average_cost') or 0)
+                invested_nok = shares * float(item.get('average_cost') or 0)
                 market_nok = shares * nok_price
                 pnl = market_nok - invested_nok
                 item.update({
@@ -294,6 +293,7 @@ def build_holdings_snapshot_with_instruments(provider=None):
                     'quote_error': None,
                 })
             except Exception as exc:
+                item['quote_error'] = str(exc)
                 quote_failures.append({'ticker': item.get('ticker'), 'symbol': meta.get('market_symbol'), 'error': str(exc)})
         else:
             item.update({
@@ -305,7 +305,6 @@ def build_holdings_snapshot_with_instruments(provider=None):
                 'instrument_currency': 'NOK',
             })
 
-    # Recalculate portfolio-level figures after exact-symbol and FX enrichment.
     items = snapshot.get('items') or []
     invested = sum(float(x.get('invested') or 0) for x in items)
     priced = [x for x in items if x.get('market_value') is not None]
@@ -325,6 +324,16 @@ def build_holdings_snapshot_with_instruments(provider=None):
         'unrealized_pnl': pnl,
         'unrealized_pnl_pct': pnl / priced_invested * 100 if priced_invested else None,
     })
+
+    sector_map = {}
+    for item in priced:
+        sector = item.get('sector') or 'Ukjent'
+        bucket = sector_map.setdefault(sector, {'sector': sector, 'market_value': 0.0, 'positions': 0})
+        bucket['market_value'] += float(item['market_value'])
+        bucket['positions'] += 1
+    snapshot['sectors'] = sorted(sector_map.values(), key=lambda x: x['market_value'], reverse=True)
+    for sector in snapshot['sectors']:
+        sector['weight_pct'] = sector['market_value'] / market_value * 100 if market_value else 0.0
 
     cash = []
     for row in _cash_rows():
@@ -365,7 +374,11 @@ def install():
 
         @app.get('/api/instruments/search')
         def instrument_search(q: str = '', limit: int = 12):
-            return {'query': q, 'items': search_instruments(provider, q, limit), 'source': 'Yahoo Finance Search'}
+            try:
+                items = search_instruments(provider, q, limit)
+                return {'query': q, 'items': items, 'source': 'Yahoo Finance Search'}
+            except Exception as exc:
+                raise HTTPException(502, detail=f'Instrument search unavailable: {exc}')
 
         @app.post('/api/holdings/instrument-meta')
         def save_instrument_meta(payload: InstrumentMetaIn):
@@ -400,6 +413,19 @@ def install():
                 conn.close()
             return {'status': 'ok', 'portfolio': holdings_routes.build_holdings_snapshot(provider)}
 
+        @app.delete('/api/holdings/instrument-meta')
+        def delete_instrument_meta(ticker: str, broker: str = 'Nordnet', account_type: str = 'ASK'):
+            conn = connect()
+            try:
+                conn.execute(
+                    'DELETE FROM holding_instrument_meta WHERE ticker=? AND broker=? AND account_type=?',
+                    (ticker.strip().upper(), _clean(broker, 'Nordnet'), _clean(account_type, 'ASK')),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            return {'status': 'ok'}
+
         @app.post('/api/holdings/cash')
         def save_cash(payload: CashIn):
             broker = _clean(payload.broker, 'Nordnet')
@@ -432,7 +458,6 @@ def install():
             try:
                 row = conn.execute('SELECT id FROM holding_cash WHERE id=? LIMIT 1', (cash_id,)).fetchone()
                 if not row:
-                    from fastapi import HTTPException
                     raise HTTPException(404, detail='Cash balance not found')
                 conn.execute('DELETE FROM holding_cash WHERE id=?', (cash_id,))
                 conn.commit()
