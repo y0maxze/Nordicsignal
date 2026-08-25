@@ -24,9 +24,11 @@ h1{font-weight:760!important}h2{font-weight:720!important}h3{font-weight:680!imp
 .logo{display:inline-flex;align-items:center;gap:0;font-weight:820!important;letter-spacing:-.04em;color:#fff!important;user-select:none}
 .logo span{color:#18c984!important}
 .side .logo{margin:2px 10px 30px!important;font-size:22px!important}
-nav a{color:#a8a8a8!important;border:1px solid transparent!important;border-radius:8px!important;padding:10px 12px!important;transition:background .14s ease,color .14s ease,border-color .14s ease!important}
-nav a:hover{background:#111!important;color:#fff!important;border-color:#242424!important}
-nav a.active{background:#f3f3f3!important;color:#080808!important;border-color:#f3f3f3!important;font-weight:700!important}
+nav a{display:block;color:#a8a8a8!important;border:1px solid transparent!important;border-radius:8px!important;padding:10px 12px!important;transition:background .14s ease,color .14s ease,border-color .14s ease!important;text-decoration:none!important}
+nav a:visited{text-decoration:none!important}
+nav a:hover{background:#111!important;color:#fff!important;border-color:#242424!important;text-decoration:none!important}
+nav a.active{background:#f3f3f3!important;color:#080808!important;border-color:#f3f3f3!important;font-weight:700!important;text-decoration:none!important}
+.sidebar .nav a,.sidebar nav a{text-decoration:none!important}
 .card,.section,.metric,.notice,#nsStockActions,.pressureAlert{background:#0e0e0e!important;border-color:#292929!important;box-shadow:none!important}
 .card,.section{border-radius:12px!important}
 .metric{border:1px solid #242424!important;border-radius:10px!important}
