@@ -73,9 +73,13 @@ def connect():
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA_POSTGRES if USING_POSTGRES else SCHEMA_SQLITE)
-    try:
-        conn.execute("ALTER TABLE scores ADD COLUMN source TEXT DEFAULT 'stored'")
-    except Exception:
-        pass
+    # PostgreSQL aborts the entire transaction when a DDL statement fails.
+    # The old ALTER TABLE was redundant because `source` is already part of
+    # the schema above, so a duplicate-column error could roll back all tables.
+    if not USING_POSTGRES:
+        try:
+            conn.execute("ALTER TABLE scores ADD COLUMN source TEXT DEFAULT 'stored'")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
