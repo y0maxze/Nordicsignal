@@ -1,6 +1,20 @@
 from datetime import datetime, timezone
 
 
+def classify_news_title(title):
+    """Compatibility helper retained for callers/tests; routes live in news_routes."""
+    low = (title or '').lower()
+    if any(k in low for k in ('insider', 'primary insider', 'mandatory notification', 'meldepliktig')):
+        return 'Insider'
+    if any(k in low for k in ('report', 'results', 'quarter', 'q1', 'q2', 'q3', 'q4', 'earnings', 'årsrapport', 'annual report', 'interim report')):
+        return 'Rapport'
+    if any(k in low for k in ('dividend', 'ex-dividend', 'utbytte', 'distribution')):
+        return 'Utbytte'
+    if any(k in low for k in ('acqui', 'merger', 'contract', 'order', 'agreement', 'avtale', 'kontrakt')):
+        return 'Selskap'
+    return 'Nyhet'
+
+
 def install():
     try:
         import extra_api
@@ -47,11 +61,7 @@ def install():
 
         @app.get('/api/intelligence/{ticker}')
         def intelligence(ticker: str):
-            """Small aggregate endpoint for non-news stock intelligence.
-
-            News and reports are intentionally omitted here because their canonical
-            endpoints now live in news_routes.py.
-            """
+            """Aggregate endpoint for non-news stock intelligence."""
             ticker = ticker.upper()
             return {'ticker': ticker, 'dividends': dividends(ticker, 10)}
 
