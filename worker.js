@@ -41,6 +41,15 @@ function assetPath(pathname) {
   return pathname;
 }
 
+async function searchUpstream(request, searchTerm) {
+  const upstream = new URL(`${API_ORIGIN}/api/search`);
+  upstream.searchParams.set("q", searchTerm);
+  const response = await fetch(upstream.toString(), request);
+  if (!response.ok) return { items: [] };
+  const data = await response.json();
+  return { items: Array.isArray(data.items) ? data.items : [] };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -52,6 +61,28 @@ export default {
         message: "Cloudflare ASSETS binding is not available in this deployment.",
         path: url.pathname,
       }, 500);
+    }
+
+    if (url.pathname === "/api/search") {
+      const q = (url.searchParams.get("q") || "").trim();
+      if (!q) return json({ items: [] });
+
+      try {
+        // The API currently uses PostgreSQL LIKE, which is case-sensitive.
+        // Query the common ticker/name casing variants at the edge so that
+        // searches such as "lsg", "LSG", "lerøy", and "Lerøy" all work.
+        const variants = [...new Set([q, q.toUpperCase(), q.charAt(0).toUpperCase() + q.slice(1).toLowerCase()])];
+        const responses = await Promise.all(variants.map(term => searchUpstream(request, term)));
+        const merged = new Map();
+        for (const response of responses) {
+          for (const item of response.items) {
+            if (item?.ticker) merged.set(item.ticker, item);
+          }
+        }
+        return json({ items: [...merged.values()].slice(0, 30) });
+      } catch (error) {
+        return json({ status: "error", code: "API_UPSTREAM_UNAVAILABLE", message: String(error) }, 502);
+      }
     }
 
     if (url.pathname.startsWith("/api/")) {
