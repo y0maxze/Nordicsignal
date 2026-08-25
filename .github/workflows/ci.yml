@@ -63,3 +63,13 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+      - name: Check Cloudflare Worker syntax
+        run: |
+          cp worker.js /tmp/nordicsignal-worker.mjs
+          node --check /tmp/nordicsignal-worker.mjs
+      - name: Check production asset routes
+        run: |
+          grep -q '\["/stock", "/stock.html"\]' worker.js
+          grep -q '\["/paper", "/paper.html"\]' worker.js
+          grep -q 'Stock Intelligence' worker.js
+          grep -q 'Paper Trading' worker.js
