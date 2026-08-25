@@ -1,11 +1,22 @@
+import json
+import subprocess
+import sys
 import unittest
-
-import main
 
 
 class RuntimeRouteRegistrationTests(unittest.TestCase):
-    def test_required_runtime_routes_are_registered(self):
-        paths = {route.path for route in main.app.routes}
+    def test_required_runtime_routes_are_registered_in_fresh_process(self):
+        code = (
+            "import json, main; "
+            "print(json.dumps(sorted({route.path for route in main.app.routes})))"
+        )
+        proc = subprocess.run(
+            [sys.executable, '-c', code],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        paths = set(json.loads(proc.stdout.strip().splitlines()[-1]))
         required = {
             '/api/reports/{ticker}',
             '/api/dividends/{ticker}',
