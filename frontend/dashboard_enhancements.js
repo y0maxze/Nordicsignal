@@ -40,8 +40,13 @@
       showStock(ticker);
       return;
     }
-    const symbol=item.symbol||item.market_symbol||ticker;
-    location.href='/frontend/holdings.html?search='+encodeURIComponent(symbol);
+    const symbol=item.market_symbol||item.symbol||item.ticker||ticker;
+    const p=new URLSearchParams({symbol:String(symbol)});
+    if(item.name)p.set('name',item.name);
+    if(item.quote_type)p.set('type',item.quote_type);
+    if(item.exchange||item.market)p.set('exchange',item.exchange||item.market);
+    if(item.currency)p.set('currency',item.currency);
+    location.href='/frontend/instrument.html?'+p.toString();
   }
 
   function installGlobalSearch(){
@@ -70,7 +75,7 @@
           const rows=Array.isArray(d.items)?d.items:[];
           if(!rows.length){list.innerHTML='<div class="nsSearchHint">Ingen treff. Prøv hele navnet, ticker eller et annet fondnavn.</div>';return;}
           list.innerHTML=rows.map((x,i)=>{
-            const type=typeLabel(x),symbol=x.symbol||x.market_symbol||x.ticker||'',exchange=x.exchange||x.market||'Marked ukjent';
+            const type=typeLabel(x),symbol=x.market_symbol||x.symbol||x.ticker||'',exchange=x.exchange||x.market||'Marked ukjent';
             return `<div class="result" data-ns-search-index="${i}"><strong>${esc(x.name||symbol)}</strong><span class="nsTypeBadge">${esc(type)}</span><div class="nsSearchMeta"><span>${esc(symbol)}</span><span>·</span><span>${esc(exchange)}</span>${x.currency?`<span>·</span><span>${esc(x.currency)}</span>`:''}${x.tracked?'<span>· NordicSignal</span>':''}</div></div>`;
           }).join('');
           [...list.querySelectorAll('[data-ns-search-index]')].forEach(el=>el.onclick=()=>openSearchItem(rows[Number(el.dataset.nsSearchIndex)]));
