@@ -82,10 +82,12 @@ jobs:
           test -s frontend/paper.html
           test -s frontend/history.html
           test -s frontend/news.html
+          test -s frontend/holdings.html
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
+          grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'theme.css' worker.js
           grep -q 'Stock Intelligence' worker.js
           grep -q 'Paper Trading' worker.js
