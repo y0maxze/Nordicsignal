@@ -1,7 +1,8 @@
-"""FIFO realized gain/loss analytics for taxable share accounts.
+"""FIFO realized gain/loss analytics for ordinary taxable share accounts.
 
 ASK remains account-level and is intentionally excluded. This module enriches the
 holdings snapshot without changing the transaction ledger or current positions.
+The figures are decision-support estimates, not a tax return calculation.
 """
 from collections import defaultdict, deque
 from datetime import date
@@ -23,11 +24,19 @@ def _is_taxable_share_account(account_type):
     return _norm(account_type) in TAXABLE_ACCOUNT_NAMES
 
 
+def _year(value):
+    try:
+        return int(str(value or '')[:4])
+    except (TypeError, ValueError):
+        return 0
+
+
 def fifo_realized_analysis(transactions, year=None):
-    """Calculate FIFO realized P/L from ledger buys/sells for taxable accounts.
+    """Calculate FIFO realized P/L from complete ledger buys/sells.
 
     Lots are isolated by broker + account type + ticker. ASK and unsupported account
-    types are excluded. Oversells are flagged rather than assigned invented cost basis.
+    types are excluded. An incomplete sale is flagged and excluded from tax totals;
+    NordicSignal never invents missing acquisition cost.
     """
     year = int(year or date.today().year)
     lots = defaultdict(deque)
@@ -57,36 +66,55 @@ def fifo_realized_analysis(transactions, year=None):
             continue
         key = (_norm(tx.get('broker')), _norm(account), ticker)
         if kind == 'buy':
-            lots[key].append({'shares': shares, 'unit_cost': unit_price, 'transaction_id': tx.get('id')})
+            lots[key].append({
+                'shares': shares,
+                'unit_cost': unit_price,
+                'transaction_id': tx.get('id'),
+                'date': tx.get('transaction_date'),
+            })
+            continue
+
+        available = sum(float(lot['shares']) for lot in lots[key])
+        if available + 1e-9 < shares:
+            warnings.append({
+                'transaction_id': tx.get('id'), 'ticker': ticker,
+                'broker': tx.get('broker'), 'account_type': account,
+                'reason': 'sell_exceeds_recorded_fifo_lots',
+                'shares_sold': shares, 'recorded_shares_available': available,
+                'unmatched_shares': max(0.0, shares - available),
+            })
+            # Do not consume partial lots: this sale cannot be calculated reliably.
             continue
 
         remaining = shares
         cost_basis = 0.0
-        matched = 0.0
-        while remaining > 1e-12 and lots[key]:
+        matched_lots = []
+        while remaining > 1e-12:
             lot = lots[key][0]
             take = min(remaining, lot['shares'])
             cost_basis += take * lot['unit_cost']
-            matched += take
+            matched_lots.append({
+                'buy_transaction_id': lot['transaction_id'],
+                'buy_date': lot.get('date'),
+                'shares': take,
+                'unit_cost': lot['unit_cost'],
+                'cost_basis': take * lot['unit_cost'],
+            })
             lot['shares'] -= take
             remaining -= take
             if lot['shares'] <= 1e-12:
                 lots[key].popleft()
-        if remaining > 1e-9:
-            warnings.append({
-                'transaction_id': tx.get('id'), 'ticker': ticker,
-                'reason': 'sell_exceeds_recorded_fifo_lots', 'unmatched_shares': remaining,
-            })
-        if matched <= 0:
-            continue
-        proceeds = matched * unit_price
+
+        proceeds = shares * unit_price
         gain_loss = proceeds - cost_basis
-        tx_year = int(str(tx.get('transaction_date') or '0000')[:4] or 0)
         realized.append({
             'transaction_id': tx.get('id'), 'date': tx.get('transaction_date'),
-            'year': tx_year, 'broker': tx.get('broker'), 'account_type': account,
-            'ticker': ticker, 'shares_sold': matched, 'sale_price': unit_price,
-            'proceeds': proceeds, 'cost_basis': cost_basis, 'realized_gain_loss': gain_loss,
+            'year': _year(tx.get('transaction_date')), 'broker': tx.get('broker'),
+            'account_type': account, 'ticker': ticker, 'shares_sold': shares,
+            'sale_price': unit_price, 'proceeds': proceeds, 'cost_basis': cost_basis,
+            'realized_gain_loss': gain_loss,
+            'realized_gain_loss_pct': (gain_loss / cost_basis * 100) if cost_basis else None,
+            'matched_fifo_lots': matched_lots,
         })
 
     year_rows = [x for x in realized if x['year'] == year]
@@ -116,12 +144,15 @@ def fifo_realized_analysis(transactions, year=None):
         'estimated_tax_effect': estimated_tax_effect,
         'estimated_tax_payable': max(0.0, estimated_tax_effect),
         'estimated_loss_tax_value': max(0.0, -estimated_tax_effect),
+        'net_after_estimated_tax': net - max(0.0, estimated_tax_effect),
         'remaining_fifo_lots': remaining_lots,
         'warnings': warnings,
+        'is_complete': len(warnings) == 0,
         'note': (
             'Estimat for vanlige skattepliktige aksjekontoer basert på registrerte kjøp/salg og FIFO. '
-            'ASK er ekskludert. Skjerming, kurtasje som ikke ligger i registrert beløp/kostpris, valuta, '
-            'corporate actions og andre individuelle skatteforhold kan endre faktisk skatt.'
+            'ASK er ekskludert. Skjerming, kurtasje som ikke er registrert, valuta, corporate actions, '
+            'overføringer og andre individuelle skatteforhold kan endre faktisk skatt. Ufullstendige salg '
+            'utelates fra skatteestimatet i stedet for at NordicSignal gjetter inngangsverdi.'
         ),
     }
 
@@ -131,7 +162,10 @@ _original_snapshot = holdings_routes.build_holdings_snapshot
 
 def build_holdings_snapshot_with_tax(provider=None):
     snapshot = _original_snapshot(provider)
-    snapshot['realized_tax'] = fifo_realized_analysis(snapshot.get('transactions') or [])
+    # The public snapshot intentionally contains only the latest 250 transactions for UI.
+    # Tax analysis must use a larger ledger window so old acquisition lots are not silently lost.
+    transactions = holdings_routes._transaction_rows(1000)
+    snapshot['realized_tax'] = fifo_realized_analysis(transactions)
     return snapshot
 
 
