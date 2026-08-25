@@ -90,7 +90,7 @@ jobs:
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
-          grep -q '/api/instrument/' frontend/instrument.html
+          grep -q "'/instrument/'" frontend/instrument.html
           grep -q 'theme.css' worker.js
           grep -q 'Stock Intelligence' worker.js
           grep -q 'Paper Trading' worker.js
