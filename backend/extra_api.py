@@ -70,9 +70,10 @@ def _positions(provider):
     starting=float(account['starting_cash']) if account else 100000.; cash=starting; positions={}; layers={}; realized={}
     for t in trades:
         ticker=t['ticker']; shares=float(t['shares']); price=float(t['price']); gross=shares*price; fee=float(t['fee'] or 0)
-        if t['side']=='buy': cash-=gross+fee; positions[ticker]=positions.get(ticker,0)+shares; layers.setdefault(ticker,[]).append([shares,gross+fee]); continue
+        if t['side']=='buy':
+            cash-=gross+fee; positions[ticker]=positions.get(ticker,0)+shares; layers.setdefault(ticker,[]).append([shares,gross+fee]); continue
         held=positions.get(ticker,0)
-        if shares>held+1e-10: shares=held
+        if shares>held+1e-10: continue
         cash+=gross-fee; positions[ticker]=positions.get(ticker,0)-shares; remaining=shares; removed=0.; queue=layers.setdefault(ticker,[])
         while remaining>1e-10 and queue:
             ls,lc=queue[0]; take=min(remaining,ls); unit=lc/ls if ls else 0.; removed+=take*unit; ls-=take; lc-=take*unit; remaining-=take
@@ -96,6 +97,19 @@ def _dividends(provider,ticker,start_ts,end_ts):
         if amount is not None: out.append({'timestamp':int(ts),'amount':float(amount)})
     return sorted(out,key=lambda x:x['timestamp'])
 
+def _historical_between(provider,ticker,start_ts,end_ts):
+    symbol=provider.symbol(ticker)
+    data=provider._get(f'{provider.BASE}/v8/finance/chart/{symbol}',{'period1':int(start_ts),'period2':int(end_ts),'interval':'1d','events':'div,splits'})
+    result=((data.get('chart') or {}).get('result') or [])
+    if not result: raise HTTPException(404,detail=f'No historical data for {ticker}')
+    result=result[0]; timestamps=result.get('timestamp') or []; quote=(result.get('indicators',{}).get('quote') or [{}])[0]
+    closes=quote.get('close') or []; opens=quote.get('open') or []; highs=quote.get('high') or []; lows=quote.get('low') or []; volumes=quote.get('volume') or []
+    rows=[]
+    for i,ts in enumerate(timestamps):
+        if i>=len(closes) or closes[i] is None: continue
+        rows.append({'timestamp':int(ts),'date':datetime.fromtimestamp(ts,timezone.utc).isoformat(),'open':opens[i] if i<len(opens) else None,'high':highs[i] if i<len(highs) else None,'low':lows[i] if i<len(lows) else None,'close':closes[i],'volume':volumes[i] if i<len(volumes) else None})
+    return rows
+
 def _xirr(cashflows):
     if len(cashflows)<2:return None
     first=cashflows[0][0]; flows=[((dt-first).total_seconds()/31557600.,float(amount)) for dt,amount in cashflows]
@@ -116,10 +130,22 @@ def _xirr(cashflows):
         else:lo,nlo=mid,nm
     return (lo+hi)/2
 
+def _parse_date(value, field):
+    try:
+        dt=datetime.fromisoformat(value.replace('Z','+00:00'))
+    except ValueError:
+        raise HTTPException(400,detail=f'Invalid {field} date; use YYYY-MM-DD')
+    if dt.tzinfo is None: dt=dt.replace(tzinfo=timezone.utc)
+    return dt
+
 def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest_dividends):
-    history=provider.historical(ticker,'max'); start_ts=int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp()) if 'T' not in start else int(datetime.fromisoformat(start.replace('Z','+00:00')).timestamp()); end_ts=int(datetime.fromisoformat(end).replace(tzinfo=timezone.utc).timestamp())+86399 if 'T' not in end else int(datetime.fromisoformat(end.replace('Z','+00:00')).timestamp()); rows=[x for x in history if start_ts<=int(x['timestamp'])<=end_ts]
+    start_dt=_parse_date(start,'start'); end_dt=_parse_date(end,'end')
+    if end_dt<=start_dt: raise HTTPException(400,detail='End date must be after start date')
+    start_ts=int(start_dt.timestamp()); end_ts=int(end_dt.timestamp())+86399
+    rows=_historical_between(provider,ticker,start_ts,end_ts)
     if not rows:raise HTTPException(404,detail='No historical data for selected period')
-    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}; cash=0.; shares=0.; invested=0.; last_month=None; points=[]; tx=[]; flows=[]
+    divs=_dividends(provider,ticker,start_ts-86400,end_ts+86400); div_by_day={datetime.fromtimestamp(d['timestamp'],timezone.utc).date().isoformat():d['amount'] for d in divs}
+    cash=0.; shares=0.; invested=0.; last_month=None; points=[]; tx=[]; flows=[]
     for row in rows:
         d=datetime.fromtimestamp(int(row['timestamp']),timezone.utc).date(); price=float(row['close'])
         if last_month!=(d.year,d.month):
@@ -134,7 +160,8 @@ def _backtest(provider,ticker,start,end,initial_cash,monthly_investment,reinvest
             else: cash+=dividend; tx.append({'date':d.isoformat(),'side':'dividend_cash','shares':shares,'price':price,'amount':dividend})
         equity=cash+shares*price; points.append({'date':d.isoformat(),'price':price,'shares':shares,'cash':cash,'value':shares*price,'equity':equity,'invested':invested})
     end_equity=points[-1]['equity']; total=end_equity-invested; end_date=datetime.fromtimestamp(int(rows[-1]['timestamp']),timezone.utc); flows.append((end_date,end_equity))
-    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':sum(x['amount'] for x in tx if x['side'].startswith('dividend')),'points':points,'transactions':tx[-30:]}
+    dividend_total=sum(x['amount'] for x in tx if x['side'].startswith('dividend'))
+    return {'ticker':ticker,'start':rows[0]['date'],'end':rows[-1]['date'],'initial_cash':initial_cash,'monthly_investment':monthly_investment,'reinvest_dividends':reinvest_dividends,'invested':invested,'final_equity':end_equity,'return':total,'return_pct':total/invested*100 if invested else 0,'xirr':_xirr(flows),'shares':shares,'cash':cash,'dividends':dividend_total,'points':points,'transactions':tx[-100:]}
 
 def install(app):
     _ensure_schema(); provider=YahooProvider()
@@ -161,7 +188,7 @@ def install(app):
     def paper_portfolio():return _positions(provider)
     @app.get('/api/paper/trades')
     def paper_trades(limit:int=100):
-        conn=connect(); rows=conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id DESC LIMIT ?',(min(limit,500),)).fetchall(); conn.close(); return {'items':[dict(r) for r in rows]}
+        conn=connect(); rows=conn.execute('SELECT * FROM paper_trades WHERE account_id=1 ORDER BY id DESC LIMIT ?',(min(max(limit,1),500),)).fetchall(); conn.close(); return {'items':[dict(r) for r in rows]}
     @app.post('/api/paper/trades')
     def paper_trade(payload:TradeIn):
         side=payload.side.lower(); ticker=payload.ticker.upper()
