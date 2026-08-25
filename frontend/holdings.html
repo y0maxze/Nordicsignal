@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NordicSignal · Beholdning</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+:root{--bg:#070707;--panel:#0e0e0e;--panel2:#141414;--line:#292929;--text:#f5f5f5;--muted:#999;--green:#35d99b;--red:#ff7586}
+*{box-sizing:border-box}body{margin:0;background:#070707;color:var(--text);font:14px Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.shell{display:grid;grid-template-columns:252px minmax(0,1fr);min-height:100vh}.sidebar{position:sticky;top:0;height:100vh;border-right:1px solid #242424;background:#090909;padding:24px 18px}.brand{font-size:22px;font-weight:820;letter-spacing:-.04em;text-decoration:none;display:block;margin:2px 10px 30px}.brand span{color:#18c984}.nav a{display:block;text-decoration:none;color:#aaa;padding:10px 12px;border:1px solid transparent;border-radius:8px;margin:4px 0}.nav a:hover{background:#111;border-color:#242424}.nav a.active{background:#f3f3f3!important;color:#080808!important;font-weight:700}.content{padding:32px;max-width:1550px;width:100%;margin:0 auto}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:24px}.eyebrow{color:#999;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.top h1{margin:6px 0 6px;font-size:32px}.sub{color:#999}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.card{background:#0e0e0e;border:1px solid #292929;border-radius:12px;padding:18px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metric{background:#0e0e0e;border:1px solid #292929;border-radius:10px;padding:16px}.metric span{display:block;color:#999;font-size:12px}.metric b{display:block;font-size:24px;margin-top:7px;font-variant-numeric:tabular-nums}.positive{color:var(--green)}.negative{color:var(--red)}.formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field label{display:block;color:#aaa;font-size:12px;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;background:#0b0b0b;border:1px solid #303030;color:#fff;border-radius:8px;padding:11px 12px;font:inherit}.field textarea{min-height:82px;resize:vertical}.field.full{grid-column:1/-1}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn{border:1px solid #303030;background:#151515;color:#f4f4f4;border-radius:8px;padding:10px 13px;cursor:pointer;font-weight:650}.btn:hover{background:#202020;border-color:#505050}.btn.primary{background:#f3f3f3;color:#090909;border-color:#f3f3f3}.btn.danger{background:#170d0f;color:#ff9cab;border-color:#5b2730}.notice{border:1px solid #292929;background:#0d0d0d;border-radius:10px;padding:12px;color:#aaa}.tablewrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:950px}.table th,.table td{text-align:left;padding:12px 10px;border-bottom:1px solid #252525;vertical-align:middle}.table th{font-size:11px;color:#999}.ticker{font-weight:800}.small{font-size:11px;color:#999}.empty{padding:26px;text-align:center;color:#999;border:1px dashed #333;border-radius:10px}.pill{display:inline-block;padding:4px 7px;border-radius:999px;border:1px solid #333;background:#151515;font-size:10px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.toolbar h2{margin:0}.right{text-align:right}.mono{font-variant-numeric:tabular-nums}.status{margin-top:10px;min-height:22px;color:#aaa}.status.error{color:#ff9cab}.status.ok{color:#55dca8}@media(max-width:1050px){.shell{grid-template-columns:1fr}.sidebar{display:none}.content{padding:20px}.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.metrics,.formgrid{grid-template-columns:1fr}.top{align-items:stretch;flex-direction:column}.content{padding:15px}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="/app">Nordic<span>Signal</span></a>
+<nav class="nav">
+<a href="/app">Dashboard</a>
+<a href="/stock">Stock Intelligence</a>
+<a class="active" href="/holdings">Beholdning</a>
+<a href="/paper">Paper Trading</a>
+<a href="/news">News</a>
+</nav>
+</aside>
+<main class="content">
+<div class="top"><div><div class="eyebrow">Min portefølje</div><h1>Beholdning</h1><div class="sub">Speil aksjene du faktisk eier hos Nordnet eller andre meglere. Dette er separat fra Paper Trading.</div></div><button class="btn" onclick="loadHoldings()">Oppdater kurser</button></div>
+<section class="metrics">
+<div class="metric"><span>Posisjoner</span><b id="mCount">—</b></div>
+<div class="metric"><span>Investert</span><b id="mInvested">—</b></div>
+<div class="metric"><span>Markedsverdi</span><b id="mValue">—</b></div>
+<div class="metric"><span>Urealisert resultat</span><b id="mPnl">—</b></div>
+</section>
+<div class="grid">
+<section class="card">
+<div class="toolbar"><div><h2>Min beholdningsliste</h2><div class="sub">Live kurs brukes der NordicSignal finner en tilgjengelig markedspris.</div></div><span class="pill" id="priced">—</span></div>
+<div id="tableHost"><div class="notice">Laster beholdning…</div></div>
+</section>
+<section class="card">
+<h2 style="margin-top:0">Legg til / oppdater beholdning</h2>
+<div class="notice" style="margin-bottom:14px">Samme ticker + megler + kontotype oppdaterer eksisterende rad. Gjennomsnittlig kjøpspris brukes som kostpris.</div>
+<form id="holdingForm">
+<div class="formgrid">
+<div class="field"><label>Ticker</label><input id="ticker" maxlength="20" placeholder="LSG" required></div>
+<div class="field"><label>Antall aksjer</label><input id="shares" type="number" min="0.000001" step="any" placeholder="1000" required></div>
+<div class="field"><label>Gjennomsnittlig kjøpspris (NOK)</label><input id="avg" type="number" min="0.000001" step="any" placeholder="42,50" required></div>
+<div class="field"><label>Megler</label><input id="broker" value="Nordnet" maxlength="60" required></div>
+<div class="field full"><label>Kontotype</label><select id="accountType"><option>ASK</option><option>Aksje- og fondskonto</option><option>Investeringskonto</option><option>IPS</option><option>Annet</option></select></div>
+<div class="field full"><label>Notat (valgfritt)</label><textarea id="note" maxlength="240" placeholder="F.eks. langsiktig utbytteposisjon"></textarea></div>
+</div>
+<div class="actions"><button class="btn primary" type="submit">Lagre beholdning</button><button class="btn" type="reset">Tøm skjema</button></div>
+<div id="formStatus" class="status"></div>
+</form>
+</section>
+</div>
+<section class="card" style="margin-top:16px"><div class="toolbar"><div><h2>Skatt og netto etter skatt</h2><div class="sub">Neste byggesteg</div></div><span class="pill">Ikke aktiv ennå</span></div><div id="taxNote" class="notice">Vi kobler skatteberegningen på denne beholdningen etter at selve listen er stabil. Kontotype beholdes allerede nå fordi ASK, aksje- og fondskonto og investeringskonto må behandles forskjellig.</div></section>
+</main>
+</div>
+<script>
+const API='/api';
+const esc=v=>String(v??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m]));
+const kr=v=>v==null?'—':Number(v).toLocaleString('no-NO',{style:'currency',currency:'NOK',maximumFractionDigits:2});
+const num=v=>v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:4});
+const pct=v=>v==null?'—':(Number(v)>=0?'+':'')+Number(v).toLocaleString('no-NO',{maximumFractionDigits:2})+'%';
+async function request(path,options){const r=await fetch(API+path,{cache:'no-store',headers:{'content-type':'application/json'},...(options||{})});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.detail||data.message||('HTTP '+r.status));return data}
+function resultClass(v){return Number(v)>0?'positive':Number(v)<0?'negative':''}
+function render(data){const s=data.summary||{},items=data.items||[];mCount.textContent=s.position_count??items.length;mInvested.textContent=kr(s.invested);mValue.textContent=kr(s.market_value);mPnl.textContent=(s.unrealized_pnl==null?'—':kr(s.unrealized_pnl)+' · '+pct(s.unrealized_pnl_pct));mPnl.className=resultClass(s.unrealized_pnl);priced.textContent=(s.priced_count||0)+' / '+items.length+' live pris';taxNote.textContent=data.tax_note||taxNote.textContent;if(!items.length){tableHost.innerHTML='<div class="empty"><b>Ingen beholdninger lagt inn ennå.</b><div class="small" style="margin-top:6px">Legg inn første aksje i skjemaet til høyre.</div></div>';return}tableHost.innerHTML='<div class="tablewrap"><table class="table"><thead><tr><th>Aksje</th><th>Megler / konto</th><th>Antall</th><th>Snittpris</th><th>Investert</th><th>Nåpris</th><th>Markedsverdi</th><th>Resultat</th><th></th></tr></thead><tbody>'+items.map(x=>'<tr><td><a class="ticker" href="/stock?ticker='+encodeURIComponent(x.ticker)+'">'+esc(x.ticker)+'</a><div class="small">'+(x.quote_source?esc(x.quote_source):'Pris ikke tilgjengelig')+'</div></td><td>'+esc(x.broker)+'<div class="small">'+esc(x.account_type)+'</div></td><td class="mono">'+num(x.shares)+'</td><td class="mono">'+kr(x.average_cost)+'</td><td class="mono">'+kr(x.invested)+'</td><td class="mono">'+kr(x.current_price)+'</td><td class="mono">'+kr(x.market_value)+'</td><td class="mono '+resultClass(x.unrealized_pnl)+'"><b>'+kr(x.unrealized_pnl)+'</b><div class="small '+resultClass(x.unrealized_pnl)+'">'+pct(x.unrealized_pnl_pct)+'</div></td><td class="right"><button class="btn danger" onclick="removeHolding('+Number(x.id)+')">Slett</button></td></tr>').join('')+'</tbody></table></div>'}
+async function loadHoldings(){tableHost.innerHTML='<div class="notice">Oppdaterer beholdning og markedskurser…</div>';try{render(await request('/holdings'))}catch(e){tableHost.innerHTML='<div class="notice">Kunne ikke laste beholdning: '+esc(e.message)+'</div>'}}
+async function removeHolding(id){if(!confirm('Slette denne beholdningen?'))return;try{const d=await request('/holdings/'+id,{method:'DELETE'});render(d.portfolio)}catch(e){alert('Kunne ikke slette: '+e.message)}}
+holdingForm.addEventListener('submit',async e=>{e.preventDefault();formStatus.className='status';formStatus.textContent='Lagrer…';const payload={ticker:ticker.value.trim().toUpperCase(),shares:Number(shares.value),average_cost:Number(avg.value),broker:broker.value.trim(),account_type:accountType.value,note:note.value.trim()||null};try{const d=await request('/holdings',{method:'POST',body:JSON.stringify(payload)});render(d.portfolio);formStatus.className='status ok';formStatus.textContent='Beholdningen er lagret.';ticker.value='';shares.value='';avg.value='';note.value=''}catch(err){formStatus.className='status error';formStatus.textContent='Feil: '+err.message}});
+loadHoldings();
+</script>
+</body>
+</html>
