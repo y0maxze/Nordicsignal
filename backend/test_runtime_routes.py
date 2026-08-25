@@ -18,7 +18,6 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
         )
         paths = set(json.loads(proc.stdout.strip().splitlines()[-1]))
         required = {
-            '/api/search',
             '/api/reports/{ticker}',
             '/api/dividends/{ticker}',
             '/api/intelligence/{ticker}',
@@ -38,6 +37,10 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/holdings/instrument-meta',
             '/api/holdings/cash',
             '/api/holdings/cash/{cash_id}',
+            '/api/instrument/{symbol}',
+            '/api/instrument/{symbol}/history',
+            '/api/instrument/{symbol}/news',
+            '/api/instrument/{symbol}/distributions',
         }
         missing = sorted(required - paths)
         self.assertFalse(missing, f'Missing runtime API routes: {missing}')
