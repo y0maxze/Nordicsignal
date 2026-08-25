@@ -14,6 +14,7 @@ RUNTIME_MODULES = (
     "paper_history_runtime",
     "news_routes",
     "holdings_routes",
+    "holdings_tax_runtime",
 )
 
 
