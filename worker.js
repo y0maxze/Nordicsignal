@@ -84,6 +84,58 @@ const STOCK_INSIDER_UI = `
 })();
 </script>`;
 
+const DASHBOARD_STOCK_ACTIONS_UI = `
+<style>
+#nsStockActions{margin:14px 0 18px;padding:14px;border:1px solid #20354d;border-radius:12px;background:#0a1727}#nsStockActions .nsTitle{font-weight:800;margin-bottom:10px}#nsStockActions .nsActions{display:flex;flex-wrap:wrap;gap:8px}#nsStockActions a{display:inline-flex;align-items:center;text-decoration:none;border:1px solid #294660;background:#10243a;color:#eef5ff;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:700}#nsStockActions a:hover{border-color:#65a9ff;background:#17324d}
+</style>
+<script>
+(function(){
+  function detectTicker(){
+    var nodes=document.querySelectorAll('.muted');
+    for(var i=0;i<nodes.length;i++){
+      var text=(nodes[i].textContent||'').trim();
+      var m=text.match(/^([A-Z0-9.]{1,12})\s*·.*Oslo Børs/i);
+      if(m)return m[1].toUpperCase();
+    }
+    return null;
+  }
+  function mount(){
+    var ticker=detectTicker();
+    if(!ticker)return;
+    var existing=document.getElementById('nsStockActions');
+    if(existing&&existing.dataset.ticker===ticker)return;
+    if(existing)existing.remove();
+    var headings=Array.from(document.querySelectorAll('h1,h2,h3,h4'));
+    var anchor=headings.find(function(x){return /why this score|hvorfor.*score/i.test(x.textContent||'')});
+    if(!anchor)return;
+    var box=document.createElement('div');box.id='nsStockActions';box.dataset.ticker=ticker;
+    var actions=[['Oversikt','overview'],['Nyheter','news'],['Insider','insider'],['Rapporter','reports'],['Utbytte','dividend'],['Short','short'],['Paper Trade','paper'],['Backtest','backtest'],['Market Pressure','pressure']];
+    box.innerHTML='<div class="nsTitle">'+ticker+' · Aksjeverktøy</div><div class="nsActions">'+actions.map(function(a){return '<a href="/stock?ticker='+encodeURIComponent(ticker)+'&tab='+encodeURIComponent(a[1])+'">'+a[0]+'</a>'}).join('')+'</div>';
+    anchor.parentNode.insertBefore(box,anchor);
+  }
+  var queued=false;function schedule(){if(queued)return;queued=true;setTimeout(function(){queued=false;mount()},80)}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+  window.addEventListener('popstate',schedule);document.addEventListener('click',function(){setTimeout(schedule,120)});schedule();
+})();
+</script>`;
+
+const STOCK_TAB_DEEPLINK_UI = `
+<script>
+(function(){
+  var tab=(new URLSearchParams(location.search).get('tab')||'').toLowerCase();
+  var allowed={overview:1,news:1,insider:1,reports:1,dividend:1,short:1,paper:1,backtest:1,pressure:1};
+  if(!allowed[tab])return;
+  var tries=0;
+  var timer=setInterval(function(){
+    tries++;
+    var button=document.querySelector('.tab[data-tab="'+tab+'"]');
+    var content=document.getElementById('content');
+    if(button&&content&&content.children.length){button.click();clearInterval(timer)}
+    else if(tries>80)clearInterval(timer);
+  },125);
+})();
+</script>`;
+
 function assetRequest(request, pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;
@@ -126,10 +178,12 @@ async function serveAsset(request, env, pathname) {
   if (pathname === "/index.html") {
     const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a>';
     if (!html.includes('href="/paper"')) html = html.replace("</nav>", `${navExtras}</nav>`);
+    if (!html.includes('id="nsStockActions"')) html = html.replace("</body>", `${DASHBOARD_STOCK_ACTIONS_UI}</body>`);
   }
   if (pathname === "/stock.html") {
     if (!html.includes('id="pressureAlertBar"')) html = html.replace("</body>", `${STOCK_PRESSURE_UI}</body>`);
     if (!html.includes('class="insiderSummary"')) html = html.replace("</body>", `${STOCK_INSIDER_UI}</body>`);
+    if (!html.includes('STOCK_TAB_DEEPLINK_MARKER')) html = html.replace("</body>", `${STOCK_TAB_DEEPLINK_UI.replace('<script>','<script>/* STOCK_TAB_DEEPLINK_MARKER */')}</body>`);
   }
 
   const headers = new Headers(response.headers);
