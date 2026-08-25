@@ -6,15 +6,26 @@ from extra_api import _backtest, _xirr
 
 
 class FakeProvider:
+    BASE = 'https://query1.finance.yahoo.com'
+
     def symbol(self, ticker):
         return ticker
 
-    def historical(self, ticker, period='max'):
-        return [
-            {'timestamp': 1672531200, 'date': '2023-01-01T00:00:00+00:00', 'close': 100},
-            {'timestamp': 1675209600, 'date': '2023-02-01T00:00:00+00:00', 'close': 110},
-            {'timestamp': 1677628800, 'date': '2023-03-01T00:00:00+00:00', 'close': 120},
-        ]
+    def _get(self, url, params):
+        # Match the Yahoo chart payload consumed by _backtest.
+        return {
+            'chart': {
+                'result': [{
+                    'timestamp': [1672531200, 1675209600, 1677628800],
+                    'indicators': {
+                        'quote': [{
+                            'close': [100, 110, 120],
+                        }]
+                    },
+                    'events': {},
+                }]
+            }
+        }
 
 
 class PaperBacktestTests(unittest.TestCase):
@@ -27,7 +38,7 @@ class PaperBacktestTests(unittest.TestCase):
 
     def test_backtest_monthly_contributions(self):
         provider = FakeProvider()
-        with patch('extra_api._dividends', return_value=[]):
+        with patch('dividend_runtime.fetch_dividend_events', return_value=[]):
             result = _backtest(provider, 'LSG', '2023-01-01', '2023-03-01', 1000, 500, False)
         self.assertEqual(result['invested'], 2000)
         self.assertEqual([x['date'] for x in result['transactions']], ['2023-01-01', '2023-02-01', '2023-03-01'])
