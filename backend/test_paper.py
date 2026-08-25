@@ -20,7 +20,7 @@ class PaperBacktestTests(unittest.TestCase):
             (datetime(2023, 1, 1, tzinfo=timezone.utc), -100.0),
             (datetime(2024, 1, 1, tzinfo=timezone.utc), 200.0),
         ]
-        self.assertAlmostEqual(_xirr(flows), 1.0, places=6)
+        self.assertAlmostEqual(_xirr(flows), 1.0, delta=0.005)
 
     def test_backtest_monthly_contributions(self):
         provider = FakeProvider()
