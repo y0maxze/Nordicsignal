@@ -1,8 +1,10 @@
 # NordicSignal database schema
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "nordicsignal.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent / "nordicsignal.db"
+DB_PATH = Path(os.getenv("NORDICSIGNAL_DB_PATH", str(DEFAULT_DB_PATH))).expanduser().resolve()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS stocks (
@@ -80,12 +82,17 @@ CREATE TABLE IF NOT EXISTS watchlist (
 
 
 def connect():
-    conn = sqlite3.connect(DB_PATH)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 def init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = connect()
     conn.executescript(SCHEMA)
     try:
