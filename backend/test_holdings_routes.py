@@ -1,6 +1,7 @@
 import unittest
+from pydantic import ValidationError
 
-from holdings_routes import _row_with_market
+from holdings_routes import _ask_tax_summary, _row_with_market, HoldingTransactionIn
 
 
 class FakeProvider:
@@ -31,6 +32,28 @@ class HoldingsRouteTests(unittest.TestCase):
         self.assertIsNone(item['market_value'])
         self.assertIsNone(item['unrealized_pnl'])
         self.assertIn('quote unavailable', item['quote_error'])
+
+    def test_ask_withdrawal_within_contributions_is_not_taxable(self):
+        tax = _ask_tax_summary(10000, 2500, 0)
+        self.assertEqual(tax['remaining_tax_free_capital'], 7500)
+        self.assertEqual(tax['taxable_withdrawal'], 0)
+        self.assertEqual(tax['estimated_tax'], 0)
+
+    def test_ask_withdrawal_above_contributions_uses_shielding_first(self):
+        tax = _ask_tax_summary(10000, 13000, 1000)
+        self.assertEqual(tax['withdrawal_above_contributions'], 3000)
+        self.assertEqual(tax['shielding_used'], 1000)
+        self.assertEqual(tax['taxable_withdrawal'], 2000)
+        self.assertAlmostEqual(tax['estimated_tax'], 756.8)
+
+    def test_buy_transaction_can_derive_amount_from_shares_and_price(self):
+        tx = HoldingTransactionIn(transaction_type='buy', ticker='LSG', shares=100, price=45)
+        self.assertIsNone(tx.amount)
+        self.assertEqual(tx.shares * tx.price, 4500)
+
+    def test_buy_transaction_requires_ticker(self):
+        with self.assertRaises(ValidationError):
+            HoldingTransactionIn(transaction_type='buy', shares=100, price=45)
 
 
 if __name__ == '__main__':
