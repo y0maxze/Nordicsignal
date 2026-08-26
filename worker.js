@@ -38,7 +38,7 @@ const ASSET_ROUTES = new Map([
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
-const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
+const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 
 function assetRequest(request, pathname) {
