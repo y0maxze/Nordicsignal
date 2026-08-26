@@ -52,8 +52,10 @@ pip install -r requirements.txt
 Start:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
+uvicorn production:app --host 0.0.0.0 --port $PORT
 ```
+
+`production:app` is intentional: it replaces the blocking development startup handler with the non-blocking production warmup, installs production indexes, and removes exact shadowed route duplicates.
 
 Backend dependencies are pinned in `backend/requirements.txt` so CI and Render use the same tested versions.
 
