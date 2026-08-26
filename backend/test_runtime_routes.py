@@ -34,6 +34,8 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/holdings/account-tax',
             '/api/holdings/transactions',
             '/api/holdings/transactions/{transaction_id}',
+            '/api/calendar',
+            '/api/holdings/calendar',
             '/api/instruments/search',
             '/api/holdings/instrument-meta',
             '/api/holdings/cash',
