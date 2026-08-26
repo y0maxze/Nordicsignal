@@ -25,6 +25,7 @@ RUNTIME_MODULES = (
     "holding_purchase_lots_runtime",
     "portfolio_benchmark_runtime",
     "portfolio_events_runtime",
+    "portfolio_pulse_runtime",
     "instrument_search_runtime",
     "global_search_runtime",
     "instrument_detail_runtime",
