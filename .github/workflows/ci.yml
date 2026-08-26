@@ -79,8 +79,10 @@ jobs:
           test -s frontend/theme.css
           test -s frontend/index.html
           test -s frontend/stock.html
+          test -s frontend/stock_selector.js
           test -s frontend/stock_extras.js
           test -s frontend/stock_readiness.js
+          test -s frontend/intelligence.html
           test -s frontend/instrument.html
           test -s frontend/paper.html
           test -s frontend/history.html
@@ -101,6 +103,8 @@ jobs:
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/stock", "/stock.html"\]' worker.js
+          grep -q '\["/intelligence", "/intelligence.html"\]' worker.js
+          grep -q '\["/instrument", "/instrument.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
@@ -146,10 +150,14 @@ jobs:
           grep -q '/api/calendar' frontend/calendar.html
           grep -q '/api/readiness/' frontend/readiness.html
           grep -q '/api/readiness/' frontend/stock_readiness.js
+          grep -q '/api/search?q=' frontend/intelligence.html
+          grep -q '/api/search?q=' frontend/stock_selector.js
+          grep -q "pathname = \"/intelligence.html\"" worker.js
           grep -q 'NS-RISK-2026-08-26-1' frontend/access_gate.js
           grep -q 'NS-RISK-2026-08-26-1' frontend/legal.html
           grep -q 'Development Visualisation' frontend/development.html
           grep -q 'access_gate.js' worker.js
+          grep -q 'stock_selector.js' worker.js
           grep -q 'stock_readiness.js' worker.js
           grep -q 'theme.css' worker.js
           grep -q 'stock_extras.js' worker.js
