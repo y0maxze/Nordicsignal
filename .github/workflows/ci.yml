@@ -91,6 +91,9 @@ jobs:
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
           grep -q "'/instrument/'" frontend/instrument.html
+          grep -q '/analytics' frontend/instrument.html
+          grep -q '/paper/instrument-order' frontend/instrument.html
+          grep -q 'Fondordre i beløp' frontend/instrument.html
           grep -q 'theme.css' worker.js
           grep -q 'Stock Intelligence' worker.js
           grep -q 'Paper Trading' worker.js
