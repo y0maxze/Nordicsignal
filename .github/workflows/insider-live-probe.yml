@@ -18,7 +18,7 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Probe live insider sources
+      - name: Probe live insider sources and production
         run: |
           python - <<'PY'
           import json, time
@@ -28,37 +28,70 @@ jobs:
           from providers import NordicRegulatoryProvider
 
           session = requests.Session(impersonate='chrome')
-          print('FRESH_ISSUER_FEEDS=', FRESH_ISSUER_FEEDS)
-          urls = [
-              'https://rss.globenewswire.com/news/consumer-products-services/food-beverage/load/more',
+          print('=== SOURCE PROBE ===')
+          source_urls = [
               'https://rss.globenewswire.com/news/consumer-products-services/food-beverage/load/more?page=1&pageSize=50',
               'https://www.globenewswire.com/en/search/organization/Ler%C3%B8y%2520Seafood%2520Group%2520ASA?page=1',
-              'https://live.euronext.com/en/product/equities/NO0003096208-XOSL/company-information',
           ]
-          for url in urls:
+          for url in source_urls:
               try:
-                  r = session.get(url, timeout=20, allow_redirects=True)
-                  text = r.text
-                  p = _Parser(); p.feed(text)
-                  links = discover_release_links(text, url, 'LSG')
-                  print('\nURL', url)
-                  print('STATUS', r.status_code, 'FINAL', r.url, 'BYTES', len(text))
-                  print('HAS_LEROY', 'leroy seafood' in norm(text), 'HAS_INSIDER', 'primary insider' in norm(text) or 'primarinsider' in norm(text))
-                  print('TEXT_HEAD', p.text[:500].replace('\n',' '))
-                  print('DISCOVERED', len(links), links[:8])
+                  r = session.get(url, timeout=25, allow_redirects=True)
+                  links = discover_release_links(r.text, url, 'LSG')
+                  print('SOURCE', url, 'STATUS', r.status_code, 'BYTES', len(r.text), 'DISCOVERED', len(links))
+                  print('LINKS', links[:8])
               except Exception as exc:
-                  print('\nURL', url, 'ERROR', repr(exc))
+                  print('SOURCE_ERROR', url, repr(exc))
 
           try:
               rows = _fresh_items(session, 'LSG', 'Lerøy Seafood Group ASA')
-              print('\nFRESH_ITEMS', json.dumps(rows, ensure_ascii=False, indent=2)[:8000])
+              print('FRESH_ITEMS_COUNT', len(rows))
+              print('FRESH_ITEMS_HEAD', json.dumps(rows[:6], ensure_ascii=False, indent=2)[:7000])
           except Exception as exc:
-              print('\nFRESH_ITEMS_ERROR', repr(exc))
+              print('FRESH_ITEMS_ERROR', repr(exc))
 
           try:
               provider = NordicRegulatoryProvider()
               result = provider.insider('LSG', 'Lerøy Seafood Group ASA')
-              print('\nPROVIDER_RESULT', json.dumps(result, ensure_ascii=False, indent=2)[:12000])
+              print('LOCAL_PROVIDER', json.dumps(result, ensure_ascii=False, indent=2)[:12000])
           except Exception as exc:
-              print('\nPROVIDER_ERROR', repr(exc))
+              print('LOCAL_PROVIDER_ERROR', repr(exc))
+
+          print('\n=== ROUTE OWNERSHIP ===')
+          try:
+              import production
+              for route in production.app.router.routes:
+                  if getattr(route, 'path', None) == '/api/insider/{ticker}':
+                      fn = getattr(route, 'endpoint', None)
+                      print('ROUTE', route.path, sorted(getattr(route, 'methods', []) or []),
+                            'MODULE', getattr(fn, '__module__', None), 'NAME', getattr(fn, '__name__', None),
+                            'QUALNAME', getattr(fn, '__qualname__', None))
+          except Exception as exc:
+              print('ROUTE_ERROR', repr(exc))
+
+          print('\n=== PRODUCTION HTTP PROBE ===')
+          endpoints = [
+              'https://nordicsignal-api.onrender.com/api/health',
+              'https://nordicsignal-api.onrender.com/api/insider/LSG?refresh=1&probe=1',
+              'https://nordicsignal-api.onrender.com/api/score-explanation/LSG?refresh=1&probe=1',
+              'https://nordicsignal.8pnwk5r8f4.workers.dev/api/health?probe=1',
+              'https://nordicsignal.8pnwk5r8f4.workers.dev/api/insider/LSG?refresh=1&probe=1',
+          ]
+          for url in endpoints:
+              try:
+                  t0=time.time()
+                  r=session.get(url,timeout=45,allow_redirects=True)
+                  elapsed=time.time()-t0
+                  wanted={k:v for k,v in r.headers.items() if k.lower() in {
+                      'server','cf-ray','x-nordicsignal-cache','cache-control','age','etag','x-render-origin-server'
+                  }}
+                  print('\nPROD_URL',url)
+                  print('STATUS',r.status_code,'SECONDS',round(elapsed,2),'FINAL',r.url)
+                  print('HEADERS',json.dumps(wanted,ensure_ascii=False))
+                  try:
+                      body=r.json()
+                      print('JSON',json.dumps(body,ensure_ascii=False,indent=2)[:16000])
+                  except Exception:
+                      print('BODY',r.text[:4000])
+              except Exception as exc:
+                  print('\nPROD_ERROR',url,repr(exc))
           PY
