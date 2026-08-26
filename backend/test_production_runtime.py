@@ -29,6 +29,11 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertNotIn(main.startup, handlers)
         self.assertIn(production.production_startup, handlers)
 
+    def test_production_replaces_unbounded_refresh_implementation(self):
+        self.assertIs(main.refresh_all, production._production_refresh_all)
+        self.assertGreaterEqual(production._PROVIDER_WORKERS, 1)
+        self.assertLessEqual(production._PROVIDER_WORKERS, 4)
+
     def test_index_plan_contains_core_query_indexes(self):
         joined = '\n'.join(production._INDEXES)
         self.assertIn('scores(ticker,id)', joined)
