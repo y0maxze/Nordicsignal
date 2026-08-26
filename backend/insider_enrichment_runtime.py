@@ -1,13 +1,12 @@
 """Enrich public primary-insider disclosures with structured trade and ownership fields.
 
 This patch intentionally never invents a person, company, trade amount or ownership.
-It only parses values present in the public disclosure; ownership percentage may be
-calculated from the disclosed post-trade holding and Yahoo's latest annual share count,
-and is then explicitly marked as an estimate.
+It only parses values present in the public disclosure. Ownership percentage is shown
+only when the disclosure itself states it; disclosed post-trade share holdings remain
+available separately without triggering another market-data request.
 """
 
 import re
-from functools import lru_cache
 
 
 def _norm_number(value):
@@ -124,17 +123,6 @@ def _disclosed_pct(text):
     return _norm_number(raw)
 
 
-@lru_cache(maxsize=64)
-def _shares_outstanding(ticker):
-    try:
-        from providers import YahooProvider
-        data=YahooProvider().research(ticker)
-        value=((data.get('defaultKeyStatistics') or {}).get('sharesOutstanding'))
-        return float(value) if value else None
-    except Exception:
-        return None
-
-
 def enrich_item(item, ticker):
     x=dict(item or {})
     text=' '.join(str(v or '') for v in (x.get('summary'),x.get('title')))
@@ -156,20 +144,20 @@ def enrich_item(item, ticker):
     if pct is not None:
         x['ownership_pct']=pct
         x['ownership_pct_source']='disclosed'
-    elif holding is not None:
-        outstanding=_shares_outstanding(ticker)
-        if outstanding and outstanding>0:
-            x['ownership_pct']=holding/outstanding*100.0
-            x['ownership_pct_source']='estimated_from_latest_annual_share_count'
-            x['shares_outstanding_reference']=outstanding
+    else:
+        # Do not launch a second Yahoo fundamentals request merely to estimate a
+        # percentage from an annual share-count proxy. It adds provider/RAM load and
+        # can imply more precision than the underlying disclosure supports.
+        x.pop('ownership_pct',None)
+        x.pop('ownership_pct_source',None)
+        x.pop('shares_outstanding_reference',None)
     details=[]
     if x.get('role'):
         details.append(str(x['role']))
     if x.get('holding_after_shares') is not None:
         details.append(f"Eier etter: {int(x['holding_after_shares']):,} aksjer".replace(',',' '))
     if x.get('ownership_pct') is not None:
-        suffix=' oppgitt' if x.get('ownership_pct_source')=='disclosed' else ' estimert'
-        details.append(f"{x['ownership_pct']:.4f}% av selskapet{suffix}")
+        details.append(f"{x['ownership_pct']:.4f}% av selskapet oppgitt")
     if details:
         x['role']=' · '.join(details)
     x['verified_detail']=bool(x.get('person') or x.get('entity') or x.get('shares') is not None or x.get('price') is not None or x['direction'] in ('buy','sell'))
@@ -198,7 +186,7 @@ def install():
         out['sell_count']=sum(x.get('direction')=='sell' for x in actionable)
         out['unknown_count']=len(actionable)-out['buy_count']-out['sell_count']
         out['verified_detail_count']=sum(1 for x in actionable if x.get('verified_detail'))
-        out['ownership_data_note']='Eierandel vises når den er oppgitt i meldingen. Ellers kan den estimeres fra oppgitt beholdning etter handel og siste tilgjengelige årlige aksjetall; estimater merkes eksplisitt.'
+        out['ownership_data_note']='Eierandel vises når prosentandelen er oppgitt i børsmeldingen. Oppgitt beholdning etter handel vises separat i antall aksjer; NordicSignal gjør ikke et ekstra nettverkskall for å gjette eierandel.'
         return out
 
     NordicRegulatoryProvider.insider=insider
