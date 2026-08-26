@@ -22,6 +22,7 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/dividends/{ticker}',
             '/api/intelligence/{ticker}',
             '/api/market-pressure/{ticker}',
+            '/api/readiness/{symbol}',
             '/api/paper/history',
             '/api/paper/dashboard',
             '/api/paper/account',
