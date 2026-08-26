@@ -1,6 +1,12 @@
 import unittest
 
-from holding_purchase_lots_runtime import _aggregate_lots, _lot_view
+from holding_purchase_lots_runtime import (
+    InitializePurchaseIn,
+    PurchaseLotIn,
+    _aggregate_lots,
+    _date_text,
+    _lot_view,
+)
 
 
 class HoldingPurchaseLotTests(unittest.TestCase):
@@ -28,6 +34,16 @@ class HoldingPurchaseLotTests(unittest.TestCase):
         self.assertIsNone(row['unrealized_pnl'])
         self.assertIsNone(row['unrealized_pnl_pct'])
         self.assertEqual(row['status'], 'unpriced')
+
+    def test_new_purchase_date_is_optional(self):
+        payload = PurchaseLotIn(shares=29, price_nok=21.92)
+        self.assertIsNone(payload.purchase_date)
+        self.assertIsNone(_date_text(payload.purchase_date))
+
+    def test_existing_purchase_date_is_optional(self):
+        payload = InitializePurchaseIn()
+        self.assertIsNone(payload.purchase_date)
+        self.assertIsNone(_date_text(payload.purchase_date))
 
 
 if __name__ == '__main__':
