@@ -1,8 +1,8 @@
 """Portfolio-scoped event feed for the NordicSignal home dashboard.
 
-The dashboard should surface only events that matter to positions the user has
-actually entered in Holdings. This module aggregates the already-installed news,
-report and insider routes without introducing another provider implementation.
+The dashboard surfaces only events that matter to positions the user has entered in
+Holdings. Events are enriched with a small amount of real market context so the home
+brief can explain what happened instead of merely repeating a headline.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +13,7 @@ import time
 
 import extra_api
 from database import connect
+from providers import YahooProvider
 
 _CACHE_LOCK = threading.Lock()
 _CACHE = {"key": None, "at": 0.0, "value": None}
@@ -27,13 +28,25 @@ def _route_handler(app, path):
     return None
 
 
+def _canonical_event_ticker(value):
+    """Map Yahoo-style Oslo symbols back to NordicSignal's canonical ticker."""
+    ticker = str(value or "").strip().upper()
+    if ticker.endswith(".OL"):
+        return ticker[:-3]
+    return ticker
+
+
 def _holding_rows():
+    """Return unique holdings using the canonical Oslo ticker where available.
+
+    Holdings may contain either MPCC or MPCC.OL depending on how the instrument was
+    added. News/report/insider routes use MPCC, so normalize before calling them.
+    """
     conn = connect()
     try:
-        rows = conn.execute(
-            "SELECT DISTINCT h.ticker,COALESCE(s.name,h.ticker) AS company_name "
-            "FROM holdings h LEFT JOIN stocks s ON s.ticker=h.ticker ORDER BY h.ticker"
-        ).fetchall()
+        holdings = conn.execute("SELECT DISTINCT ticker FROM holdings ORDER BY ticker").fetchall()
+        stocks = conn.execute("SELECT ticker,name FROM stocks").fetchall()
+        names = {str(row["ticker"]).upper(): row["name"] for row in stocks}
     except Exception:
         return []
     finally:
@@ -41,7 +54,22 @@ def _holding_rows():
             conn.close()
         except Exception:
             pass
-    return [dict(row) for row in rows]
+
+    out = []
+    seen = set()
+    for row in holdings:
+        raw = str(row["ticker"] or "").strip().upper()
+        ticker = _canonical_event_ticker(raw)
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        out.append({
+            "ticker": ticker,
+            "holding_ticker": raw,
+            "company_name": names.get(ticker) or raw,
+            "tracked": ticker in names,
+        })
+    return out
 
 
 def _iso(value):
@@ -69,14 +97,72 @@ def _compact_number(value):
     return f"{n:,.2f}".replace(",", " ")
 
 
+def _pct_text(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f"{abs(value):.2f}".replace(".", ",") + " %"
+
+
+def _price_text(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f"{value:.2f}".replace(".", ",") + " kr"
+
+
+def _report_name(title):
+    match = re.search(r"\b(Q[1-4])\b", str(title or ""), re.I)
+    if match:
+        return match.group(1).upper() + "-rapporten"
+    low = str(title or "").lower()
+    if "annual" in low or "årsrapport" in low or "arsrapport" in low:
+        return "Årsrapporten"
+    if "half" in low:
+        return "Halvårsrapporten"
+    return "Rapporten"
+
+
+def _reaction_words(change_pct):
+    try:
+        change = float(change_pct)
+    except (TypeError, ValueError):
+        return ("var omtrent uendret", "avventende", "watch")
+    if change >= 0.5:
+        return ("steg", "positiv", "positive")
+    if change <= -0.5:
+        return ("falt", "negativ", "negative")
+    return ("var omtrent uendret", "avventende", "watch")
+
+
 def _brief_for_event(row):
     kind = row.get("kind")
     title = str(row.get("title") or "")
     low = title.lower()
+    reaction = row.get("market_reaction") or {}
 
     if kind == "report":
+        report = _report_name(title)
+        if reaction.get("change_pct") is not None:
+            verb, assessment, tone = _reaction_words(reaction.get("change_pct"))
+            move = _pct_text(reaction.get("change_pct"))
+            close = _price_text(reaction.get("close"))
+            ticker = row.get("ticker") or "Aksjen"
+            if reaction.get("basis") == "event_day":
+                text = f"{report} er publisert. På rapportdagen {verb} {ticker} {move}"
+                if close:
+                    text += f" og endte rundt {close}"
+                text += f". Markedsreaksjonen var dermed {assessment}. Følg spesielt guiding, kontantstrøm, gjeld og utbytte mot forrige periode."
+                return {"brief": text, "brief_tone": tone}
+            text = f"{report} er publisert. Siste handelsdag {verb} {ticker} {move}"
+            if close:
+                text += f" til rundt {close}"
+            text += ". Kilden mangler en presis rapportdato/-tid i feeden, så hele kursbevegelsen kan ikke sikkert tilskrives rapporten."
+            return {"brief": text, "brief_tone": tone}
         return {
-            "brief": "Ny finansiell rapport er publisert. Se spesielt etter resultat, guiding, kontantstrøm, gjeld og eventuelt utbytte mot forrige periode.",
+            "brief": f"{report} er publisert. Se spesielt etter resultat, guiding, kontantstrøm, gjeld og eventuelt utbytte mot forrige periode.",
             "brief_tone": "watch",
         }
 
@@ -92,47 +178,47 @@ def _brief_for_event(row):
             detail += f" rundt {price} kr"
         direction = row.get("direction")
         if direction == "buy":
-            return {
-                "brief": detail + ". Insiderkjøp kan være et positivt interesse-signal, men bør vurderes sammen med verdsettelse, rapporter og øvrige signaler.",
-                "brief_tone": "positive",
-            }
-        if direction == "sell":
-            return {
-                "brief": detail + ". Insidersalg er verdt å følge, men kan skyldes mange forhold og er ikke alene et salgssignal.",
-                "brief_tone": "negative",
-            }
-        return {"brief": detail + ". Åpne insiderfanen for verifiserte detaljer om handelen.", "brief_tone": "watch"}
+            base = detail + ". Insiderkjøp kan være et positivt interesse-signal, men bør vurderes sammen med verdsettelse, rapporter og øvrige signaler."
+            tone = "positive"
+        elif direction == "sell":
+            base = detail + ". Insidersalg er verdt å følge, men kan skyldes mange forhold og er ikke alene et salgssignal."
+            tone = "negative"
+        else:
+            base = detail + ". Åpne insiderfanen for verifiserte detaljer om handelen."
+            tone = "watch"
+        if reaction.get("basis") == "event_day" and reaction.get("change_pct") is not None:
+            verb, _, _ = _reaction_words(reaction.get("change_pct"))
+            base += f" Aksjen {verb} {_pct_text(reaction.get('change_pct'))} på hendelsesdagen."
+        return {"brief": base, "brief_tone": tone}
 
     if kind == "dividend":
-        return {
-            "brief": "Utbytterelatert melding for en aksje du eier. Sjekk beløp, ex-dato, betalingsdato og om utbyttet endrer forventet direkteavkastning.",
-            "brief_tone": "watch",
-        }
+        base = "Utbytterelatert melding for en aksje du eier. Sjekk beløp, ex-dato, betalingsdato og om utbyttet endrer forventet direkteavkastning."
+        if reaction.get("basis") == "event_day" and reaction.get("change_pct") is not None:
+            verb, _, _ = _reaction_words(reaction.get("change_pct"))
+            base += f" Aksjen {verb} {_pct_text(reaction.get('change_pct'))} på hendelsesdagen."
+        return {"brief": base, "brief_tone": "watch"}
 
     if re.search(r"\b(contract|kontrakt|order|ordre|award)\b", low):
-        return {
-            "brief": "Ny kontrakt eller ordre. Se på kontraktsverdi, varighet, marginpotensial og hvor stor den er relativt til selskapets eksisterende omsetning.",
-            "brief_tone": "watch",
-        }
-    if re.search(r"\b(acquisition|acquire|oppkjøp|merger|fusjon)\b", low):
-        return {
-            "brief": "Oppkjøps- eller transaksjonsmelding. Viktigste punkter er pris, finansiering, forventede synergier og effekt på gjeld og inntjening.",
-            "brief_tone": "watch",
-        }
-    if re.search(r"\b(guidance|outlook|profit warning|resultatvarsel|nedjuster|oppjuster)\b", low):
-        return {
-            "brief": "Meldingen kan påvirke markedets forventninger til resultatene fremover. Sammenlign ny guiding med tidligere guiding og konsensus der det finnes.",
-            "brief_tone": "important",
-        }
-    if re.search(r"\b(bond|obligasjon|financing|finansiering|rights issue|emisjon|share issue)\b", low):
-        return {
-            "brief": "Finansieringsmelding. Følg med på rente/kostnad, eventuell utvanning og hvordan kapitalen påvirker balanse og vekstplaner.",
-            "brief_tone": "important",
-        }
-    return {
-        "brief": "Ny offisiell selskapsmelding for en aksje i beholdningen. Åpne meldingen for detaljene og vurder om den endrer inntjening, risiko eller kapitalallokering.",
-        "brief_tone": "neutral",
-    }
+        base = "Ny kontrakt eller ordre. Se på kontraktsverdi, varighet, marginpotensial og hvor stor den er relativt til selskapets eksisterende omsetning."
+        tone = "watch"
+    elif re.search(r"\b(acquisition|acquire|oppkjøp|merger|fusjon)\b", low):
+        base = "Oppkjøps- eller transaksjonsmelding. Viktigste punkter er pris, finansiering, forventede synergier og effekt på gjeld og inntjening."
+        tone = "watch"
+    elif re.search(r"\b(guidance|outlook|profit warning|resultatvarsel|nedjuster|oppjuster)\b", low):
+        base = "Meldingen kan påvirke markedets forventninger til resultatene fremover. Sammenlign ny guiding med tidligere guiding og konsensus der det finnes."
+        tone = "important"
+    elif re.search(r"\b(bond|obligasjon|financing|finansiering|rights issue|emisjon|share issue)\b", low):
+        base = "Finansieringsmelding. Følg med på rente/kostnad, eventuell utvanning og hvordan kapitalen påvirker balanse og vekstplaner."
+        tone = "important"
+    else:
+        base = "Ny offisiell selskapsmelding for en aksje i beholdningen. Åpne meldingen for detaljene og vurder om den endrer inntjening, risiko eller kapitalallokering."
+        tone = "neutral"
+    if reaction.get("basis") == "event_day" and reaction.get("change_pct") is not None:
+        verb, assessment, reaction_tone = _reaction_words(reaction.get("change_pct"))
+        base += f" På hendelsesdagen {verb} aksjen {_pct_text(reaction.get('change_pct'))}, en {assessment} markedsreaksjon."
+        if tone in ("watch", "neutral"):
+            tone = reaction_tone
+    return {"brief": base, "brief_tone": tone}
 
 
 def _event(ticker, company, kind, title, url=None, occurred_at=None, importance="normal", **extra):
@@ -150,8 +236,81 @@ def _event(ticker, company, kind, title, url=None, occurred_at=None, importance=
     return row
 
 
-def _events_for_one(row, news_handler, reports_handler, insider_handler):
-    ticker = str(row.get("ticker") or "").upper()
+def _market_rows(provider, ticker):
+    symbol = provider.symbol(_canonical_event_ticker(ticker))
+    data = provider._get(
+        f"{provider.BASE}/v8/finance/chart/{symbol}",
+        {"range": "1mo", "interval": "1d", "events": "div,splits"},
+    )
+    result = ((data.get("chart") or {}).get("result") or [])
+    if not result:
+        return []
+    result = result[0]
+    timestamps = result.get("timestamp") or []
+    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+    closes = quote.get("close") or []
+    rows = []
+    for i, ts in enumerate(timestamps):
+        if i >= len(closes) or closes[i] is None:
+            continue
+        rows.append({
+            "date": datetime.fromtimestamp(int(ts), timezone.utc).date().isoformat(),
+            "close": float(closes[i]),
+        })
+    return rows
+
+
+def _reaction_for_event(rows, event):
+    if len(rows) < 2:
+        return None
+    occurred = event.get("occurred_at")
+    event_date = occurred[:10] if occurred else None
+    if event_date:
+        idx = next((i for i, row in enumerate(rows) if row["date"] >= event_date), None)
+        if idx is not None and idx > 0:
+            before = float(rows[idx - 1]["close"])
+            close = float(rows[idx]["close"])
+            if before > 0:
+                return {
+                    "basis": "event_day",
+                    "date": rows[idx]["date"],
+                    "previous_close": before,
+                    "close": close,
+                    "change_pct": (close / before - 1.0) * 100.0,
+                }
+    # Fresh issuer fallbacks can temporarily lack a parsed publication date. For
+    # reports only, expose the latest session move but label the weaker basis.
+    if event.get("kind") == "report":
+        before = float(rows[-2]["close"])
+        close = float(rows[-1]["close"])
+        if before > 0:
+            return {
+                "basis": "latest_session",
+                "date": rows[-1]["date"],
+                "previous_close": before,
+                "close": close,
+                "change_pct": (close / before - 1.0) * 100.0,
+            }
+    return None
+
+
+def _enrich_market_reaction(events, provider, ticker):
+    if not events or provider is None:
+        return events
+    try:
+        rows = _market_rows(provider, ticker)
+    except Exception:
+        return events
+    for event in events:
+        reaction = _reaction_for_event(rows, event)
+        if reaction:
+            event["market_reaction"] = reaction
+            event.update(_brief_for_event(event))
+    return events
+
+
+def _events_for_one(row, news_handler, reports_handler, insider_handler, provider=None):
+    ticker = _canonical_event_ticker(row.get("ticker"))
     company = row.get("company_name") or ticker
     events = []
 
@@ -205,7 +364,7 @@ def _events_for_one(row, news_handler, reports_handler, insider_handler):
         except Exception:
             pass
 
-    return events
+    return _enrich_market_reaction(events, provider, ticker)
 
 
 def _dedupe_and_sort(events, limit):
@@ -229,7 +388,7 @@ def _dedupe_and_sort(events, limit):
 
 
 def install():
-    if getattr(extra_api, "_portfolio_events_runtime_v2", False):
+    if getattr(extra_api, "_portfolio_events_runtime_v3", False):
         return
     original_install = extra_api.install
 
@@ -238,6 +397,7 @@ def install():
         news_handler = _route_handler(app, "/api/news/{ticker}")
         reports_handler = _route_handler(app, "/api/reports/{ticker}")
         insider_handler = _route_handler(app, "/api/insider/{ticker}")
+        provider = YahooProvider()
 
         @app.get("/api/holdings/events")
         def holdings_events(limit: int = 16):
@@ -253,7 +413,7 @@ def install():
 
             events = []
             with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-                futures = [pool.submit(_events_for_one, row, news_handler, reports_handler, insider_handler) for row in holdings]
+                futures = [pool.submit(_events_for_one, row, news_handler, reports_handler, insider_handler, provider) for row in holdings if row.get("tracked")]
                 for future in as_completed(futures):
                     try:
                         events.extend(future.result())
@@ -264,9 +424,10 @@ def install():
             value = {
                 "status": "ok",
                 "holding_count": len(holdings),
+                "tracked_holding_count": sum(1 for x in holdings if x.get("tracked")),
                 "event_count": len(items),
                 "high_priority_count": sum(1 for x in items if x.get("importance") == "high"),
-                "brief_method": "context_rules",
+                "brief_method": "official_events_plus_market_reaction",
                 "items": items,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -277,7 +438,7 @@ def install():
             return result
 
     extra_api.install = patched_install
-    extra_api._portfolio_events_runtime_v2 = True
+    extra_api._portfolio_events_runtime_v3 = True
 
 
 install()
