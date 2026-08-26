@@ -80,11 +80,16 @@ jobs:
           test -s frontend/index.html
           test -s frontend/stock.html
           test -s frontend/stock_extras.js
+          test -s frontend/stock_readiness.js
           test -s frontend/instrument.html
           test -s frontend/paper.html
           test -s frontend/history.html
           test -s frontend/news.html
           test -s frontend/calendar.html
+          test -s frontend/readiness.html
+          test -s frontend/development.html
+          test -s frontend/legal.html
+          test -s frontend/access_gate.js
           test -s frontend/holdings.html
           test -s frontend/dashboard_performance.js
           test -s frontend/portfolio_dashboard.js
@@ -92,6 +97,7 @@ jobs:
           test -s backend/http_cache_runtime.py
           test -s backend/holdings_integrity_runtime.py
           test -s backend/market_calendar_runtime.py
+          test -s backend/investment_readiness_runtime.py
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/stock", "/stock.html"\]' worker.js
@@ -99,6 +105,9 @@ jobs:
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q '\["/calendar", "/calendar.html"\]' worker.js
+          grep -q '\["/readiness", "/readiness.html"\]' worker.js
+          grep -q '\["/development", "/development.html"\]' worker.js
+          grep -q '\["/legal", "/legal.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'const API=""' frontend/index.html
           if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then
@@ -135,6 +144,13 @@ jobs:
           grep -q 'Fondordre i beløp' frontend/instrument.html
           grep -q '/api/holdings/calendar' frontend/portfolio_dashboard.js
           grep -q '/api/calendar' frontend/calendar.html
+          grep -q '/api/readiness/' frontend/readiness.html
+          grep -q '/api/readiness/' frontend/stock_readiness.js
+          grep -q 'NS-RISK-2026-08-26-1' frontend/access_gate.js
+          grep -q 'NS-RISK-2026-08-26-1' frontend/legal.html
+          grep -q 'Development Visualisation' frontend/development.html
+          grep -q 'access_gate.js' worker.js
+          grep -q 'stock_readiness.js' worker.js
           grep -q 'theme.css' worker.js
           grep -q 'stock_extras.js' worker.js
           grep -q 'Market Pressure' frontend/stock_extras.js
@@ -151,7 +167,10 @@ jobs:
           grep -q 'href="/app"' worker.js
           grep -q 'nsGlobalHome' worker.js
           grep -q 'href="/calendar"' worker.js
+          grep -q 'href="/readiness"' worker.js
+          grep -q 'href="/development"' worker.js
           grep -q "data-tab='pressure'\|data-tab=\"pressure\"\|dataset.tab='pressure'" frontend/stock_extras.js
+          grep -q 'data-tab="readiness"' frontend/stock_readiness.js
           if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then
             echo 'Global search must open instrument intelligence, not Holdings'
             exit 1
