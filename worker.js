@@ -10,6 +10,10 @@ const ASSET_ROUTES = new Map([
   ["/stock/", "/stock.html"],
   ["/stock-intelligence", "/stock.html"],
   ["/stock-intelligence/", "/stock.html"],
+  ["/intelligence", "/intelligence.html"],
+  ["/intelligence/", "/intelligence.html"],
+  ["/instrument", "/instrument.html"],
+  ["/instrument/", "/instrument.html"],
   ["/paper", "/paper.html"],
   ["/paper/", "/paper.html"],
   ["/paper-trading", "/paper.html"],
@@ -34,7 +38,7 @@ const ASSET_ROUTES = new Map([
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
-const STOCK_EXTRAS = '<script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
+const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 
 function assetRequest(request, pathname) {
@@ -56,6 +60,10 @@ function assetPath(pathname) {
   return pathname;
 }
 
+function isStockEntry(pathname) {
+  return pathname === "/stock" || pathname === "/stock/" || pathname === "/stock-intelligence" || pathname === "/stock-intelligence/";
+}
+
 function enhanceHtml(html, pathname) {
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
   if (pathname === "/index.html") {
@@ -64,7 +72,7 @@ function enhanceHtml(html, pathname) {
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
   }
-  if (pathname === "/stock.html" && !html.includes('src="/stock_extras.js"')) {
+  if (pathname === "/stock.html" && !html.includes('src="/stock_selector.js"')) {
     html = html.replace("</body>", `${STOCK_EXTRAS}</body>`);
   }
   if (pathname !== "/legal.html" && !html.includes('src="/access_gate.js"')) {
@@ -107,6 +115,8 @@ export default {
     }
     if (url.pathname.startsWith("/api/")) return proxyApi(request, url);
     if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
-    return serveAsset(request, env, assetPath(url.pathname));
+    let pathname = assetPath(url.pathname);
+    if (isStockEntry(url.pathname) && !url.searchParams.get("ticker") && !url.searchParams.get("symbol")) pathname = "/intelligence.html";
+    return serveAsset(request, env, pathname);
   },
 };
