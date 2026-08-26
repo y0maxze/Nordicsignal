@@ -9,6 +9,7 @@ RUNTIME_MODULES = (
     "provider_resilience_runtime",
     "insider_runtime",
     "insider_enrichment_runtime",
+    "regulatory_limits_runtime",
     "backtest_runtime",
     "stock_intelligence_runtime",
     "short_alert_runtime",
