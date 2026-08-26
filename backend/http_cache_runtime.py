@@ -31,6 +31,12 @@ def _ttl_for(path):
         return 0
     if path.startswith(("/api/holdings", "/api/paper", "/api/watchlist", "/api/refresh")):
         return 0
+    # Insider already has bounded provider-level caches/semaphores. Do not place a
+    # second response-body cache in front of it: an empty disclosure result can turn
+    # stale the moment a new regulated trade is published, and this route is used for
+    # portfolio alerts as well as Stock Intelligence.
+    if path.startswith("/api/insider/"):
+        return 0
     if path == "/api/search":
         return 45
     if path.startswith("/api/quote/"):
@@ -49,7 +55,7 @@ def _ttl_for(path):
         if path.endswith("/analytics"):
             return 180
         return 45
-    if path.startswith(("/api/insider/", "/api/short/", "/api/news/")):
+    if path.startswith(("/api/short/", "/api/news/")):
         return 60
     if path.startswith("/api/reports/"):
         return 120
