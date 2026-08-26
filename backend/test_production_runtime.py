@@ -16,6 +16,15 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertIn('holding_transactions', joined)
         self.assertIn('signal_events', joined)
 
+    def test_production_route_table_has_no_exact_duplicates(self):
+        keys = []
+        for route in production.app.router.routes:
+            path = getattr(route, 'path', None)
+            methods = getattr(route, 'methods', None)
+            if path and methods:
+                keys.append((path, tuple(sorted(methods))))
+        self.assertEqual(len(keys), len(set(keys)))
+
 
 if __name__ == '__main__':
     unittest.main()
