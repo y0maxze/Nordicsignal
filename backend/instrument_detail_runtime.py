@@ -4,7 +4,7 @@ Tracked Oslo equities keep their richer NordicSignal stock model.  This module g
 all Yahoo-covered search results a real detail page with exact-symbol quote/history,
 news and distribution data instead of redirecting users to Holdings.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 
 from fastapi import HTTPException
@@ -144,7 +144,21 @@ def instrument_news(provider, symbol, name=None, limit=20):
 
 
 def instrument_distributions(provider, symbol, years=10):
-    result = _chart(provider, symbol, {"range": "max" if years >= 10 else f"{years}y", "interval": "1d", "events": "div,splits"})
+    # Distribution events do not need daily OHLC history. Bound the requested window
+    # to the user-facing years value and use monthly bars to keep Yahoo JSON/RAM small.
+    years = max(1, min(int(years or 10), 25))
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=years * 365.25 + 7)
+    result = _chart(
+        provider,
+        symbol,
+        {
+            "period1": int(start.timestamp()),
+            "period2": int((now + timedelta(days=1)).timestamp()),
+            "interval": "1mo",
+            "events": "div,splits",
+        },
+    )
     raw = ((result.get("events") or {}).get("dividends") or {})
     rows = raw.values() if isinstance(raw, dict) else raw if isinstance(raw, list) else []
     items = []
