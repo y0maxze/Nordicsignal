@@ -25,9 +25,20 @@ class PortfolioEventRuntimeTests(unittest.TestCase):
         self.assertIn('insider', kinds)
         self.assertIn('announcement', kinds)
         self.assertFalse(any(x['title'] == 'Broker opinion' for x in events))
+
+        report = next(x for x in events if x['kind'] == 'report')
+        self.assertIn('guiding', report['brief'].lower())
+        self.assertEqual(report['brief_tone'], 'watch')
+
         buy = next(x for x in events if x['kind'] == 'insider')
         self.assertEqual(buy['direction'], 'buy')
         self.assertIn('Example Insider', buy['title'])
+        self.assertIn('1 000', buy['brief'])
+        self.assertIn('positivt interesse-signal', buy['brief'])
+        self.assertEqual(buy['brief_tone'], 'positive')
+
+        contract = next(x for x in events if x['kind'] == 'announcement')
+        self.assertIn('kontrakt', contract['brief'].lower())
 
     def test_dedupe_keeps_one_event_per_canonical_url_and_sorts_newest_first(self):
         items = [
