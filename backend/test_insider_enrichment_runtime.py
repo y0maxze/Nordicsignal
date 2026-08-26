@@ -1,11 +1,10 @@
 import unittest
-from unittest.mock import patch
 
 from insider_enrichment_runtime import enrich_item
 
 
 class InsiderEnrichmentTests(unittest.TestCase):
-    def test_labelled_primary_insider_table_is_parsed(self):
+    def test_labelled_primary_insider_table_is_parsed_without_network_estimate(self):
         item={
             'ticker':'LSG',
             'title':'Lerøy Seafood Group ASA: Primary Insider Transaction',
@@ -16,23 +15,21 @@ class InsiderEnrichmentTests(unittest.TestCase):
                 'Following the transaction Ola Nordmann holds 120 000 shares.'
             ),
         }
-        with patch('insider_enrichment_runtime._shares_outstanding', return_value=600_000_000):
-            x=enrich_item(item,'LSG')
+        x=enrich_item(item,'LSG')
         self.assertEqual(x['direction'],'buy')
         self.assertEqual(x['shares'],20000)
         self.assertAlmostEqual(x['price'],44.5)
         self.assertEqual(x['person'],'Ola Nordmann')
         self.assertEqual(x['holding_after_shares'],120000)
         self.assertAlmostEqual(x['transaction_value'],890000)
-        self.assertAlmostEqual(x['ownership_pct'],0.02)
-        self.assertEqual(x['ownership_pct_source'],'estimated_from_latest_annual_share_count')
+        self.assertNotIn('ownership_pct',x)
+        self.assertNotIn('shares_outstanding_reference',x)
 
-    def test_disclosed_ownership_percentage_wins_over_estimate(self):
+    def test_disclosed_ownership_percentage_is_preserved(self):
         item={
             'summary':'Nature of transaction: Sale; Volume: 5 000; Price: NOK 50.00; Holding after transaction: 90 000 shares; Ownership after transaction: 0.015%',
         }
-        with patch('insider_enrichment_runtime._shares_outstanding', return_value=1):
-            x=enrich_item(item,'LSG')
+        x=enrich_item(item,'LSG')
         self.assertEqual(x['direction'],'sell')
         self.assertEqual(x['shares'],5000)
         self.assertAlmostEqual(x['ownership_pct'],0.015)
