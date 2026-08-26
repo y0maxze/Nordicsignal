@@ -21,6 +21,7 @@ RUNTIME_MODULES = (
     "instrument_detail_runtime",
     "instrument_analytics_runtime",
     "instrument_signal_runtime",
+    "signal_events_runtime",
     "fund_news_runtime",
     "generic_paper_runtime",
 )
