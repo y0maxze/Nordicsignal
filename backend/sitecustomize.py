@@ -19,6 +19,8 @@ RUNTIME_MODULES = (
     "instrument_search_runtime",
     "global_search_runtime",
     "instrument_detail_runtime",
+    "instrument_analytics_runtime",
+    "generic_paper_runtime",
 )
 
 
