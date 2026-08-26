@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
@@ -51,6 +51,48 @@ class ProductionRuntimeTests(unittest.TestCase):
         }
         with patch.object(production, 'connect', return_value=_FakeConn(row)):
             self.assertTrue(production._latest_scores_fresh())
+
+    def test_only_fresh_partial_rows_can_be_upgraded_with_insider_data(self):
+        fresh = {
+            'fundamentals': 30,
+            'valuation': 14,
+            'sentiment': 11,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'source': 'partial_live',
+        }
+        with patch.object(production, 'connect', return_value=_FakeConn(fresh)):
+            self.assertEqual(
+                production._fresh_partial_components('LSG'),
+                {'fundamentals': 30, 'valuation': 14, 'sentiment': 11},
+            )
+
+        stale = dict(fresh)
+        stale['created_at'] = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        with patch.object(production, 'connect', return_value=_FakeConn(stale)):
+            self.assertIsNone(production._fresh_partial_components('LSG'))
+
+        old_live = dict(fresh)
+        old_live['source'] = 'live'
+        with patch.object(production, 'connect', return_value=_FakeConn(old_live)):
+            self.assertIsNone(production._fresh_partial_components('LSG'))
+
+    def test_stale_warmup_runs_yahoo_once_then_insider_only(self):
+        with patch.object(production.time, 'sleep'), \
+             patch.object(production, '_latest_scores_fresh', return_value=False), \
+             patch.object(main, 'refresh_all', return_value=[]) as refresh_all, \
+             patch.object(production, '_refresh_insiders_only', return_value=[]) as insiders_only:
+            production._market_warmup()
+        refresh_all.assert_called_once_with(include_insider=False)
+        insiders_only.assert_called_once_with()
+
+    def test_fresh_warmup_skips_all_provider_work(self):
+        with patch.object(production.time, 'sleep'), \
+             patch.object(production, '_latest_scores_fresh', return_value=True), \
+             patch.object(main, 'refresh_all') as refresh_all, \
+             patch.object(production, '_refresh_insiders_only') as insiders_only:
+            production._market_warmup()
+        refresh_all.assert_not_called()
+        insiders_only.assert_not_called()
 
 
 if __name__ == '__main__':
