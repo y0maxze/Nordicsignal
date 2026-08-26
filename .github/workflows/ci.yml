@@ -93,6 +93,9 @@ jobs:
           grep -q 'nsTopSignalFilter' frontend/dashboard_enhancements.js
           grep -q 'nsLatestSignalFilter' frontend/dashboard_enhancements.js
           grep -q "SIGNAL_FILTERS=\['Aksjer','Fond','ETF','Alle'\]" frontend/dashboard_enhancements.js
+          grep -q '/api/instrument-signals' frontend/dashboard_enhancements.js
+          grep -q '/api/instrument-signals/register' frontend/dashboard_enhancements.js
+          grep -q 'history_model' frontend/dashboard_enhancements.js
           grep -q "'/instrument/'" frontend/instrument.html
           grep -q '/analytics' frontend/instrument.html
           grep -q '/paper/instrument-order' frontend/instrument.html
