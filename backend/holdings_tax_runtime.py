@@ -162,8 +162,10 @@ _original_snapshot = holdings_routes.build_holdings_snapshot
 
 def build_holdings_snapshot_with_tax(provider=None):
     snapshot = _original_snapshot(provider)
-    # The public snapshot intentionally contains only the latest 250 transactions for UI.
-    # Tax analysis must use a larger ledger window so old acquisition lots are not silently lost.
+    # holdings_integrity_runtime performs the final calculation from the complete
+    # ledger. Avoid doing the same FIFO work twice when that layer is active.
+    if getattr(holdings_routes, '_complete_ledger_integrity_installed', False):
+        return snapshot
     transactions = holdings_routes._transaction_rows(1000)
     snapshot['realized_tax'] = fifo_realized_analysis(transactions)
     return snapshot
