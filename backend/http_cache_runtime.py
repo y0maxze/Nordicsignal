@@ -14,8 +14,13 @@ from starlette.responses import Response
 
 import extra_api
 
-_MAX_ENTRIES = 96
-_MAX_BODY_BYTES = 600_000
+# Keep this cache intentionally small on Render Free. The previous 96 x 600 kB
+# theoretical ceiling could retain about 58 MB of response bodies alone, before
+# Python/container overhead. Most NordicSignal JSON responses are far smaller than
+# 192 kB, so a 32-entry cache still removes duplicate upstream work with a much
+# tighter worst-case memory footprint (~6 MB of bodies).
+_MAX_ENTRIES = 32
+_MAX_BODY_BYTES = 192_000
 _CACHE = OrderedDict()
 _LOCK = threading.RLock()
 
