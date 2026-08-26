@@ -3,5 +3,6 @@
   load('/analysis_legacy.js')
     .catch(console.error)
     .finally(()=>load('/dashboard_enhancements.js').catch(console.error))
-    .finally(()=>load('/dashboard_performance.js').catch(console.error));
+    .finally(()=>load('/dashboard_performance.js').catch(console.error))
+    .finally(()=>load('/portfolio_dashboard.js').catch(console.error));
 })();
