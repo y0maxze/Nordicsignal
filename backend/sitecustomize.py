@@ -6,6 +6,7 @@ import logging
 log = logging.getLogger("nordicsignal.runtime")
 
 RUNTIME_MODULES = (
+    "provider_resilience_runtime",
     "insider_runtime",
     "insider_enrichment_runtime",
     "backtest_runtime",
