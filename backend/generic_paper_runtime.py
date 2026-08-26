@@ -1,13 +1,31 @@
-"""Make the existing paper-trading ledger price exact global market symbols safely.
+"""Paper-trading support for exact global symbols and amount-based fund orders.
 
 Tracked Oslo tickers such as LSG keep the historical `.OL` mapping. Symbols from the
 global instrument search (AAPL, OP0001OPBLIR, VOO, etc.) are treated as exact Yahoo
 symbols so portfolio valuation and sell validation do not accidentally append `.OL`.
+
+Traditional mutual funds are normally ordered by money amount rather than by a known
+number of units. The generic instrument page therefore has a dedicated paper endpoint
+that converts the entered amount to estimated units at the currently displayed NAV.
 """
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+
 import extra_api
 from database import connect
+from providers import YahooProvider
+
+
+class InstrumentAmountOrder(BaseModel):
+    symbol: str = Field(min_length=1, max_length=64)
+    side: str
+    amount: float = Field(gt=0)
+    price: float = Field(gt=0)
+    fee: float = Field(default=0, ge=0)
+    currency: str | None = Field(default=None, max_length=12)
+    instrument_name: str | None = Field(default=None, max_length=180)
 
 
 def _is_tracked_oslo(ticker):
@@ -59,6 +77,7 @@ def install():
     if getattr(extra_api, "_generic_paper_runtime_installed", False):
         return
     original_quote = extra_api._quote
+    original_install = extra_api.install
 
     def patched_quote(provider, ticker):
         symbol = str(ticker or "").upper().strip()
@@ -66,9 +85,60 @@ def install():
             return original_quote(provider, symbol)
         q = _exact_quote(provider, symbol)
         if q.get("price") is None:
-            from fastapi import HTTPException
             raise HTTPException(502, detail="Live quote unavailable")
         return q
 
     extra_api._quote = patched_quote
+
+    def patched_install(app):
+        original_install(app)
+        provider = YahooProvider()
+
+        @app.post("/api/paper/instrument-order")
+        def paper_instrument_amount_order(payload: InstrumentAmountOrder):
+            side = str(payload.side or "").lower()
+            if side not in ("buy", "sell"):
+                raise HTTPException(400, detail="side must be buy or sell")
+            symbol = payload.symbol.upper().strip()
+            amount = float(payload.amount)
+            price = float(payload.price)
+            fee = float(payload.fee)
+            shares = amount / price
+            if shares <= 0:
+                raise HTTPException(400, detail="Order amount is too small")
+
+            portfolio = extra_api._positions(provider)
+            position = next((p for p in portfolio["positions"] if str(p.get("ticker") or "").upper() == symbol), None)
+            held = float(position["shares"]) if position else 0.0
+            if side == "buy" and portfolio["cash"] < amount + fee:
+                raise HTTPException(400, detail="Insufficient paper cash")
+            if side == "sell" and held < shares - 1e-10:
+                raise HTTPException(400, detail=f"Insufficient paper units; holding {held:g}")
+
+            label = (payload.instrument_name or symbol).strip()
+            currency = (payload.currency or "").upper().strip()
+            note = f"Amount order: {amount:g} {currency}; estimated units at displayed NAV; {label}"[:240]
+            conn = connect()
+            try:
+                conn.execute(
+                    "INSERT INTO paper_trades(account_id,ticker,side,shares,price,fee,executed_at,note) VALUES(1,?,?,?,?,?,?,?)",
+                    (symbol, side, shares, price, fee, extra_api._now(), note),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            return {
+                "status": "ok",
+                "symbol": symbol,
+                "side": side,
+                "order_amount": amount,
+                "currency": currency or None,
+                "estimated_units": shares,
+                "nav_used": price,
+                "fee": fee,
+                "portfolio": extra_api._positions(provider),
+                "settlement_note": "Paper estimate uses the displayed NAV; a real mutual-fund order normally settles later at an unknown NAV.",
+            }
+
+    extra_api.install = patched_install
     extra_api._generic_paper_runtime_installed = True
