@@ -28,7 +28,6 @@
     return `<tr class="lotDetail"><td colspan="10"><div class="lotPanel"><div class="lotHead"><div><h3>${esc(x.instrument_name||x.company_name||x.ticker)} · kjøpsoversikt</h3><div class="lotSummary"><span>Totalt antall <b>${num(x.shares)}</b></span><span>Snittpris <b>${kr(x.average_cost)}</b></span><span>Investert <b>${kr(x.invested)}</b></span><span>Samlet resultat <b class="${cls(x.unrealized_pnl)}">${x.unrealized_pnl==null?'—':(Number(x.unrealized_pnl)>=0?'+':'')+kr(x.unrealized_pnl)} ${x.unrealized_pnl_pct==null?'':`(${Number(x.unrealized_pnl_pct)>=0?'+':''}${pct(x.unrealized_pnl_pct)})`}</b></span></div></div><div class="lotActions"><button class="btn compact" onclick="toggleAddPurchase(${Number(x.id)})">+ Legg til kjøp</button><button class="btn compact" onclick="togglePurchaseLots(${Number(x.id)})">Lukk</button></div></div>${purchaseTable(x)}</div></td></tr>`;
   }
 
-  const original=window.renderHoldingsTable;
   window.renderHoldingsTable=function(items){
     addStyles();
     const filtered=assetFilter&&assetFilter!=='Kontanter'?items.filter(x=>(x.asset_class||'Aksjer')===assetFilter):assetFilter==='Kontanter'?[]:items;
@@ -46,9 +45,7 @@
   window.toggleAddPurchase=function(id){id=Number(id);expanded.add(id);activeAddId=activeAddId===id?null:id;if(lastSnapshot)renderHoldingsTable(lastSnapshot.items||[])};
   window.initializePurchaseLots=async function(id){const input=$('lotInitDate'+Number(id)),purchase_date=input?.value;if(!purchase_date){alert('Velg kjøpsdato først.');return}try{await request(`/holdings/${Number(id)}/purchases/initialize`,{method:'POST',body:JSON.stringify({purchase_date})});expanded.add(Number(id));await loadHoldings()}catch(e){alert(e.message)}};
   window.savePurchaseLot=async function(id){id=Number(id);const purchase_date=$('lotDate'+id)?.value,shares=Number($('lotShares'+id)?.value),price_nok=Number($('lotPrice'+id)?.value),note=$('lotNote'+id)?.value?.trim()||null;if(!purchase_date||!Number.isFinite(shares)||shares<=0||!Number.isFinite(price_nok)||price_nok<=0){alert('Fyll inn kjøpsdato, antall og kjøpspris.');return}try{await request(`/holdings/${id}/purchases`,{method:'POST',body:JSON.stringify({purchase_date,shares,price_nok,note})});expanded.add(id);activeAddId=null;await loadHoldings()}catch(e){alert(e.message)}};
-  window.deletePurchaseLot=async function(purchaseId,holdingId){if(!confirm('Slette denne kjøpslinjen? Total antall og snittpris beregnes på nytt.'))return;try{await request(`/holdings/purchases/${Number(purchaseId)}`,{method:'DELETE'});expanded.add(Number(holdingId));await loadHoldings()}catch(e){alert(e.message)}};
+  window.deletePurchaseLot=async function(purchaseId,holdingId){if(!confirm('Slette denne kjøpslinjen? Total antall og snittpris beregnes på nytt.'))return;try{await request(`/holding-purchases/${Number(purchaseId)}`,{method:'DELETE'});expanded.add(Number(holdingId));await loadHoldings()}catch(e){alert(e.message)}};
 
-  // The inline page starts its first load before this enhancement arrives. Refresh
-  // once so existing positions immediately receive purchase-lot data and controls.
   if(typeof loadHoldings==='function')loadHoldings();
 })();
