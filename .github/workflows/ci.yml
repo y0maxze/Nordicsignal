@@ -96,6 +96,11 @@ jobs:
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'const API=""' frontend/index.html
+          if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then
+            echo 'Frontend must use the same-origin /api proxy instead of calling Render directly'
+            grep -R -n -F 'nordicsignal-api.onrender.com' frontend
+            exit 1
+          fi
           if grep -Fq 'Number(p)*100' frontend/index.html; then
             echo 'Dashboard fallback must not multiply Finanstilsynet short percent by 100'
             exit 1
