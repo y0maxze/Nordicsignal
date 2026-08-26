@@ -15,6 +15,11 @@ def install():
     original_get = YahooProvider._get
 
     def resilient_get(self, url, params=None, need_crumb=False):
+        # Instrument search already owns a host loop with search-specific zero-result
+        # handling, so applying this wrapper there would retry the same hosts twice.
+        if "/v1/finance/search" in url:
+            return original_get(self, url, params=params, need_crumb=need_crumb)
+
         candidates = [url]
         for base in self.BASES:
             if url.startswith(base):
