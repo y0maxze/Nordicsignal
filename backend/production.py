@@ -83,4 +83,4 @@ try:
 except ValueError:
     pass
 if production_startup not in app.router.on_startup:
-    app.add_event_handler("startup", production_startup)
+    app.router.on_startup.append(production_startup)
