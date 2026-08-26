@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 import re
 import time
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 from curl_cffi import requests
 
 
@@ -47,26 +47,57 @@ ISSUER_ARCHIVES={
  'BWLPG':'https://live.euronext.com/en/product/equities/BMG173841013-XOSL',
 }
 
+# Some issuers syndicate the exact regulated announcement through a stable publisher
+# index. This is used as a fallback when Euronext's product page exposes the release
+# title through JavaScript rather than as a directly labelled anchor.
+ISSUER_RELEASE_FEEDS={
+ 'LSG':'https://www.globenewswire.com/en/search/organization/Ler%C3%B8y%2520Seafood%2520Group%2520ASA?page=1',
+}
+
 PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
 BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|ervervet|ervervelse)\b',re.I)
 SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendelse)\b',re.I)
 TRADE_VERB=r'(?:purchased|purchase|bought|buy|acquired|acquisition|sold|sell|sale|disposed(?:\s+of)?|avhendet|solgt|solgte|salg|kjøpt|kjøpte|kjøp|ervervet|ervervelse)'
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
-ROLE=r'(?:CEO|CFO|COO|CTO|Chair|Chairman|Chairwoman|Board member|Director|Styremedlem|Styreleder|Konsernsjef|Finansdirektør|Finansdirektor)'
+ROLE=r'(?:CEO|CFO|COO(?:\s+Market Operations)?|CTO|Chair|Chairman|Chairwoman|Board member|Director|Styremedlem|Styreleder|Konsernsjef|Finansdirektør|Finansdirektor)'
 ENTITY_SUFFIX=r'(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC|Holding(?:s)?|Invest(?:ment)?(?:s)?)'
 
 _CACHE={}
 _CACHE_TTL=45
+
+_MONTHS={
+ 'january':1,'jan':1,'januar':1,
+ 'february':2,'feb':2,'februar':2,
+ 'march':3,'mar':3,'mars':3,
+ 'april':4,'apr':4,
+ 'may':5,'mai':5,
+ 'june':6,'jun':6,'juni':6,
+ 'july':7,'jul':7,'juli':7,
+ 'august':8,'aug':8,
+ 'september':9,'sep':9,
+ 'october':10,'oct':10,'oktober':10,'okt':10,
+ 'november':11,'nov':11,
+ 'december':12,'dec':12,'desember':12,'des':12,
+}
 
 
 def norm(v): return re.sub(r'[^a-z0-9]+',' ',(v or '').lower().replace('ø','o').replace('æ','ae').replace('å','a')).strip()
 
 
 def date_of(t):
-    m=re.search(r'\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b',t or '')
+    text=t or ''
+    m=re.search(r'\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b',text)
     if m:return f'{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}'
-    m=re.search(r'\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b',t or '')
-    return f'{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}' if m else None
+    m=re.search(r'\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b',text)
+    if m:return f'{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}'
+    month_names='|'.join(sorted((re.escape(x) for x in _MONTHS),key=len,reverse=True))
+    m=re.search(rf'\b(\d{{1,2}})\.?\s+({month_names})\s+(20\d{{2}})\b',text,re.I)
+    if m:
+        return f'{m.group(3)}-{_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}'
+    m=re.search(rf'\b({month_names})\s+(\d{{1,2}}),?\s+(20\d{{2}})\b',text,re.I)
+    if m:
+        return f'{m.group(3)}-{_MONTHS[m.group(1).lower()]:02d}-{int(m.group(2)):02d}'
+    return None
 
 
 def issuer_ok(body,ticker,name,title=''):
@@ -121,20 +152,28 @@ def parse_trade(body,ticker,title,source,url):
             person=name_first.group('name').strip(' ,.-–—'); role=name_first.group('role').strip()
 
     entity=None
-    entity_patterns=(
-        rf'\b(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})(?=\s+{TRADE_VERB}\b)',
-        rf'\b(?:through|via|by|gjennom)\s+(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})\b',
+    represented=re.search(
+        rf'\b(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX}),\s*(?:represented|representert).*?\b(?:by|ved)\s+(?P<rep>[A-ZÆØÅ][A-Za-zÀ-ÿ .\'-]{{2,80}})',
+        body or '',re.I,
     )
-    for p in entity_patterns:
-        mm=re.search(p,body or '',re.I)
-        if mm:
-            candidate=mm.group('entity').strip(' ,.-–—')
-            # Greedy company-name matches can include the preceding issuer sentence.
-            # Keep only the final sentence fragment nearest the trade verb.
-            candidate=re.split(r'[.!?]\s+',candidate)[-1].strip(' ,.-–—')
-            issuer_name=ISSUERS.get(ticker,(ticker,()))[0]
-            if norm(candidate)!=norm(issuer_name): entity=candidate
-            break
+    if represented:
+        entity=represented.group('entity').strip(' ,.-–—')
+        representative=represented.group('rep').strip(' ,.-–—')
+        if not role:
+            role=f'Representert ved {representative}'
+    else:
+        entity_patterns=(
+            rf'\b(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})(?=\s+{TRADE_VERB}\b)',
+            rf'\b(?:through|via|by|gjennom)\s+(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})\b',
+        )
+        for p in entity_patterns:
+            mm=re.search(p,body or '',re.I)
+            if mm:
+                candidate=mm.group('entity').strip(' ,.-–—')
+                candidate=re.split(r'[.!?]\s+',candidate)[-1].strip(' ,.-–—')
+                issuer_name=ISSUERS.get(ticker,(ticker,()))[0]
+                if norm(candidate)!=norm(issuer_name): entity=candidate
+                break
 
     price=_price_of(body)
     actor=person or entity
@@ -149,6 +188,31 @@ def parse_trade(body,ticker,title,source,url):
         'source':source,'verified_detail':direction in ('buy','sell') or shares is not None,
         'issuer_verified':True,'summary':' '.join(body.split())[:1000],'url':url,
     }
+
+
+def parse_trades(body,ticker,title,source,url):
+    """Return every disclosed trade from a release, not just the first sentence."""
+    text=' '.join((body or '').split())
+    release_date=date_of(text) or date_of(title)
+    rows=[]
+    for segment in re.split(r'(?<=[.!?])\s+(?=[A-ZÆØÅ])',text):
+        if not (BUY.search(segment) or SELL.search(segment)) or not SHARES.search(segment):
+            continue
+        row=parse_trade(segment,ticker,title,source,url)
+        if row.get('trade_date') is None and release_date:
+            row['trade_date']=release_date; row['date']=release_date
+        if row.get('shares') is not None or row.get('insider') or row.get('direction') in ('buy','sell'):
+            rows.append(row)
+    if not rows:
+        rows=[parse_trade(text,ticker,title,source,url)]
+        if rows[0].get('trade_date') is None and release_date:
+            rows[0]['trade_date']=release_date; rows[0]['date']=release_date
+    dedup=[]; seen=set()
+    for row in rows:
+        key=(row.get('date'),row.get('direction'),row.get('shares'),norm(row.get('insider')))
+        if key in seen: continue
+        seen.add(key); dedup.append(row)
+    return dedup
 
 
 def fetch(session,url,params=None):
@@ -177,10 +241,15 @@ def canonical_url(url):
         return url
 
 
+def _is_insider_label(label):
+    low=norm(label)
+    return any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig'))
+
+
 def install():
     try: from providers import NordicRegulatoryProvider
     except Exception: return
-    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v9',False): return
+    if getattr(NordicRegulatoryProvider,'_robust_insider_patch_v10',False): return
 
     def insider(self,ticker,company_name=''):
         ticker=(ticker or '').upper(); name=company_name or ISSUERS.get(ticker,(ticker,()))[0]
@@ -196,21 +265,44 @@ def install():
             try: html=fetch(session,page,{'keys':ticker,'page':0})
             except Exception: continue
             p=_Parser(); p.feed(html)
+            relevant=[]; fallback=[]
             for href,label in p.links:
-                full=href if href and href.startswith('http') else ('https://live.euronext.com'+href if href else '')
+                full=urljoin(page,href or '')
                 canonical=canonical_url(full)
-                if not full or canonical in seen: continue
-                low=norm(label)
-                if any(x in low for x in ('insider','primar','pdmr','mandatory notification','meldepliktig')) or ticker in ISSUER_ARCHIVES:
-                    seen.add(canonical); candidates.append((full,label))
+                if not href or canonical in seen: continue
+                if _is_insider_label(label):
+                    relevant.append((full,label,'Euronext Oslo Børs Newspoint'))
+                    seen.add(canonical)
+                elif page==ISSUER_ARCHIVES.get(ticker) and norm(label) in ('open in new window','open'):
+                    fallback.append((full,label,'Euronext Oslo Børs Newspoint'))
+                    seen.add(canonical)
+            candidates.extend(relevant)
+            # Euronext issuer pages sometimes render the release title outside the anchor
+            # and label the actual release link only as "Open in new window".
+            if not relevant:
+                candidates.extend(fallback[:12])
+
+        feed=ISSUER_RELEASE_FEEDS.get(ticker)
+        if feed:
+            try:
+                html=fetch(session,feed); p=_Parser(); p.feed(html)
+                for href,label in p.links:
+                    if not _is_insider_label(label): continue
+                    full=urljoin(feed,href or '')
+                    canonical=canonical_url(full)
+                    if not href or canonical in seen: continue
+                    seen.add(canonical)
+                    candidates.append((full,label,'GlobeNewswire issuer release'))
+            except Exception:
+                pass
 
         items=[]
-        for url,label in candidates[:80]:
+        for url,label,source in candidates[:60]:
             try:
                 detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text; low=norm(body)
                 if not any(norm(x) in low for x in PHRASES): continue
                 if not issuer_ok(body,ticker,name,label): continue
-                items.append(parse_trade(body,ticker,label,'Euronext Oslo Børs Newspoint',url))
+                items.extend(parse_trades(body,ticker,label,source,url))
             except Exception: continue
 
         try:
@@ -218,17 +310,21 @@ def install():
             data=session.get(f'https://query2.finance.yahoo.com/v1/finance/search?q={q}&newsCount=20',timeout=15).json()
             for n in data.get('news',[]):
                 title=n.get('title',''); url=n.get('link') or ''
-                if not any(x in norm(title) for x in ('primary insider','primærinsider','mandatory notification','meldepliktig')): continue
+                if not _is_insider_label(title): continue
                 try:
                     detail=fetch(session,url); p=_Parser(); p.feed(detail); body=p.text
                 except Exception: continue
                 if not issuer_ok(body,ticker,name,title) or not any(norm(x) in norm(body) for x in PHRASES): continue
-                items.append(parse_trade(body,ticker,title,'Yahoo Finance syndicated issuer release',url))
+                items.extend(parse_trades(body,ticker,title,'Yahoo Finance syndicated issuer release',url))
         except Exception: pass
 
         dedup={}
         for x in items:
-            k=(x.get('date'),x.get('direction'),x.get('shares'),norm(x.get('insider')),norm(x.get('summary',''))[:240])
+            actor_key=norm(x.get('insider'))
+            if actor_key or x.get('shares') is not None:
+                k=(x.get('date'),x.get('direction'),x.get('shares'),actor_key)
+            else:
+                k=(x.get('date'),x.get('direction'),canonical_url(x.get('url') or ''),norm(x.get('title')))
             if k not in dedup: dedup[k]=x
         items=sorted(dedup.values(),key=lambda x:x.get('date') or '',reverse=True)[:12]
         buys=sum(x['direction']=='buy' for x in items); sells=sum(x['direction']=='sell' for x in items); unknown=len(items)-buys-sells
@@ -240,6 +336,6 @@ def install():
         return result
 
     NordicRegulatoryProvider.insider=insider
-    NordicRegulatoryProvider._robust_insider_patch_v9=True
+    NordicRegulatoryProvider._robust_insider_patch_v10=True
 
 install()
