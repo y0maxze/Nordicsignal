@@ -190,9 +190,6 @@ def build_holdings_snapshot_with_purchase_lots(provider=None):
 
 
 def _replace_snapshot_route(app):
-    # Existing /api/holdings route resolves holdings_routes.build_holdings_snapshot at
-    # call time, so replacing the module function is sufficient. This helper exists
-    # only to make the intended dependency explicit.
     return True
 
 
@@ -214,8 +211,6 @@ def install():
             conn = connect()
             try:
                 holding = _holding_row(conn, holding_id)
-                # Preserve an existing aggregate position the first time detailed
-                # purchases are enabled, then add the new purchase on top.
                 _seed_legacy_lot(conn, holding)
                 cursor = conn.execute(
                     'INSERT INTO holding_purchase_lots(holding_id,shares,price_nok,purchase_date,note,source,created_at) '
@@ -252,7 +247,7 @@ def install():
                 conn.close()
             return {'status': 'ok', 'id': purchase_id}
 
-        @app.delete('/api/holdings/purchases/{purchase_id}')
+        @app.delete('/api/holding-purchases/{purchase_id}')
         def delete_purchase(purchase_id: int):
             conn = connect()
             try:
