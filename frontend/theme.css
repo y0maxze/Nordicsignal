@@ -2,62 +2,62 @@
   --bg:#070707!important;
   --p:#0d0d0d!important;
   --p2:#141414!important;
-  --line:#2a2a2a!important;
+  --line:#262626!important;
   --t:#f5f5f5!important;
-  --m:#a3a3a3!important;
+  --m:#969696!important;
   --g:#18c984!important;
   --y:#e6b94b!important;
   --r:#ff6b7d!important;
   --b:#d9d9d9!important;
 }
-*{scrollbar-color:#333 #0a0a0a}
+*{scrollbar-color:#303030 #090909}
 html{background:#070707}
 body{background:#070707!important;color:#f5f5f5!important;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;letter-spacing:-.01em}
-body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 75% -10%,rgba(255,255,255,.045),transparent 32%);z-index:-1}
+body:before{display:none!important}
 ::selection{background:#f5f5f5;color:#070707}
 a{color:#f2f2f2!important;text-underline-offset:3px}
 a:hover{color:#fff!important}
 h1,h2,h3{letter-spacing:-.025em}
 h1{font-weight:760!important}h2{font-weight:720!important}h3{font-weight:680!important}
-.side{width:252px!important;background:#090909!important;border-right:1px solid #242424!important;padding:24px 18px!important;box-shadow:12px 0 40px rgba(0,0,0,.18)}
-.app>.main{margin-left:252px!important}
+.side{width:228px!important;background:#090909!important;border-right:1px solid #222!important;padding:22px 14px!important;box-shadow:none!important}
+.app>.main{margin-left:228px!important}
 .logo{display:inline-flex;align-items:center;gap:0;font-weight:820!important;letter-spacing:-.04em;color:#fff!important;user-select:none}
 .logo span{color:#18c984!important}
-.side .logo{margin:2px 10px 30px!important;font-size:22px!important}
-nav a{display:block;color:#a8a8a8!important;border:1px solid transparent!important;border-radius:8px!important;padding:10px 12px!important;transition:background .14s ease,color .14s ease,border-color .14s ease!important;text-decoration:none!important}
+.side .logo{margin:2px 10px 27px!important;font-size:21px!important}
+nav a{display:block;color:#9c9c9c!important;border:1px solid transparent!important;border-radius:8px!important;padding:9px 11px!important;transition:background .12s ease,color .12s ease,border-color .12s ease!important;text-decoration:none!important}
 nav a:visited{text-decoration:none!important}
-nav a:hover{background:#111!important;color:#fff!important;border-color:#242424!important;text-decoration:none!important}
-nav a.active{background:#f3f3f3!important;color:#080808!important;border-color:#f3f3f3!important;font-weight:700!important;text-decoration:none!important}
+nav a:hover{background:#111!important;color:#fff!important;border-color:#222!important;text-decoration:none!important}
+nav a.active{background:#f1f1f1!important;color:#080808!important;border-color:#f1f1f1!important;font-weight:700!important;text-decoration:none!important}
 .sidebar .nav a,.sidebar nav a{text-decoration:none!important}
-.card,.section,.metric,.notice,#nsStockActions,.pressureAlert{background:#0e0e0e!important;border-color:#292929!important;box-shadow:none!important}
-.card,.section{border-radius:12px!important}
-.metric{border:1px solid #242424!important;border-radius:10px!important}
-.cards>.card{transition:transform .14s ease,border-color .14s ease,background .14s ease!important}
-.cards>.card:hover{background:#131313!important;border-color:#4a4a4a!important}
-.label,.sub,.muted,.small,th{color:#999!important}
+.card,.section,.metric,.notice,.pressureAlert{background:#0f0f0f!important;border-color:#272727!important;box-shadow:none!important}
+.card,.section{border-radius:11px!important}
+.metric{border:1px solid #232323!important;border-radius:9px!important}
+.cards>.card{transition:background .12s ease,border-color .12s ease!important}
+.cards>.card:hover{background:#111!important;border-color:#333!important}
+.label,.sub,.muted,.small,th{color:#929292!important}
 .value,.price,.big{font-variant-numeric:tabular-nums}
-.search,.input,.wideinput,.form input,.form select{background:#0b0b0b!important;border-color:#303030!important;color:#fff!important;box-shadow:none!important}
-.search:focus,.input:focus,.wideinput:focus,.form input:focus,.form select:focus{outline:2px solid #4a4a4a!important;outline-offset:1px!important;border-color:#555!important}
-.btn,.tab,#nsStockActions a{background:#151515!important;border-color:#303030!important;color:#f4f4f4!important;border-radius:8px!important;font-weight:650!important;transition:background .12s ease,border-color .12s ease,transform .12s ease!important}
-.btn:hover,.tab:hover,#nsStockActions a:hover{background:#202020!important;border-color:#505050!important;transform:translateY(-1px)}
-.btn.active,.tab.active{background:#f3f3f3!important;color:#090909!important;border-color:#f3f3f3!important}
+.search,.input,.wideinput,.form input,.form select{background:#0a0a0a!important;border-color:#2d2d2d!important;color:#fff!important;box-shadow:none!important}
+.search:focus,.input:focus,.wideinput:focus,.form input:focus,.form select:focus{outline:1px solid #5a5a5a!important;outline-offset:0!important;border-color:#555!important}
+.btn,.tab{background:#141414!important;border-color:#2d2d2d!important;color:#f4f4f4!important;border-radius:8px!important;font-weight:650!important;transition:background .12s ease,border-color .12s ease!important}
+.btn:hover,.tab:hover{background:#1d1d1d!important;border-color:#454545!important;transform:none!important}
+.btn.active,.tab.active{background:#f1f1f1!important;color:#090909!important;border-color:#f1f1f1!important}
 .btn.danger,.danger{background:#170d0f!important;border-color:#5b2730!important;color:#ff9cab!important}
-.badge,.pill{border:1px solid rgba(24,201,132,.25)!important;background:rgba(24,201,132,.10)!important;color:#51dda7!important}
-.badge.watch,.pill.watch{background:rgba(230,185,75,.10)!important;border-color:rgba(230,185,75,.25)!important;color:#f0c85f!important}
-.badge.risk,.pill.sell,.sell{background:rgba(255,107,125,.10)!important;border-color:rgba(255,107,125,.25)!important;color:#ff8897!important}
+.badge,.pill{border:1px solid rgba(24,201,132,.25)!important;background:rgba(24,201,132,.09)!important;color:#51dda7!important}
+.badge.watch,.pill.watch{background:rgba(230,185,75,.09)!important;border-color:rgba(230,185,75,.25)!important;color:#f0c85f!important}
+.badge.risk,.pill.sell,.sell{background:rgba(255,107,125,.09)!important;border-color:rgba(255,107,125,.25)!important;color:#ff8897!important}
 .g,.positive{color:#35d99b!important}.r,.negative{color:#ff7586!important}.y{color:#e9bf56!important}
-.bar{background:#232323!important}.fill{background:#dcdcdc!important}
-.row{border-color:#242424!important}.row:not(.head):hover{background:#111!important}
+.bar{background:#222!important}.fill{background:#dcdcdc!important}
+.row{border-color:#232323!important}.row:not(.head):hover{background:#101010!important}
 .stock:hover{color:#fff!important;text-decoration:underline}
-table th,table td,.table th,.table td{border-color:#252525!important}
-table tbody tr:hover,.table tbody tr:hover{background:#111!important}
-.chart{background:linear-gradient(180deg,rgba(255,255,255,.035),transparent)!important;border:1px solid #202020}
+table th,table td,.table th,.table td{border-color:#242424!important}
+table tbody tr:hover,.table tbody tr:hover{background:#101010!important}
+.chart{background:#0d0d0d!important;border:1px solid #202020}
 .chart svg path,.chart svg polyline{filter:saturate(.85)}
-.searchResults{background:#101010!important;border:1px solid #2a2a2a!important;box-shadow:0 20px 50px rgba(0,0,0,.45)!important}
-.result:hover{background:#191919!important}
-.nsGlobalHome{background:#0b0b0b!important;border-color:#2d2d2d!important;color:#fff!important;box-shadow:0 12px 28px rgba(0,0,0,.32)!important}
+.searchResults{background:#0e0e0e!important;border:1px solid #292929!important;box-shadow:0 18px 42px rgba(0,0,0,.42)!important}
+.result:hover{background:#171717!important}
+.nsGlobalHome{background:#0a0a0a!important;border-color:#292929!important;color:#fff!important;box-shadow:0 10px 24px rgba(0,0,0,.28)!important}
 .nsGlobalHome span{color:#18c984!important}
-.nsGlobalHome:hover{background:#151515!important;border-color:#4b4b4b!important}
+.nsGlobalHome:hover{background:#131313!important;border-color:#404040!important}
 #pressureAlertBar .pressureAlert.long{background:#0d1511!important;border-color:#24523e!important}
 #pressureAlertBar .pressureAlert.short{background:#160d0f!important;border-color:#572a31!important}
 .actorBadge.person{background:#151515!important;color:#ddd!important}.actorBadge.company{background:#17130b!important;color:#e7c16b!important}
