@@ -84,11 +84,19 @@ jobs:
           test -s frontend/history.html
           test -s frontend/news.html
           test -s frontend/holdings.html
+          test -s frontend/dashboard_performance.js
+          test -s backend/production.py
+          test -s backend/http_cache_runtime.py
+          test -s backend/holdings_integrity_runtime.py
+          grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
+          grep -q 'dashboard_performance.js' frontend/analysis.js
+          grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
+          grep -q 'Number(p).toFixed(2)' frontend/dashboard_performance.js
           grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
           grep -q 'nsTopSignalFilter' frontend/dashboard_enhancements.js
           grep -q 'nsLatestSignalFilter' frontend/dashboard_enhancements.js
