@@ -11,6 +11,8 @@ import logging
 import threading
 import time
 
+from starlette.responses import JSONResponse
+
 import main
 from database import connect
 
@@ -26,6 +28,77 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_signal_events_class_created ON signal_events(asset_class,created_at,id)",
     "CREATE INDEX IF NOT EXISTS idx_signal_catalog_class_seen ON signal_instrument_catalog(asset_class,last_seen_at)",
 )
+
+_REFRESH_COOLDOWN_SECONDS = 60
+_REFRESH_STATE_LOCK = threading.Lock()
+_REFRESH_IN_PROGRESS = False
+_LAST_REFRESH_FINISHED_AT = 0.0
+
+
+def _begin_provider_refresh(enforce_cooldown=True):
+    """Reserve the one production slot for expensive provider-wide refresh work."""
+    global _REFRESH_IN_PROGRESS
+    now = time.monotonic()
+    with _REFRESH_STATE_LOCK:
+        if _REFRESH_IN_PROGRESS:
+            return False, "in_progress", 1
+        if enforce_cooldown and _LAST_REFRESH_FINISHED_AT:
+            elapsed = max(0.0, now - _LAST_REFRESH_FINISHED_AT)
+            if elapsed < _REFRESH_COOLDOWN_SECONDS:
+                retry_after = max(1, int(_REFRESH_COOLDOWN_SECONDS - elapsed + 0.999))
+                return False, "cooldown", retry_after
+        _REFRESH_IN_PROGRESS = True
+        return True, "ok", 0
+
+
+def _finish_provider_refresh(mark_finished=True):
+    """Release the refresh slot and optionally start the anti-stampede cooldown."""
+    global _REFRESH_IN_PROGRESS, _LAST_REFRESH_FINISHED_AT
+    with _REFRESH_STATE_LOCK:
+        _REFRESH_IN_PROGRESS = False
+        if mark_finished:
+            _LAST_REFRESH_FINISHED_AT = time.monotonic()
+
+
+def _reset_refresh_guard_for_tests():
+    global _REFRESH_IN_PROGRESS, _LAST_REFRESH_FINISHED_AT
+    with _REFRESH_STATE_LOCK:
+        _REFRESH_IN_PROGRESS = False
+        _LAST_REFRESH_FINISHED_AT = 0.0
+
+
+@app.middleware("http")
+async def provider_refresh_guard(request, call_next):
+    """Prevent overlapping/click-spammed full refreshes in the production process."""
+    if request.url.path != "/api/refresh":
+        return await call_next(request)
+
+    allowed, reason, retry_after = _begin_provider_refresh(enforce_cooldown=True)
+    if not allowed:
+        message = (
+            "A market refresh is already running"
+            if reason == "in_progress"
+            else "Market data was refreshed recently"
+        )
+        return JSONResponse(
+            {
+                "status": "busy",
+                "code": "REFRESH_IN_PROGRESS" if reason == "in_progress" else "REFRESH_COOLDOWN",
+                "message": message,
+                "retry_after_seconds": retry_after,
+            },
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        # Even a failed provider attempt gets a short cooldown. Immediate retries are
+        # more likely to amplify an upstream outage than to repair it.
+        _finish_provider_refresh(mark_finished=True)
 
 
 def deduplicate_routes():
@@ -219,18 +292,27 @@ def _market_warmup():
     if _latest_scores_fresh():
         log.info("Skipping provider warmup because all active scores are fresh")
         return
+
+    allowed, reason, _ = _begin_provider_refresh(enforce_cooldown=False)
+    if not allowed:
+        log.info("Skipping provider warmup because another refresh is %s", reason)
+        return
+
     try:
-        main.refresh_all(include_insider=False)
-    except Exception:
-        log.exception("Background market refresh failed")
-    # Give the first dashboard requests priority before the slower regulatory pass.
-    # This second phase deliberately reuses the fresh partial score components so it
-    # does not repeat Yahoo quote/fundamentals/history work for all 24 instruments.
-    time.sleep(3)
-    try:
-        _refresh_insiders_only()
-    except Exception:
-        log.exception("Background insider refresh failed")
+        try:
+            main.refresh_all(include_insider=False)
+        except Exception:
+            log.exception("Background market refresh failed")
+        # Give the first dashboard requests priority before the slower regulatory pass.
+        # This second phase deliberately reuses the fresh partial score components so it
+        # does not repeat Yahoo quote/fundamentals/history work for all 24 instruments.
+        time.sleep(3)
+        try:
+            _refresh_insiders_only()
+        except Exception:
+            log.exception("Background insider refresh failed")
+    finally:
+        _finish_provider_refresh(mark_finished=True)
 
 
 def production_startup():
