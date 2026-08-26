@@ -18,6 +18,12 @@ class _FakeConn:
 
 
 class ProductionRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        production._reset_refresh_guard_for_tests()
+
+    def tearDown(self):
+        production._reset_refresh_guard_for_tests()
+
     def test_render_entrypoint_replaces_blocking_main_startup(self):
         handlers = list(production.app.router.on_startup)
         self.assertNotIn(main.startup, handlers)
@@ -76,6 +82,42 @@ class ProductionRuntimeTests(unittest.TestCase):
         with patch.object(production, 'connect', return_value=_FakeConn(old_live)):
             self.assertIsNone(production._fresh_partial_components('LSG'))
 
+    def test_refresh_guard_rejects_overlap(self):
+        allowed, reason, retry_after = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, 'ok')
+        self.assertEqual(retry_after, 0)
+
+        allowed, reason, retry_after = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, 'in_progress')
+        self.assertGreaterEqual(retry_after, 1)
+        production._finish_provider_refresh(mark_finished=True)
+
+    def test_refresh_guard_enforces_cooldown_after_attempt(self):
+        allowed, _, _ = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertTrue(allowed)
+        production._finish_provider_refresh(mark_finished=True)
+
+        allowed, reason, retry_after = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, 'cooldown')
+        self.assertGreaterEqual(retry_after, 1)
+
+    def test_startup_refresh_can_ignore_cooldown_but_not_overlap(self):
+        allowed, _, _ = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertTrue(allowed)
+        production._finish_provider_refresh(mark_finished=True)
+
+        allowed, reason, _ = production._begin_provider_refresh(enforce_cooldown=False)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, 'ok')
+
+        second, second_reason, _ = production._begin_provider_refresh(enforce_cooldown=False)
+        self.assertFalse(second)
+        self.assertEqual(second_reason, 'in_progress')
+        production._finish_provider_refresh(mark_finished=True)
+
     def test_stale_warmup_runs_yahoo_once_then_insider_only(self):
         with patch.object(production.time, 'sleep'), \
              patch.object(production, '_latest_scores_fresh', return_value=False), \
@@ -84,6 +126,18 @@ class ProductionRuntimeTests(unittest.TestCase):
             production._market_warmup()
         refresh_all.assert_called_once_with(include_insider=False)
         insiders_only.assert_called_once_with()
+
+    def test_warmup_skips_when_manual_refresh_already_owns_slot(self):
+        allowed, _, _ = production._begin_provider_refresh(enforce_cooldown=True)
+        self.assertTrue(allowed)
+        with patch.object(production.time, 'sleep'), \
+             patch.object(production, '_latest_scores_fresh', return_value=False), \
+             patch.object(main, 'refresh_all') as refresh_all, \
+             patch.object(production, '_refresh_insiders_only') as insiders_only:
+            production._market_warmup()
+        refresh_all.assert_not_called()
+        insiders_only.assert_not_called()
+        production._finish_provider_refresh(mark_finished=True)
 
     def test_fresh_warmup_skips_all_provider_work(self):
         with patch.object(production.time, 'sleep'), \
