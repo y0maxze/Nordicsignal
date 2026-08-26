@@ -10,7 +10,7 @@
 <div class="top"><div><div class="logo">Nordic<span>Signal</span></div><h1>Aksjenyheter & hendelser</h1><div class="sub">Nyheter, rapporter og relevante offentlige hendelser samlet per aksje.</div></div><div class="controls"><input id="ticker" class="input" value="LSG" maxlength="12"><button class="btn" onclick="loadAll()">Oppdater</button><button class="btn" onclick="location.href='/app'">← Dashboard</button></div></div>
 <div id="status" class="notice">Laster…</div><div class="grid"><section class="section"><div class="toolbar"><h2>Hva er nytt?</h2><span id="count" class="sub">—</span></div><div id="news"></div></section><section class="section"><div class="toolbar"><h2>Insider</h2><span id="insiderStatus" class="sub">—</span></div><div id="insider"></div><div style="height:20px"></div><div class="toolbar"><h2>Short</h2><span id="shortStatus" class="sub">—</span></div><div id="short"></div></section></div>
 <script>
-const API='https://nordicsignal-api.onrender.com';
+const API='';
 const esc=s=>String(s??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const get=async p=>{const r=await fetch(API+p);if(!r.ok)throw Error(await r.text());return r.json()};
 function tag(c){return `<span class="tag ${c==='Rapport'?'report':c==='Insider'?'insider':c==='Selskap'?'company':''}">${esc(c||'Nyhet')}</span>`}
