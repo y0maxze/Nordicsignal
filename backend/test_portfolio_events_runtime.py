@@ -84,6 +84,54 @@ class PortfolioEventRuntimeTests(unittest.TestCase):
         contract = next(x for x in events if x['kind'] == 'announcement')
         self.assertIn('kontrakt', contract['brief'].lower())
 
+    def test_insider_sales_are_separate_high_priority_portfolio_news(self):
+        def insider(ticker):
+            self.assertEqual(ticker, 'MPCC')
+            return {
+                'items': [
+                    {
+                        'transaction_type': 'sell',
+                        'person': 'Selling Director',
+                        'role': 'Board member',
+                        'trade_date': '2026-08-26',
+                        'shares': 25000,
+                        'price': 27.5,
+                        'url': 'https://exchange/insider-sell',
+                    },
+                    {
+                        'transaction_type': 'buy',
+                        'person': 'Buying CEO',
+                        'role': 'CEO',
+                        'trade_date': '2026-08-25',
+                        'shares': 5000,
+                        'price': 26.0,
+                        'url': 'https://exchange/insider-buy',
+                    },
+                ]
+            }
+
+        events = _events_for_one(
+            {'ticker': 'MPCC', 'company_name': 'MPC Container Ships'},
+            lambda ticker, limit: {'items': []},
+            lambda ticker, limit: {'items': []},
+            insider,
+        )
+        insider_events = [x for x in events if x.get('kind') == 'insider']
+        self.assertEqual(len(insider_events), 2)
+
+        sell = next(x for x in insider_events if x.get('direction') == 'sell')
+        self.assertEqual(sell['importance'], 'high')
+        self.assertIn('Insidersalg', sell['title'])
+        self.assertIn('Selling Director', sell['title'])
+        self.assertIn('25 000', sell['brief'])
+        self.assertIn('Insidersalg', sell['brief'])
+        self.assertEqual(sell['brief_tone'], 'negative')
+
+        buy = next(x for x in insider_events if x.get('direction') == 'buy')
+        self.assertEqual(buy['importance'], 'high')
+        self.assertIn('Insiderkjøp', buy['title'])
+        self.assertEqual(buy['brief_tone'], 'positive')
+
     def test_report_brief_includes_actual_event_day_market_reaction(self):
         event = {
             'ticker': 'MPCC',
