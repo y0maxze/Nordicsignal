@@ -14,8 +14,8 @@ from starlette.responses import Response
 
 import extra_api
 
-_MAX_ENTRIES = 160
-_MAX_BODY_BYTES = 1_000_000
+_MAX_ENTRIES = 96
+_MAX_BODY_BYTES = 600_000
 _CACHE = OrderedDict()
 _LOCK = threading.RLock()
 
@@ -109,15 +109,21 @@ def install():
             method = request.method.upper()
 
             if method not in {"GET", "HEAD"}:
+                # User-state writes are deliberately uncached and should not evict
+                # unrelated public market responses. Catalog registration is the one
+                # write that can change a cached public signal universe.
                 response = await call_next(request)
-                if response.status_code < 400:
+                if response.status_code < 400 and path == "/api/instrument-signals/register":
                     _clear()
                 return response
 
             ttl = _ttl_for(path)
             refresh = str(request.query_params.get("refresh", "")).lower() in {"1", "true", "yes"}
             if ttl <= 0 or refresh:
-                return await call_next(request)
+                response = await call_next(request)
+                if path == "/api/refresh" and response.status_code < 400:
+                    _clear()
+                return response
 
             key = f"{method}:{path}?{request.url.query}"
             cached = _get(key)
