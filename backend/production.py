@@ -26,6 +26,29 @@ _INDEXES = (
 )
 
 
+def deduplicate_routes():
+    """Drop exact shadowed route duplicates while preserving first-match behaviour."""
+    seen = set()
+    unique = []
+    removed = []
+    for route in app.router.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", None)
+        if not path or not methods:
+            unique.append(route)
+            continue
+        key = (path, tuple(sorted(methods)))
+        if key in seen:
+            removed.append(key)
+            continue
+        seen.add(key)
+        unique.append(route)
+    if removed:
+        app.router.routes[:] = unique
+        log.info("Removed %d shadowed duplicate routes", len(removed))
+    return removed
+
+
 def ensure_indexes():
     """Create performance indexes without making optional tables a startup blocker."""
     for statement in _INDEXES:
@@ -78,6 +101,7 @@ def production_startup():
 
 # main.startup synchronously refreshed all 24 stocks before Uvicorn reported ready.
 # Replace exactly that handler in production while leaving local/dev behaviour intact.
+deduplicate_routes()
 try:
     app.router.on_startup.remove(main.startup)
 except ValueError:
