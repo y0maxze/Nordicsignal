@@ -227,7 +227,7 @@ def install():
                 purchase_id = getattr(cursor, 'lastrowid', None)
             finally:
                 conn.close()
-            return {'status': 'ok', 'id': purchase_id, 'portfolio': holdings_routes.build_holdings_snapshot()}
+            return {'status': 'ok', 'id': purchase_id}
 
         @app.post('/api/holdings/{holding_id}/purchases/initialize')
         def initialize_existing_purchase(holding_id: int, payload: InitializePurchaseIn):
@@ -250,7 +250,7 @@ def install():
                 purchase_id = getattr(cursor, 'lastrowid', None)
             finally:
                 conn.close()
-            return {'status': 'ok', 'id': purchase_id, 'portfolio': holdings_routes.build_holdings_snapshot()}
+            return {'status': 'ok', 'id': purchase_id}
 
         @app.delete('/api/holdings/purchases/{purchase_id}')
         def delete_purchase(purchase_id: int):
@@ -267,7 +267,7 @@ def install():
                 conn.commit()
             finally:
                 conn.close()
-            return {'status': 'ok', 'portfolio': holdings_routes.build_holdings_snapshot()}
+            return {'status': 'ok'}
 
     extra_api.install = patched_install
 
