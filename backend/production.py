@@ -7,7 +7,9 @@ immediately and expensive market refreshes warm in the background.
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import gc
 import logging
+import os
 import threading
 import time
 
@@ -33,6 +35,38 @@ _REFRESH_COOLDOWN_SECONDS = 60
 _REFRESH_STATE_LOCK = threading.Lock()
 _REFRESH_IN_PROGRESS = False
 _LAST_REFRESH_FINISHED_AT = 0.0
+
+
+def _bounded_env_int(name, default, low=1, high=4):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(low, min(high, value))
+
+
+# Render Free has a 512 MB RAM ceiling. Provider work is network-bound, but each
+# concurrent curl/JSON parse also has a real native/Python memory cost. Two workers
+# keep useful parallelism without allowing five large market responses to peak at once.
+_PROVIDER_WORKERS = _bounded_env_int("NORDICSIGNAL_PROVIDER_WORKERS", 2)
+
+
+def _production_refresh_all(limit=None, include_insider=True):
+    """Memory-bounded replacement for main.refresh_all used by production only."""
+    tickers = main.TICKERS[:limit] if limit else main.TICKERS
+    results = []
+    with ThreadPoolExecutor(max_workers=_PROVIDER_WORKERS) as pool:
+        futures = {
+            pool.submit(main.refresh_one, ticker, include_insider): ticker
+            for ticker in tickers
+        }
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                ticker = futures[future]
+                results.append({"ticker": ticker, "source": "stored", "live_verified": False, "error": str(exc)})
+    return sorted(results, key=lambda item: item.get("ticker", ""))
 
 
 def _begin_provider_refresh(enforce_cooldown=True):
@@ -273,7 +307,7 @@ def _refresh_insider_one(ticker):
 def _refresh_insiders_only():
     """Run the slower regulatory phase without repeating Yahoo market requests."""
     results = []
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=_PROVIDER_WORKERS) as pool:
         futures = {pool.submit(_refresh_insider_one, ticker): ticker for ticker in main.TICKERS}
         for future in as_completed(futures):
             try:
@@ -303,6 +337,11 @@ def _market_warmup():
             main.refresh_all(include_insider=False)
         except Exception:
             log.exception("Background market refresh failed")
+        finally:
+            # Encourage short-lived Yahoo JSON/history objects to be reclaimed before
+            # the regulatory phase starts on memory-constrained Render instances.
+            gc.collect()
+
         # Give the first dashboard requests priority before the slower regulatory pass.
         # This second phase deliberately reuses the fresh partial score components so it
         # does not repeat Yahoo quote/fundamentals/history work for all 24 instruments.
@@ -311,6 +350,8 @@ def _market_warmup():
             _refresh_insiders_only()
         except Exception:
             log.exception("Background insider refresh failed")
+        finally:
+            gc.collect()
     finally:
         _finish_provider_refresh(mark_finished=True)
 
@@ -319,12 +360,17 @@ def production_startup():
     main.init_db()
     main.seed_db()
     ensure_indexes()
+    log.info("Production provider concurrency limited to %d workers", _PROVIDER_WORKERS)
     threading.Thread(
         target=_market_warmup,
         daemon=True,
         name="nordicsignal-market-warmup",
     ).start()
 
+
+# Production uses a lower-memory refresh implementation. The existing route handler
+# resolves main.refresh_all at request time, so this also protects manual /api/refresh.
+main.refresh_all = _production_refresh_all
 
 # main.startup synchronously refreshed all 24 stocks before Uvicorn reported ready.
 # Replace exactly that handler in production while leaving local/dev behaviour intact.
