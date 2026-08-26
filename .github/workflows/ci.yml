@@ -90,6 +90,9 @@ jobs:
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
+          grep -q 'nsTopSignalFilter' frontend/dashboard_enhancements.js
+          grep -q 'nsLatestSignalFilter' frontend/dashboard_enhancements.js
+          grep -q "SIGNAL_FILTERS=\['Aksjer','Fond','ETF','Alle'\]" frontend/dashboard_enhancements.js
           grep -q "'/instrument/'" frontend/instrument.html
           grep -q '/analytics' frontend/instrument.html
           grep -q '/paper/instrument-order' frontend/instrument.html
