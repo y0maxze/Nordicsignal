@@ -183,12 +183,6 @@ def stocks():
     conn = connect(); rows = conn.execute("SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source FROM stocks s JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=s.ticker) WHERE s.active=1 ORDER BY sc.total DESC").fetchall(); conn.close()
     return {"items": [{"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "score": r["total"], "fundamentals": r["fundamentals"], "insider": r["insider"] if r["source"] == "live" else None, "valuation": r["valuation"], "sentiment": r["sentiment"], "signal": signal_label(r["total"]), "score_source": r["source"], "live_verified": r["source"] == "live", "partial_live": r["source"] == "partial_live", "score_updated_at": r["created_at"]} for r in rows]}
 
-@app.get("/api/search")
-def search(q: str = ""):
-    q = q.strip()
-    if not q: return {"items": []}
-    conn = connect(); rows = conn.execute("SELECT ticker,name,sector,exchange FROM stocks WHERE active=1 AND (ticker LIKE ? OR name LIKE ?) ORDER BY name LIMIT 30", (f"%{q}%", f"%{q}%")).fetchall(); conn.close(); return {"items": [dict(r) for r in rows]}
-
 @app.get("/api/stocks/{ticker}")
 def stock(ticker: str):
     conn = connect(); r = conn.execute("SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source FROM stocks s JOIN scores sc ON sc.ticker=s.ticker WHERE s.ticker=? ORDER BY sc.id DESC LIMIT 1", (ticker.upper(),)).fetchone(); conn.close()
