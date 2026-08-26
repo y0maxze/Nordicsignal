@@ -79,21 +79,26 @@ jobs:
           test -s frontend/theme.css
           test -s frontend/index.html
           test -s frontend/stock.html
+          test -s frontend/stock_extras.js
           test -s frontend/instrument.html
           test -s frontend/paper.html
           test -s frontend/history.html
           test -s frontend/news.html
+          test -s frontend/calendar.html
           test -s frontend/holdings.html
           test -s frontend/dashboard_performance.js
+          test -s frontend/portfolio_dashboard.js
           test -s backend/production.py
           test -s backend/http_cache_runtime.py
           test -s backend/holdings_integrity_runtime.py
+          test -s backend/market_calendar_runtime.py
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
+          grep -q '\["/calendar", "/calendar.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'const API=""' frontend/index.html
           if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then
@@ -107,6 +112,12 @@ jobs:
           fi
           grep -Fq 'Number(p)>=3' frontend/index.html
           grep -q 'dashboard_performance.js' frontend/analysis.js
+          grep -q 'portfolio_dashboard.js' frontend/analysis.js
+          grep -q "location.href='/stock?ticker='" frontend/analysis.js
+          if grep -q 'analysis_legacy.js' frontend/analysis.js; then
+            echo 'Legacy duplicate stock-detail UI must not be loaded'
+            exit 1
+          fi
           grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
           grep -q 'Number(p).toFixed(2)' frontend/dashboard_performance.js
           grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
@@ -122,16 +133,25 @@ jobs:
           grep -q '/analytics' frontend/instrument.html
           grep -q '/paper/instrument-order' frontend/instrument.html
           grep -q 'Fondordre i beløp' frontend/instrument.html
+          grep -q '/api/holdings/calendar' frontend/portfolio_dashboard.js
+          grep -q '/api/calendar' frontend/calendar.html
           grep -q 'theme.css' worker.js
-          grep -q 'Stock Intelligence' worker.js
-          grep -q 'Paper Trading' worker.js
-          grep -q 'Market Pressure' worker.js
+          grep -q 'stock_extras.js' worker.js
+          grep -q 'Market Pressure' frontend/stock_extras.js
+          if grep -Eq 'STOCK_PRESSURE_UI|STOCK_INSIDER_UI|DASHBOARD_METRIC_UI|DASHBOARD_STOCK_ACTIONS_UI' worker.js; then
+            echo 'Large UI implementations must live in frontend assets, not the Cloudflare Worker'
+            exit 1
+          fi
+          if grep -q 'searchUpstream' worker.js; then
+            echo 'Search must use the same canonical /api proxy as other API routes'
+            exit 1
+          fi
       - name: Check navigation invariants
         run: |
           grep -q 'href="/app"' worker.js
           grep -q 'nsGlobalHome' worker.js
-          grep -q 'nsMetricCard' worker.js
-          grep -q 'STOCK_TAB_DEEPLINK_MARKER' worker.js
+          grep -q 'href="/calendar"' worker.js
+          grep -q "data-tab='pressure'\|data-tab=\"pressure\"\|dataset.tab='pressure'" frontend/stock_extras.js
           if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then
             echo 'Global search must open instrument intelligence, not Holdings'
             exit 1
