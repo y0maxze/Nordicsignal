@@ -89,11 +89,18 @@ jobs:
           test -s backend/http_cache_runtime.py
           test -s backend/holdings_integrity_runtime.py
           grep -q 'startCommand: uvicorn production:app' render.yaml
+          grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q 'frontend/holdings.html' frontend/index.html
+          grep -q 'const API=""' frontend/index.html
+          if grep -Fq 'Number(p)*100' frontend/index.html; then
+            echo 'Dashboard fallback must not multiply Finanstilsynet short percent by 100'
+            exit 1
+          fi
+          grep -Fq 'Number(p)>=3' frontend/index.html
           grep -q 'dashboard_performance.js' frontend/analysis.js
           grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
           grep -q 'Number(p).toFixed(2)' frontend/dashboard_performance.js
