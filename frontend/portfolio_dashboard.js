@@ -2,17 +2,20 @@
   const esc=v=>String(v==null?'':v).replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const nok=v=>v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:0})+' kr';
   const pct=v=>v==null?'—':(Number(v)>=0?'+':'')+Number(v).toLocaleString('no-NO',{maximumFractionDigits:2})+'%';
-  let compareBenchmark='OSEBX',comparePeriod='1y',compareSeq=0;
+  let compareBenchmark='OSEBX',comparePeriod='1y',compareSeq=0,pulseMode='news',pulseTimer=null,pulseSeq=0;
+  let currentEvents=[],currentCalendar=[];
 
   function styles(){
     if(document.getElementById('nsPortfolioHomeStyles'))return;
     const s=document.createElement('style');s.id='nsPortfolioHomeStyles';s.textContent=`
       .nsHomeWrap{margin-top:22px}.nsHomeCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
-      .nsHomeCard,.nsHomePanel{background:#101010;border:1px solid #282828;border-radius:12px}.nsHomeCard{padding:17px 18px}.nsHomeCard .k{color:#8d8d8d;font-size:11px}.nsHomeCard .v{font-size:24px;font-weight:850;margin-top:5px;letter-spacing:-.02em}.nsHomeCard .m{color:#777;font-size:10px;margin-top:5px}
+      .nsHomeCard,.nsHomePanel{background:#101010;border:1px solid #282828;border-radius:12px}.nsHomeCard{padding:17px 18px}.nsHomeCard .k{color:#8d8d8d;font-size:11px}.nsHomeCard .v{font-size:24px;font-weight:850;margin-top:5px;letter-spacing:-.02em}.nsHomeCard .m{color:#777;font-size:10px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .nsHomeGrid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(330px,.75fr);gap:16px}.nsHomePanel{padding:18px}.nsHomeHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.nsHomeHead h2{margin:0;font-size:17px}.nsHomeHead p{margin:4px 0 0;color:#858585;font-size:11px}.nsHomeLink{color:#d8d8d8;font-size:11px;text-decoration:none;border:1px solid #303030;border-radius:8px;padding:7px 9px;white-space:nowrap}.nsHomeLink:hover{border-color:#555;color:#fff}
       .nsHoldingRow{display:grid;grid-template-columns:minmax(160px,1.4fr) .85fr .7fr .55fr;gap:12px;align-items:center;padding:13px 2px;border-top:1px solid #242424;cursor:pointer}.nsHoldingRow:first-of-type{border-top:0}.nsHoldingRow:hover .nsHoldingName{color:#35d49a}.nsHoldingName{font-weight:800}.nsTicker{display:block;color:#747474;font-size:10px;margin-top:3px}.nsRight{text-align:right}.nsPos{color:#35d49a}.nsNeg{color:#fb7185}.nsWeight{height:4px;background:#242424;border-radius:99px;margin-top:6px;overflow:hidden}.nsWeight i{display:block;height:100%;background:#717171;border-radius:99px}
       .nsBriefLead{border:1px solid #292929;background:#0c0c0c;border-radius:9px;padding:11px 12px;margin-bottom:4px}.nsBriefLead b{font-size:11px}.nsBriefLead span{display:block;color:#858585;font-size:10px;line-height:1.45;margin-top:4px}.nsBriefMark{display:inline-flex;align-items:center;border:1px solid #3a3a3a;border-radius:999px;padding:4px 7px;color:#c9c9c9;font-size:9px;font-weight:850;letter-spacing:.04em}
+      .nsPulseTabs{display:flex;gap:4px;padding:3px;background:#0b0b0b;border:1px solid #292929;border-radius:9px;margin:0 0 8px}.nsPulseTab{flex:1;border:0;background:transparent;color:#888;border-radius:6px;padding:7px 8px;font:750 10px system-ui;cursor:pointer}.nsPulseTab.active{background:#ededed;color:#090909}.nsPulseFoot{display:flex;justify-content:space-between;gap:10px;align-items:center;color:#666;font-size:9px;border-top:1px solid #222;padding-top:10px;margin-top:4px}.nsPulseFoot a{color:#aaa;text-decoration:none}.nsPulseFoot a:hover{color:#fff}
       .nsEvent{display:block;padding:13px 0;border-top:1px solid #242424;text-decoration:none;color:#eee}.nsEvent:first-of-type{border-top:0}.nsEvent:hover .nsEventTitle{color:#fff}.nsEventTop{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.nsEventTicker{font-size:10px;font-weight:850;color:#bdbdbd}.nsEventBadge{font-size:9px;font-weight:900;letter-spacing:.03em;padding:3px 6px;border-radius:999px;border:1px solid #393939;color:#aaa}.nsEventBadge.report{color:#e7c16b;border-color:#554923;background:#17150c}.nsEventBadge.buy{color:#35d49a;border-color:#24503f;background:#0d1814}.nsEventBadge.sell{color:#fb7185;border-color:#5b2b34;background:#1b0f12}.nsEventBadge.important{color:#ffcb73;border-color:#624824;background:#1c160d}.nsEventTitle{font-weight:750;font-size:12px;margin-top:7px;line-height:1.35}.nsEventBrief{color:#a2a2a2;font-size:10px;line-height:1.5;margin-top:5px}.nsEventMeta{color:#6f6f6f;font-size:9px;margin-top:5px}
+      .nsCalendarRow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:11px;align-items:center;padding:12px 0;border-top:1px solid #242424;text-decoration:none;color:#eee}.nsCalendarRow:first-of-type{border-top:0}.nsCalendarDate{width:42px;text-align:center;border:1px solid #303030;border-radius:8px;background:#0b0b0b;padding:5px 2px}.nsCalendarDate b{display:block;font-size:15px}.nsCalendarDate span{display:block;color:#777;font-size:8px;text-transform:uppercase;margin-top:1px}.nsCalendarMain b{font-size:11px}.nsCalendarMain span{display:block;color:#797979;font-size:9px;margin-top:3px}.nsCalendarDays{font-size:9px;color:#929292;white-space:nowrap}.nsCalendarRow:hover .nsCalendarMain b{color:#fff;text-decoration:underline}
       .nsCompare{margin-top:16px}.nsCompareHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}.nsCompareControls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.nsCompareSelect{appearance:auto;background:#0b0b0b;color:#eee;border:1px solid #303030;border-radius:8px;padding:8px 28px 8px 9px;font:650 11px system-ui;outline:none}.nsPeriods{display:flex;gap:4px;padding:3px;border:1px solid #292929;border-radius:9px;background:#0b0b0b}.nsPeriod{border:0;background:transparent;color:#858585;border-radius:6px;padding:6px 8px;font:750 10px system-ui;cursor:pointer}.nsPeriod.active{background:#ededed;color:#090909}.nsCompareStats{display:flex;gap:28px;flex-wrap:wrap;margin:18px 0 8px}.nsCompareStat span{display:block;color:#777;font-size:10px}.nsCompareStat b{display:block;font-size:17px;margin-top:4px}.nsChartWrap{position:relative;height:285px;margin-top:6px}.nsChartWrap svg{width:100%;height:100%;display:block;overflow:visible}.nsChartGrid{stroke:#242424;stroke-width:1}.nsChartZero{stroke:#3a3a3a;stroke-width:1}.nsPortfolioLine{fill:none;stroke:#35d49a;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.nsBenchmarkLine{fill:none;stroke:#d7d7d7;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round;opacity:.78}.nsChartLabel{fill:#727272;font-size:9px}.nsCompareLegend{display:flex;gap:18px;align-items:center;flex-wrap:wrap;color:#8b8b8b;font-size:10px;margin-top:8px}.nsLegendDot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.nsLegendDot.portfolio{background:#35d49a}.nsLegendDot.benchmark{background:#d7d7d7}.nsCompareNote{color:#666;font-size:9px;line-height:1.45;margin-top:10px}.nsCompareLoading{height:250px;display:flex;align-items:center;justify-content:center;color:#777}.nsEmptyHome{padding:28px 18px;text-align:center;color:#888}.nsEmptyHome b{display:block;color:#eee;font-size:16px;margin-bottom:7px}.nsHomeSkeleton{padding:24px;color:#888;background:#101010;border:1px solid #282828;border-radius:12px}
       @media(max-width:1050px){.nsHomeCards{grid-template-columns:repeat(2,1fr)}.nsHomeGrid{grid-template-columns:1fr}}
       @media(max-width:650px){.nsHomeCards{grid-template-columns:1fr}.nsHoldingRow{grid-template-columns:1fr .8fr .65fr}.nsHoldingRow>:nth-child(4){display:none}.nsHomePanel{padding:15px}.nsCompareControls{width:100%}.nsCompareSelect{width:100%}.nsChartWrap{height:230px}.nsCompareStats{gap:16px}}
@@ -29,7 +32,7 @@
   }
   function eventHref(x){
     const tab=x.kind==='report'?'reports':x.kind==='insider'?'insider':x.kind==='dividend'?'dividend':'news';
-    return '/stock?ticker='+encodeURIComponent(x.ticker||'')+'&tab='+tab;
+    return '/stock?ticker='+encodeURIComponent(String(x.ticker||'').replace(/\.OL$/,''))+'&tab='+tab;
   }
   function dateLabel(x){
     if(!x.occurred_at)return 'Dato ikke oppgitt';
@@ -49,8 +52,24 @@
     const list=(items||[]).slice(0,6);
     if(!list.length)return '<div class="nsEmptyHome"><b>Ingen viktige hendelser akkurat nå</b>Når en aksje i beholdningen får rapport, insiderhandel eller viktig børsmelding, vises den her.</div>';
     const high=list.filter(x=>x.importance==='high').length;
-    const lead=`<div class="nsBriefLead"><b>Kort fortalt</b><span>${high?high+' viktige hendelse'+(high===1?'':'r')+' ligger øverst. ':''}NordicSignal prioriterer rapporter, insiderhandler og offisielle selskapsmeldinger fra aksjene du faktisk eier.</span></div>`;
-    return lead+list.map(x=>{const [label,cls]=eventLabel(x),important=x.importance==='high'?'<span class="nsEventBadge important">VIKTIG</span>':'';return `<a class="nsEvent" href="${eventHref(x)}"><div class="nsEventTop"><span class="nsEventTicker">${esc(x.ticker)}</span><span class="nsEventBadge ${cls}">${esc(label)}</span>${important}</div><div class="nsEventTitle">${esc(x.title)}</div>${x.brief?`<div class="nsEventBrief">${esc(x.brief)}</div>`:''}<div class="nsEventMeta">${esc(x.company||x.ticker)} · ${esc(dateLabel(x))}</div></a>`}).join('');
+    const lead=`<div class="nsBriefLead"><b>Kort fortalt</b><span>${high?high+' viktige hendelse'+(high===1?'':'r')+' ligger øverst. ':''}NordicSignal kobler offisielle hendelser med markedsreaksjon og viser bare det som gjelder aksjene du eier.</span></div>`;
+    return lead+list.map(x=>{const [label,cls]=eventLabel(x),important=x.importance==='high'?'<span class="nsEventBadge important">VIKTIG</span>':'';return `<a class="nsEvent" href="${eventHref(x)}"><div class="nsEventTop"><span class="nsEventTicker">${esc(String(x.ticker||'').replace(/\.OL$/,''))}</span><span class="nsEventBadge ${cls}">${esc(label)}</span>${important}</div><div class="nsEventTitle">${esc(x.title)}</div>${x.brief?`<div class="nsEventBrief">${esc(x.brief)}</div>`:''}<div class="nsEventMeta">${esc(x.company||x.ticker)} · ${esc(dateLabel(x))}</div></a>`}).join('');
+  }
+
+  function calendarHref(x){
+    if(x.ticker){const tab=x.event_type==='report'?'reports':'overview';return '/stock?ticker='+encodeURIComponent(x.ticker)+'&tab='+tab}
+    return x.url||'/calendar';
+  }
+  function calendarRows(items){
+    const list=(items||[]).slice(0,7);
+    if(!list.length)return '<div class="nsEmptyHome"><b>Ingen planlagte hendelser funnet</b>Kalenderen oppdateres fra den offisielle Oslo Børs-finanskalenderen.</div>';
+    return list.map(x=>{let d;try{d=new Date(String(x.date)+'T12:00:00')}catch{}const day=d&&!Number.isNaN(d.getTime())?String(d.getDate()).padStart(2,'0'):'—',month=d&&!Number.isNaN(d.getTime())?d.toLocaleDateString('no-NO',{month:'short'}):'';const when=Number(x.days_until)===0?'I dag':Number(x.days_until)===1?'I morgen':Number(x.days_until)>1?'om '+x.days_until+' dager':'';return `<a class="nsCalendarRow" href="${esc(calendarHref(x))}"${!x.ticker&&x.url?' target="_blank" rel="noopener"':''}><span class="nsCalendarDate"><b>${esc(day)}</b><span>${esc(month)}</span></span><span class="nsCalendarMain"><b>${esc(x.ticker?x.ticker+' · '+x.event_label:x.company+' · '+x.event_label)}</b><span>${esc(x.company||'Oslo Børs')} · ${esc(x.event_raw||x.event_label||'Hendelse')}</span></span><span class="nsCalendarDays">${esc(when)}</span></a>`}).join('');
+  }
+
+  function renderPulse(){
+    const body=document.getElementById('nsPulseBody');if(!body)return;
+    document.querySelectorAll('.nsPulseTab').forEach(b=>b.classList.toggle('active',b.dataset.mode===pulseMode));
+    body.innerHTML=pulseMode==='upcoming'?calendarRows(currentCalendar):eventRows(currentEvents);
   }
 
   function comparePanel(){
@@ -87,25 +106,60 @@
     }catch(e){if(mine!==compareSeq)return;body.innerHTML='<div class="nsEmptyHome"><b>Sammenligningen er midlertidig utilgjengelig</b>Beholdningen og resten av forsiden fungerer fortsatt.</div>';console.warn(e)}
   }
 
+  function updatePulseCards(events,calendar){
+    const important=document.getElementById('nsImportantValue'),nextValue=document.getElementById('nsNextEventValue'),nextMeta=document.getElementById('nsNextEventMeta');
+    if(important)important.textContent=String(events?.high_priority_count||0);
+    const next=(calendar?.items||[])[0];
+    if(nextValue)nextValue.textContent=!next?'—':Number(next.days_until)===0?'I dag':Number(next.days_until)===1?'I morgen':next.days_until+' d';
+    if(nextMeta)nextMeta.textContent=next?(String(next.ticker||next.company)+' · '+String(next.event_label||next.event_raw||'Hendelse')):'Ingen planlagt hendelse funnet';
+  }
+
+  async function refreshPulse(){
+    const mine=++pulseSeq;
+    try{
+      const [eRes,cRes]=await Promise.all([
+        fetch('/api/holdings/events?limit=12',{cache:'no-store'}),
+        fetch('/api/holdings/calendar?days=90&limit=16',{cache:'no-store'})
+      ]);
+      const events=await eRes.json().catch(()=>({})),calendar=await cRes.json().catch(()=>({}));
+      if(mine!==pulseSeq)return;
+      if(eRes.ok)currentEvents=events.items||[];
+      if(cRes.ok)currentCalendar=calendar.items||[];
+      renderPulse();updatePulseCards(eRes.ok?events:{high_priority_count:currentEvents.filter(x=>x.importance==='high').length},cRes.ok?calendar:{items:currentCalendar});
+      const stamp=document.getElementById('nsPulseUpdated');if(stamp)stamp.textContent='Oppdatert '+new Date().toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){console.warn('portfolio pulse refresh failed',e)}
+  }
+
+  function startPulseTimer(){
+    if(pulseTimer)clearInterval(pulseTimer);
+    pulseTimer=setInterval(()=>{const active=document.querySelector('#nav a.active');if(!document.hidden&&(!active||active.dataset.page==='Dashboard'))refreshPulse()},120000);
+  }
+
   async function renderPortfolioHome(){
     styles();
     if(typeof setTitle==='function')setTitle('Min oversikt','Beholdning, markedssammenligning og viktige hendelser');
     const view=document.getElementById('appview');if(!view)return;
-    view.innerHTML='<div class="nsHomeWrap"><div class="nsHomeSkeleton">Laster beholdning og hendelser…</div></div>';
+    view.innerHTML='<div class="nsHomeWrap"><div class="nsHomeSkeleton">Laster beholdning, siste nytt og kalender…</div></div>';
     try{
-      const [hRes,eRes]=await Promise.all([
+      const [hRes,eRes,cRes]=await Promise.all([
         fetch('/api/holdings',{cache:'no-store'}),
-        fetch('/api/holdings/events?limit=12',{cache:'no-store'})
+        fetch('/api/holdings/events?limit=12',{cache:'no-store'}),
+        fetch('/api/holdings/calendar?days=90&limit=16',{cache:'no-store'})
       ]);
-      const holdings=await hRes.json().catch(()=>({})),events=await eRes.json().catch(()=>({}));
+      const holdings=await hRes.json().catch(()=>({})),events=await eRes.json().catch(()=>({})),calendar=await cRes.json().catch(()=>({}));
       if(!hRes.ok)throw Error(holdings.detail||'Beholdning kunne ikke hentes');
-      const summary=holdings.summary||{},items=holdings.items||[],eventItems=eRes.ok?(events.items||[]):[];
-      const pnl=summary.unrealized_pnl,pnlCls=pnl==null?'':Number(pnl)>=0?'nsPos':'nsNeg';
-      view.innerHTML=`<div class="nsHomeWrap"><section class="nsHomeCards"><div class="nsHomeCard"><div class="k">Porteføljeverdi</div><div class="v">${nok(summary.market_value)}</div><div class="m">${esc(summary.position_count||0)} posisjoner</div></div><div class="nsHomeCard"><div class="k">Urealisert resultat</div><div class="v ${pnlCls}">${nok(pnl)}</div><div class="m ${pnlCls}">${pct(summary.unrealized_pnl_pct)}</div></div><div class="nsHomeCard"><div class="k">Viktige hendelser</div><div class="v">${esc(events.high_priority_count||0)}</div><div class="m">Rapport / insider / større melding</div></div><div class="nsHomeCard"><div class="k">Aksjer med pris</div><div class="v">${esc(summary.priced_count||0)} / ${esc(summary.position_count||0)}</div><div class="m">Live markedsverdi der kurs finnes</div></div></section><div class="nsHomeGrid"><section class="nsHomePanel"><div class="nsHomeHead"><div><h2>Min beholdning</h2><p>Største posisjoner først</p></div><a class="nsHomeLink" href="/frontend/holdings.html">Administrer beholdning</a></div>${holdingRows(items)}</section><section class="nsHomePanel"><div class="nsHomeHead"><div><h2>Siste nytt fra beholdningen</h2><p>Kort forklaring av det viktigste</p></div><span class="nsBriefMark">NORDICSIGNAL BRIEF</span></div>${eventRows(eventItems)}</section></div>${comparePanel()}</div>`;
-      view.querySelectorAll('[data-ns-holding]').forEach(el=>el.onclick=()=>{const t=el.dataset.nsHolding;if(typeof showStock==='function')showStock(t);else location.href='/stock?ticker='+encodeURIComponent(t)});
+      const summary=holdings.summary||{},items=holdings.items||[];
+      currentEvents=eRes.ok?(events.items||[]):[];currentCalendar=cRes.ok?(calendar.items||[]):[];
+      const pnl=summary.unrealized_pnl,pnlCls=pnl==null?'':Number(pnl)>=0?'nsPos':'nsNeg',next=currentCalendar[0];
+      const nextValue=!next?'—':Number(next.days_until)===0?'I dag':Number(next.days_until)===1?'I morgen':next.days_until+' d';
+      const nextMeta=next?(String(next.ticker||next.company)+' · '+String(next.event_label||next.event_raw||'Hendelse')):'Ingen planlagt hendelse funnet';
+      view.innerHTML=`<div class="nsHomeWrap"><section class="nsHomeCards"><div class="nsHomeCard"><div class="k">Porteføljeverdi</div><div class="v">${nok(summary.market_value)}</div><div class="m">${esc(summary.position_count||0)} posisjoner</div></div><div class="nsHomeCard"><div class="k">Urealisert resultat</div><div class="v ${pnlCls}">${nok(pnl)}</div><div class="m ${pnlCls}">${pct(summary.unrealized_pnl_pct)}</div></div><div class="nsHomeCard"><div class="k">Viktig nå</div><div id="nsImportantValue" class="v">${esc(events.high_priority_count||0)}</div><div class="m">Rapport · insider · større melding</div></div><div class="nsHomeCard"><div class="k">Neste hendelse</div><div id="nsNextEventValue" class="v">${esc(nextValue)}</div><div id="nsNextEventMeta" class="m">${esc(nextMeta)}</div></div></section><div class="nsHomeGrid"><section class="nsHomePanel"><div class="nsHomeHead"><div><h2>Min beholdning</h2><p>Største posisjoner først</p></div><a class="nsHomeLink" href="/frontend/holdings.html">Administrer beholdning</a></div>${holdingRows(items)}</section><section class="nsHomePanel"><div class="nsHomeHead"><div><h2>For min beholdning</h2><p>Hva har skjedd og hva kommer</p></div><span class="nsBriefMark">NORDICSIGNAL BRIEF</span></div><div class="nsPulseTabs"><button class="nsPulseTab${pulseMode==='news'?' active':''}" data-mode="news">Siste nytt</button><button class="nsPulseTab${pulseMode==='upcoming'?' active':''}" data-mode="upcoming">Kommende</button></div><div id="nsPulseBody"></div><div class="nsPulseFoot"><span id="nsPulseUpdated">Oppdatert ${new Date().toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'})}</span><a href="/calendar">Åpne kalender →</a></div></section></div>${comparePanel()}</div>`;
+      renderPulse();
+      view.querySelectorAll('[data-ns-holding]').forEach(el=>el.onclick=()=>{const t=String(el.dataset.nsHolding||'').replace(/\.OL$/,'');if(typeof showStock==='function')showStock(t);else location.href='/stock?ticker='+encodeURIComponent(t)});
+      view.querySelectorAll('.nsPulseTab').forEach(b=>b.onclick=()=>{pulseMode=b.dataset.mode||'news';renderPulse()});
       const select=document.getElementById('nsCompareSelect');if(select)select.onchange=()=>{compareBenchmark=select.value;loadComparison()};
       document.querySelectorAll('.nsPeriod').forEach(b=>b.onclick=()=>{comparePeriod=b.dataset.period||'1y';loadComparison()});
-      loadComparison();
+      loadComparison();startPulseTimer();
     }catch(e){
       console.error(e);view.innerHTML='<div class="nsHomeWrap"><div class="nsHomeSkeleton">Min oversikt kunne ikke lastes akkurat nå. De andre NordicSignal-sidene fungerer fortsatt som før.</div></div>';
     }
