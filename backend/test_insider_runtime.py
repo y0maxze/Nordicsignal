@@ -1,5 +1,5 @@
 import unittest
-from insider_runtime import parse_trade, issuer_ok, canonical_url
+from insider_runtime import parse_trade, parse_trades, issuer_ok, canonical_url, date_of, ISSUER_RELEASE_FEEDS
 
 
 class InsiderRuntimeTests(unittest.TestCase):
@@ -43,6 +43,47 @@ class InsiderRuntimeTests(unittest.TestCase):
         self.assertEqual(row['insider'], 'Ola Nordmann')
         self.assertAlmostEqual(row['price'], 42.5)
         self.assertAlmostEqual(row['transaction_value'], 42500.0)
+
+    def test_text_month_dates_are_supported(self):
+        self.assertEqual(date_of('25. august 2026'), '2026-08-25')
+        self.assertEqual(date_of('25 August 2026'), '2026-08-25')
+        self.assertEqual(date_of('August 25, 2026'), '2026-08-25')
+
+    def test_leroy_plural_release_returns_both_disclosed_buyers(self):
+        body = (
+            'Lerøy Seafood Group ASA: Primærinsidetransaksjoner. '
+            'Sjur Malm, CFO i Lerøy Seafood Group ASA, har den 25. august 2026 kjøpt 14 500 aksjer i Lerøy Seafood Group ASA. '
+            'Etter transaksjonen eier Sjur Malm 57 000 aksjer i Lerøy Seafood Group ASA. '
+            'Ivar Wulff, COO Market Operations i Lerøy Seafood Group ASA, har den 25. august 2026 kjøpt 11 500 aksjer i Lerøy Seafood Group ASA. '
+            'Etter transaksjonen eier Ivar Wulff 23 500 aksjer i Lerøy Seafood Group ASA.'
+        )
+        rows = parse_trades(body, 'LSG', 'Lerøy Seafood Group ASA: Primærinsidetransaksjoner', 'GlobeNewswire issuer release', 'https://example.test/lsg')
+        self.assertEqual(len(rows), 2)
+        by_name = {x['insider']: x for x in rows}
+        self.assertEqual(by_name['Sjur Malm']['shares'], 14500)
+        self.assertEqual(by_name['Sjur Malm']['role'], 'CFO')
+        self.assertEqual(by_name['Sjur Malm']['date'], '2026-08-25')
+        self.assertEqual(by_name['Ivar Wulff']['shares'], 11500)
+        self.assertEqual(by_name['Ivar Wulff']['role'], 'COO Market Operations')
+        self.assertEqual(by_name['Ivar Wulff']['direction'], 'buy')
+
+    def test_leroy_represented_company_trade_keeps_company_actor(self):
+        body = (
+            'Lerøy Seafood Group ASA. FERD AS, representert i styret i Lerøy Seafood Group ASA ved Are Dragesund, '
+            'har den 21.08.2026 kjøpt 357 542 aksjer i Lerøy Seafood Group ASA.'
+        )
+        rows = parse_trades(body, 'LSG', 'Primærinsidetransaksjon', 'GlobeNewswire issuer release', 'https://example.test/ferd')
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row['entity'], 'FERD AS')
+        self.assertEqual(row['insider'], 'FERD AS')
+        self.assertEqual(row['shares'], 357542)
+        self.assertEqual(row['date'], '2026-08-21')
+        self.assertIn('Are Dragesund', row['role'])
+
+    def test_leroy_has_stable_issuer_release_fallback(self):
+        self.assertIn('LSG', ISSUER_RELEASE_FEEDS)
+        self.assertIn('globenewswire.com', ISSUER_RELEASE_FEEDS['LSG'])
 
     def test_unrelated_issuer_is_rejected(self):
         self.assertFalse(issuer_ok('Equinor ASA John Example purchased 100 shares', 'LSG', 'Lerøy Seafood Group ASA'))
