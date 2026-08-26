@@ -57,20 +57,24 @@ def _ensure_schema():
 
 
 class PurchaseLotIn(BaseModel):
-    purchase_date: date
+    purchase_date: date | None = None
     shares: float = Field(gt=0, le=1_000_000_000)
     price_nok: float = Field(gt=0, le=1_000_000_000)
     note: str | None = Field(default=None, max_length=240)
 
 
 class InitializePurchaseIn(BaseModel):
-    purchase_date: date
+    purchase_date: date | None = None
     note: str | None = Field(default=None, max_length=240)
 
 
 def _clean_note(value):
     text = ' '.join(str(value or '').split()).strip()
     return text or None
+
+
+def _date_text(value):
+    return value.isoformat() if value is not None else None
 
 
 def _holding_row(conn, holding_id):
@@ -215,7 +219,7 @@ def install():
                 cursor = conn.execute(
                     'INSERT INTO holding_purchase_lots(holding_id,shares,price_nok,purchase_date,note,source,created_at) '
                     'VALUES(?,?,?,?,?,?,?)',
-                    (holding_id, float(payload.shares), float(payload.price_nok), payload.purchase_date.isoformat(), _clean_note(payload.note), 'manual', _now()),
+                    (holding_id, float(payload.shares), float(payload.price_nok), _date_text(payload.purchase_date), _clean_note(payload.note), 'manual', _now()),
                 )
                 _sync_holding_from_lots(conn, holding_id)
                 conn.commit()
@@ -239,7 +243,7 @@ def install():
                 cursor = conn.execute(
                     'INSERT INTO holding_purchase_lots(holding_id,shares,price_nok,purchase_date,note,source,created_at) '
                     'VALUES(?,?,?,?,?,?,?)',
-                    (holding_id, shares, price, payload.purchase_date.isoformat(), _clean_note(payload.note), 'manual_initial', _now()),
+                    (holding_id, shares, price, _date_text(payload.purchase_date), _clean_note(payload.note), 'manual_initial', _now()),
                 )
                 conn.commit()
                 purchase_id = getattr(cursor, 'lastrowid', None)
