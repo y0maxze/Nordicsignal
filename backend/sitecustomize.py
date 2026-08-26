@@ -16,6 +16,7 @@ RUNTIME_MODULES = (
     "holdings_routes",
     "holdings_tax_runtime",
     "portfolio_instruments_runtime",
+    "holdings_integrity_runtime",
     "instrument_search_runtime",
     "global_search_runtime",
     "instrument_detail_runtime",
@@ -24,6 +25,7 @@ RUNTIME_MODULES = (
     "signal_events_runtime",
     "fund_news_runtime",
     "generic_paper_runtime",
+    "http_cache_runtime",
 )
 
 
