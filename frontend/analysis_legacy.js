@@ -1,4 +1,4 @@
-const ANALYSIS_API = "https://nordicsignal-api.onrender.com";
+const ANALYSIS_API = "";
 
 function coverageLabel(x){
   const c=x?.coverage;
@@ -50,7 +50,7 @@ async function loadScoreAnalysis(ticker){
     const reasons=(explanation.reasons||[]).map(r=>`<div class="signal"><strong class="${r.type==='positive'?'g':'y'}">${r.type==='positive'?'✓':'⚠'} ${esc(r.text)}</strong></div>`).join('') || '<div class="notice">No additional model explanation is available yet.</div>';
     const d=fundamentals.data||{};
     const money=n=>{if(n==null||!Number.isFinite(Number(n)))return "—";const value=Number(n),abs=Math.abs(value);return (abs>=1e9?(value/1e9).toFixed(2)+"B":abs>=1e6?(value/1e6).toFixed(0)+"M":value.toLocaleString("no-NO",{maximumFractionDigits:2}))+" NOK"};
-    const shortPct=shortData.short_percent_float==null?"—":(Number(shortData.short_percent_float)*100).toFixed(2)+"%";
+    const shortPct=shortData.short_percent_float==null?"—":Number(shortData.short_percent_float).toFixed(2)+"%";
     const insiderItems=insider.items||[];
     const insiderSignal=insider.signal||"unavailable";
     const insiderClass=insiderSignal==="buying"?"g":insiderSignal==="selling"?"r":"y";
