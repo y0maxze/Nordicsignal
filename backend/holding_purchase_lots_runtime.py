@@ -1,9 +1,10 @@
 """Detailed purchase lots for positions in the Holdings view.
 
 A holding remains one aggregate portfolio position, while this runtime stores any
-number of dated purchase lots underneath it. Adding a new lot updates the holding's
-total shares and weighted average cost atomically. Existing aggregate positions are
-preserved by seeding a legacy lot the first time a new purchase is added.
+number of dated purchase lots underneath it. Adding or editing a lot updates the
+holding's total shares and weighted average cost atomically. Existing aggregate
+positions are preserved by seeding a legacy lot the first time a new purchase is
+added.
 """
 
 from datetime import date, datetime, timezone
@@ -250,6 +251,24 @@ def install():
             finally:
                 conn.close()
             return {'status': 'ok', 'id': purchase_id}
+
+        @app.put('/api/holding-purchases/{purchase_id}')
+        def update_purchase(purchase_id: int, payload: PurchaseLotIn):
+            conn = connect()
+            try:
+                row = conn.execute('SELECT * FROM holding_purchase_lots WHERE id=? LIMIT 1', (purchase_id,)).fetchone()
+                if not row:
+                    raise HTTPException(404, detail='Purchase not found')
+                holding_id = int(row['holding_id'])
+                conn.execute(
+                    'UPDATE holding_purchase_lots SET shares=?,price_nok=?,purchase_date=?,note=? WHERE id=?',
+                    (float(payload.shares), float(payload.price_nok), _date_text(payload.purchase_date), _clean_note(payload.note), purchase_id),
+                )
+                agg = _sync_holding_from_lots(conn, holding_id)
+                conn.commit()
+            finally:
+                conn.close()
+            return {'status': 'ok', 'id': purchase_id, 'holding_id': holding_id, 'holding': agg}
 
         @app.delete('/api/holding-purchases/{purchase_id}')
         def delete_purchase(purchase_id: int):
