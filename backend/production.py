@@ -210,12 +210,12 @@ def _latest_scores_fresh(max_age_seconds=300):
                 pass
 
 
-def _fresh_partial_components(ticker, max_age_seconds=120):
+def _fresh_partial_components(ticker, max_age_seconds=600):
     """Return fresh market components that are safe to upgrade with insider data.
 
-    Only ``partial_live`` rows qualify. This prevents an insider-only request from
-    stamping a new timestamp onto stale market components when Yahoo failed during
-    the first warmup phase.
+    Only ``partial_live`` rows qualify. The 10-minute window is long enough for a
+    deliberately low-concurrency 24-stock warmup, while still refusing genuinely
+    stale components after failed or abandoned provider runs.
     """
     conn = None
     try:
