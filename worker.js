@@ -20,6 +20,14 @@ const ASSET_ROUTES = new Map([
   ["/news/", "/news.html"],
   ["/calendar", "/calendar.html"],
   ["/calendar/", "/calendar.html"],
+  ["/readiness", "/readiness.html"],
+  ["/readiness/", "/readiness.html"],
+  ["/investment-check", "/readiness.html"],
+  ["/investment-check/", "/readiness.html"],
+  ["/development", "/development.html"],
+  ["/development/", "/development.html"],
+  ["/legal", "/legal.html"],
+  ["/legal/", "/legal.html"],
   ["/frontend", "/index.html"],
   ["/frontend/", "/index.html"],
 ]);
@@ -27,6 +35,7 @@ const ASSET_ROUTES = new Map([
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
 const STOCK_EXTRAS = '<script src="/stock_extras.js"></script>';
+const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 
 function assetRequest(request, pathname) {
   const url = new URL(request.url);
@@ -50,13 +59,16 @@ function assetPath(pathname) {
 function enhanceHtml(html, pathname) {
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
   if (pathname === "/index.html") {
-    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a>';
+    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/development">Development</a>';
     if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
-  } else if (!html.includes('class="nsGlobalHome"')) {
+  } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
   }
   if (pathname === "/stock.html" && !html.includes('src="/stock_extras.js"')) {
     html = html.replace("</body>", `${STOCK_EXTRAS}</body>`);
+  }
+  if (pathname !== "/legal.html" && !html.includes('src="/access_gate.js"')) {
+    html = html.replace("</body>", `${ACCESS_GATE}</body>`);
   }
   return html;
 }
