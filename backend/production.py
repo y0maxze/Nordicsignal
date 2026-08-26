@@ -5,6 +5,7 @@ compatibility. Render imports this module instead so the HTTP service becomes re
 immediately and expensive market refreshes warm in the background.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import logging
 import threading
@@ -102,6 +103,114 @@ def _latest_scores_fresh(max_age_seconds=300):
                 pass
 
 
+def _fresh_partial_components(ticker, max_age_seconds=120):
+    """Return fresh market components that are safe to upgrade with insider data.
+
+    Only ``partial_live`` rows qualify. This prevents an insider-only request from
+    stamping a new timestamp onto stale market components when Yahoo failed during
+    the first warmup phase.
+    """
+    conn = None
+    try:
+        conn = connect()
+        row = conn.execute(
+            "SELECT fundamentals,valuation,sentiment,created_at,COALESCE(source,'stored') source "
+            "FROM scores WHERE ticker=? ORDER BY id DESC LIMIT 1",
+            (ticker,),
+        ).fetchone()
+        if not row or row["source"] != "partial_live":
+            return None
+        updated = datetime.fromisoformat(str(row["created_at"]))
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        if (datetime.now(timezone.utc) - updated).total_seconds() > max_age_seconds:
+            return None
+        return {
+            "fundamentals": int(row["fundamentals"]),
+            "valuation": int(row["valuation"]),
+            "sentiment": int(row["sentiment"]),
+        }
+    except Exception:
+        return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _refresh_insider_one(ticker):
+    """Upgrade one fresh partial score using only the regulatory insider provider."""
+    components = _fresh_partial_components(ticker)
+    if not components:
+        return {"ticker": ticker, "source": "stored", "upgraded": False}
+
+    row = next((item for item in main.UNIVERSE if item[0] == ticker), None)
+    company_name = row[1] if row else ticker
+    try:
+        insider = main.regulatory.insider(ticker, company_name)
+    except Exception as exc:
+        return {"ticker": ticker, "source": "partial_live", "upgraded": False, "error": str(exc)}
+
+    insider_value = main.insider_score(insider)
+    if insider_value is None:
+        return {"ticker": ticker, "source": "partial_live", "upgraded": False}
+
+    total = main.clamp_score(
+        components["fundamentals"] + components["valuation"] + components["sentiment"] + insider_value,
+        0,
+        100,
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    conn = None
+    try:
+        conn = connect()
+        conn.execute(
+            "INSERT INTO scores(ticker,fundamentals,insider,valuation,sentiment,total,created_at,source) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (
+                ticker,
+                components["fundamentals"],
+                insider_value,
+                components["valuation"],
+                components["sentiment"],
+                total,
+                now,
+                "live",
+            ),
+        )
+        conn.commit()
+        return {"ticker": ticker, "source": "live", "upgraded": True}
+    except Exception as exc:
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
+        return {"ticker": ticker, "source": "partial_live", "upgraded": False, "error": str(exc)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _refresh_insiders_only():
+    """Run the slower regulatory phase without repeating Yahoo market requests."""
+    results = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(_refresh_insider_one, ticker): ticker for ticker in main.TICKERS}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                ticker = futures[future]
+                results.append({"ticker": ticker, "source": "partial_live", "upgraded": False, "error": str(exc)})
+    return sorted(results, key=lambda item: item.get("ticker", ""))
+
+
 def _market_warmup():
     """Warm public market data after the server is already accepting requests."""
     # Avoid hammering providers on rapid auto-deploys when all market rows were just
@@ -115,9 +224,11 @@ def _market_warmup():
     except Exception:
         log.exception("Background market refresh failed")
     # Give the first dashboard requests priority before the slower regulatory pass.
+    # This second phase deliberately reuses the fresh partial score components so it
+    # does not repeat Yahoo quote/fundamentals/history work for all 24 instruments.
     time.sleep(3)
     try:
-        main.refresh_all(include_insider=True)
+        _refresh_insiders_only()
     except Exception:
         log.exception("Background insider refresh failed")
 
