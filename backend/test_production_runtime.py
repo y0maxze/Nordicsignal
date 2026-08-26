@@ -78,7 +78,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             )
 
         stale = dict(fresh)
-        stale['created_at'] = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        stale['created_at'] = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
         with patch.object(production, 'connect', return_value=_FakeConn(stale)):
             self.assertIsNone(production._fresh_partial_components('LSG'))
 
