@@ -10,6 +10,7 @@ RUNTIME_MODULES = (
     "insider_runtime",
     "insider_enrichment_runtime",
     "regulatory_limits_runtime",
+    "insider_fresh_fallback_runtime",
     "stock_intelligence_runtime",
     "short_alert_runtime",
     "paper_history_runtime",
