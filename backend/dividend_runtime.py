@@ -25,7 +25,7 @@ def _extract_events(data):
 
 
 def fetch_dividend_events(provider, ticker, start_ts, end_ts):
-    """Return dividend events from Yahoo chart, with bounded and max-range fallbacks."""
+    """Return dividend events from Yahoo chart with memory-bounded fallbacks."""
     symbol = provider.symbol(ticker)
     bases = tuple(getattr(provider, "BASES", (getattr(provider, "BASE", "https://query1.finance.yahoo.com"),)))
     windows = [
@@ -43,10 +43,17 @@ def fetch_dividend_events(provider, ticker, start_ts, end_ts):
                 pass
         if found:
             break
+
     if not found:
+        # Events do not require every daily OHLC row. The old max/1d fallback could
+        # download decades of daily prices just to find a handful of dividends. A
+        # monthly interval preserves the event payload while sharply reducing JSON/RAM.
         for base in bases:
             try:
-                data = provider._get(f"{base}/v8/finance/chart/{symbol}", {"range": "max", "interval": "1d", "events": "div|split"})
+                data = provider._get(
+                    f"{base}/v8/finance/chart/{symbol}",
+                    {"range": "max", "interval": "1mo", "events": "div|split"},
+                )
                 for item in _extract_events(data):
                     if int(start_ts) - 7 * 86400 <= item["timestamp"] <= int(end_ts) + 7 * 86400:
                         found[(item["timestamp"], item["amount"])] = item
