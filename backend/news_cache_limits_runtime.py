@@ -1,9 +1,11 @@
-"""Bound the raw HTML cache used by multi-source news aggregation.
+"""Bound and freshness-limit the raw HTML cache used by news aggregation.
 
 Issuer investor-relations pages can be large. ``news_runtime`` already protects its
 cache with a lock, so replacing the plain dict with this byte-bounded mapping keeps
 its public behaviour intact while preventing cached HTML from consuming an
-unbounded share of a small Render instance.
+unbounded share of a small Render instance.  The original 15-minute raw TTL was too
+stale for a live event dashboard; three minutes is a practical balance between
+freshness and upstream/provider load.
 """
 
 from collections import OrderedDict
@@ -13,6 +15,7 @@ import news_runtime
 _MAX_ENTRIES = 12
 _MAX_TOTAL_BYTES = 4_000_000
 _MAX_ITEM_BYTES = 1_500_000
+_RAW_TTL_SECONDS = 180
 
 
 class BoundedTextCache(OrderedDict):
@@ -71,14 +74,16 @@ class BoundedTextCache(OrderedDict):
 
 
 def install():
-    if getattr(news_runtime, "_bounded_html_cache_v1", False):
+    if getattr(news_runtime, "_bounded_html_cache_v2", False):
         return
     existing = list((news_runtime._CACHE or {}).items())
     bounded = BoundedTextCache()
     for key, value in existing:
         bounded[key] = value
     news_runtime._CACHE = bounded
+    news_runtime._CACHE_TTL = _RAW_TTL_SECONDS
     news_runtime._bounded_html_cache_v1 = True
+    news_runtime._bounded_html_cache_v2 = True
 
 
 install()
