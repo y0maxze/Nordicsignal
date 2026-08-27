@@ -85,6 +85,7 @@ def install():
         events = _route_handler(app, "/api/holdings/events")
         calendar = _route_handler(app, "/api/holdings/calendar")
         insider = _route_handler(app, "/api/insider-market")
+        signal_events = _route_handler(app, "/api/signal-events")
         radar = _route_handler(app, "/api/radar")
         news = _route_handler(app, "/api/news")
 
@@ -109,7 +110,12 @@ def install():
                 if mode == "mobile":
                     if insider:
                         tasks["insider"] = lambda: insider(limit=18, days=7, refresh=bool(refresh))
-                    if radar:
+                    # The mobile "Stock signals" card is a latest-change feed, so use
+                    # the same signal-events node as desktop. It now includes score
+                    # changes, trend reversals and unusual trading activity.
+                    if signal_events:
+                        tasks["radar"] = lambda: signal_events(asset_class="Aksjer", limit=8)
+                    elif radar:
                         tasks["radar"] = lambda: radar()
                     if news:
                         tasks["news"] = lambda: news(limit=8)
