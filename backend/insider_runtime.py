@@ -54,7 +54,7 @@ SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendel
 TRADE_VERB=r'(?:purchased|purchase|bought|buy|acquired|acquisition|sold|sell|sale|disposed(?:\s+of)?|avhendet|solgt|solgte|salg|kjøpt|kjøpte|kjøp|ervervet|ervervelse)'
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 ROLE=r'(?:CEO|CFO|COO(?:\s+Market Operations)?|CTO|Chair|Chairman|Chairwoman|Board member|Director|Styremedlem|Styreleder|Konsernsjef|Finansdirektør|Finansdirektor)'
-ENTITY_SUFFIX=r'(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC|Holding(?:s)?|Invest(?:ment)?(?:s)?)'
+ENTITY_SUFFIX=r'(?:AS|ASA|AB|A/S|B\.V\.|BV|Ltd\.?|Limited|PLC|Holding(?:s)?|Invest(?:ment)?(?:s)?)'
 _CACHE={};_CACHE_TTL=45
 _MONTHS={'january':1,'jan':1,'januar':1,'february':2,'feb':2,'februar':2,'march':3,'mar':3,'mars':3,'april':4,'apr':4,'may':5,'mai':5,'june':6,'jun':6,'juni':6,'july':7,'jul':7,'juli':7,'august':8,'aug':8,'september':9,'sep':9,'october':10,'oct':10,'oktober':10,'okt':10,'november':11,'nov':11,'december':12,'dec':12,'desember':12,'des':12}
 
@@ -109,12 +109,18 @@ def _price_of(body):
 def _clean_entity_candidate(candidate):
     text=' '.join(str(candidate or '').split()).strip(' ,.-–—')
     if not text:return text
-    # Euronext prose can prefix the actual associated entity with a full sentence,
-    # e.g. "Ocean Sun AS has been notified that Krokryggen AS". Keep the final
-    # legal-entity phrase rather than treating the sentence as the actor name.
-    parts=re.split(r'\b(?:notified\s+that|informed\s+that|reported\s+that|at\s+|through\s+|via\s+|gjennom\s+)\b',text,flags=re.I)
-    text=parts[-1].strip(' ,.-–—')
-    matches=list(re.finditer(rf'([A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{0,80}}\s{ENTITY_SUFFIX})\b',text,re.I))
+    # Keep only the final sentence before extracting a legal entity. This removes
+    # issuer/title prefixes such as "Lerøy Seafood Group ASA. Nordbrand Invest AS".
+    text=re.split(r'[.!?]\s+',text)[-1].strip(' ,.-–—')
+    # Euronext often writes "Issuer AS has been notified that Entity AS ...".
+    # Everything before these connector phrases describes the issuer, not the actor.
+    for sep in (r'\bnotified\s+that\b',r'\binformed\s+that\b',r'\breported\s+that\b',r'\bthrough\b',r'\bvia\b',r'\bgjennom\b'):
+        parts=re.split(sep,text,flags=re.I)
+        if len(parts)>1:text=parts[-1].strip(' ,.-–—')
+    # Prefer a compact final legal-entity name (max six words). This prevents a
+    # complete prose clause from becoming the actor while retaining names such as
+    # "Riverborg B.V." and "Nordbrand Invest AS".
+    matches=list(re.finditer(rf'([A-ZÆØÅ][A-Za-zÀ-ÿ0-9&.\'-]*(?:\s+[A-ZÆØÅ][A-Za-zÀ-ÿ0-9&.\'-]*){{0,5}}\s+{ENTITY_SUFFIX})\b',text,re.I))
     if matches:return matches[-1].group(1).strip(' ,.-–—')
     return text
 
