@@ -15,10 +15,16 @@
   }
 
   cleanNavigation();
-  function load(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)})}
-  load('/dashboard_enhancements.js')
-    .catch(console.error)
-    .finally(()=>load('/dashboard_performance.js').catch(console.error))
-    .finally(()=>load('/insider_clean_ui.js').catch(console.error))
-    .finally(()=>load('/portfolio_dashboard.js').catch(console.error));
+  function load(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)})}
+
+  // Home dashboard is the critical path. Load it first instead of making the user
+  // wait for Stock Radar/Insider enhancements that are only needed after navigation.
+  load('/portfolio_dashboard.js').catch(console.error).finally(()=>{
+    const loadSecondary=()=>load('/dashboard_enhancements.js')
+      .catch(console.error)
+      .finally(()=>load('/dashboard_performance.js').catch(console.error))
+      .finally(()=>load('/insider_clean_ui.js').catch(console.error));
+    if('requestIdleCallback' in window)requestIdleCallback(loadSecondary,{timeout:900});
+    else setTimeout(loadSecondary,120);
+  });
 })();
