@@ -43,6 +43,7 @@ RUNTIME_MODULES = (
     "investment_readiness_runtime",
     "generic_paper_runtime",
     "system_health_runtime",
+    "persistent_feed_cache_runtime",
     "performance_runtime",
     "http_cache_runtime",
 )
