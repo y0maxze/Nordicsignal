@@ -1,116 +1,98 @@
 import json
+import re
 import time
+from urllib.parse import urljoin
+
 from curl_cffi import requests
 
 WORKER = "https://nordicsignal.8pnwk5r8f4.workers.dev"
 RENDER = "https://nordicsignal-api.onrender.com"
+EURONEXT = "https://live.euronext.com/en/listview/company-press-releases-by-mkt/1061/all?field_company_press_releases_target_id%5B1081%5D=1081&page=0"
 
 
-def get(url, timeout=90):
-    response = requests.get(url, impersonate="chrome", timeout=timeout, allow_redirects=True)
-    ctype = str(response.headers.get("content-type") or "")
-    body = None
-    if "json" in ctype:
-        try:
-            body = response.json()
-        except Exception:
-            body = None
-    return response, body
+def get(url, timeout=60):
+    return requests.get(url, impersonate="chrome", timeout=timeout, allow_redirects=True)
 
 
-def wait_for_new_backend():
-    for attempt in range(12):
-        try:
-            response, body = get(RENDER + "/api/system-health", timeout=30)
-            if response.status_code == 200 and isinstance(body, dict):
-                return response, body, attempt + 1
-        except Exception:
-            pass
-        time.sleep(10)
-    return None, None, 12
-
-
-print("=== DEPLOYED STORAGE HEALTH ===")
-response, health, attempts = wait_for_new_backend()
-print("ATTEMPTS", attempts)
-if response is None:
-    print("ERROR system-health unavailable after deploy wait")
-else:
-    print("HTTP", response.status_code)
-    print(json.dumps({
-        "status": health.get("status"),
-        "storage_backend": health.get("storage_backend"),
-        "persistent_storage": health.get("persistent_storage"),
-        "database_ok": health.get("database_ok"),
-        "counts": health.get("counts"),
-        "latest": health.get("latest"),
-        "warnings": health.get("warnings"),
-    }, ensure_ascii=False, indent=2))
-
-print("\n=== INSIDER PULSE WINDOWS ===")
-for base_name, base in (("RENDER", RENDER), ("WORKER", WORKER)):
-    for days in (7, 14, 30):
-        try:
-            response, data = get(f"{base}/api/insider-market?limit=100&days={days}&refresh=true")
-            if not isinstance(data, dict):
-                print(base_name, days, "HTTP", response.status_code, "NON_JSON", response.text[:500])
-                continue
-            items = data.get("items") or []
-            sample = [
-                {
-                    "date": x.get("trade_date") or x.get("date") or x.get("published_at"),
-                    "company": x.get("company"),
-                    "ticker": x.get("ticker"),
-                    "type": x.get("activity_type"),
-                    "direction": x.get("direction"),
-                    "pending": x.get("details_pending"),
-                }
-                for x in items[:12]
-            ]
-            print(json.dumps({
-                "endpoint": base_name,
-                "days": days,
-                "http": response.status_code,
-                "runtime": data.get("runtime"),
-                "status": data.get("status"),
-                "disclosure_count": data.get("disclosure_count"),
-                "eligible_trade_count": data.get("eligible_trade_count"),
-                "pending_detail_count": data.get("pending_detail_count"),
-                "returned_items": len(items),
-                "source_meta": data.get("source_meta"),
-                "sample": sample,
-            }, ensure_ascii=False, indent=2))
-        except Exception as exc:
-            print(base_name, days, "ERROR", type(exc).__name__, repr(exc))
-
-print("\n=== MOBILE / POLICY STATIC ASSETS ===")
-checks = (
-    ("app", "/app"),
-    ("holdings", "/holdings"),
-    ("manifest", "/manifest.webmanifest"),
-    ("service_worker", "/sw.js"),
-    ("mobile_shell", "/mobile_shell.js"),
-    ("risk_gate", "/access_gate.js"),
-    ("legal", "/legal"),
-)
-for name, path in checks:
+def json_get(url, timeout=60):
+    response = get(url, timeout)
     try:
-        response, _ = get(WORKER + path, timeout=30)
-        text = response.text
-        flags = {}
-        if name == "app":
-            flags = {
-                "manifest_injected": "manifest.webmanifest" in text,
-                "mobile_shell_injected": "mobile_shell.js" in text,
-                "risk_gate_injected": "access_gate.js" in text,
-            }
-        elif name == "risk_gate":
-            flags = {
-                "new_policy": "NS-RISK-2026-08-27-2" in text,
-                "session_storage": "sessionStorage" in text,
-            }
-        elif name == "legal":
-            flags = {"new_policy": "NS-RISK-2026-08-27-2" in text}
-        print(name, response.status_code, response.url, len(text), json.dumps(flags))
+        return response, response.json()
+    except Exception:
+        return response, None
+
+
+print("=== STORAGE HEALTH AFTER PURCHASE-LOT AUDIT ===")
+for attempt in range(10):
+    try:
+        response, data = json_get(RENDER + "/api/system-health", 30)
+        if response.status_code == 200 and isinstance(data, dict) and "holding_purchase_lots" in (data.get("counts") or {}):
+            print(json.dumps({
+                "status": data.get("status"),
+                "storage_backend": data.get("storage_backend"),
+                "persistent_storage": data.get("persistent_storage"),
+                "database_ok": data.get("database_ok"),
+                "counts": data.get("counts"),
+                "latest": data.get("latest"),
+                "warnings": data.get("warnings"),
+            }, ensure_ascii=False, indent=2))
+            break
     except Exception as exc:
-        print(name, "ERROR", type(exc).__name__, repr(exc))
+        if attempt == 9:
+            print("HEALTH_ERROR", type(exc).__name__, repr(exc))
+    time.sleep(8)
+else:
+    print("HEALTH_NOT_UPDATED")
+
+print("\n=== EURONEXT MODAL LOADER DISCOVERY ===")
+try:
+    page = get(EURONEXT, 30)
+    html = page.text
+    print("PAGE", page.status_code, len(html), page.url)
+    needles = (
+        "standardRightCompanyPressRelease",
+        "data-node-nid",
+        "companyPressRelease",
+        "company-press-release",
+        "press_release",
+        "press-release",
+    )
+    for needle in needles:
+        positions = [m.start() for m in re.finditer(re.escape(needle), html, flags=re.I)]
+        print("INLINE", needle, "COUNT", len(positions))
+        for pos in positions[-4:]:
+            snippet = re.sub(r"\s+", " ", html[max(0,pos-500):pos+1000])
+            if "<script" in snippet.lower() or "ajax" in snippet.lower() or "url" in snippet.lower():
+                print("INLINE_MATCH", snippet[:1600])
+
+    scripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, flags=re.I)
+    print("SCRIPT_COUNT", len(scripts))
+    matched = 0
+    for src in scripts:
+        full = urljoin(page.url, src)
+        if not full.startswith("https://live.euronext.com/"):
+            continue
+        try:
+            r = get(full, 20)
+            text = r.text
+        except Exception:
+            continue
+        if not any(needle.lower() in text.lower() for needle in needles):
+            continue
+        matched += 1
+        print("SCRIPT_MATCH_URL", full, "STATUS", r.status_code, "LEN", len(text))
+        for needle in needles:
+            pos = text.lower().find(needle.lower())
+            if pos >= 0:
+                print("SCRIPT_MATCH", needle, re.sub(r"\s+", " ", text[max(0,pos-1000):pos+2500])[:3600])
+    print("MATCHED_SCRIPTS", matched)
+except Exception as exc:
+    print("EURONEXT_DISCOVERY_ERROR", type(exc).__name__, repr(exc))
+
+print("\n=== DEPLOYED MOBILE POLICY QUICK CHECK ===")
+for path in ("/app", "/holdings", "/manifest.webmanifest", "/sw.js", "/mobile_shell.js", "/access_gate.js", "/legal"):
+    try:
+        r = get(WORKER + path, 30)
+        print(path, r.status_code, len(r.text), r.url)
+    except Exception as exc:
+        print(path, "ERROR", type(exc).__name__, repr(exc))
