@@ -22,6 +22,7 @@ RUNTIME_MODULES = (
     "general_news_runtime",
     "insider_market_runtime",
     "insider_market_v2_runtime",
+    "insider_detail_normalization_runtime",
     "market_calendar_runtime",
     "holdings_routes",
     "holdings_tax_runtime",
