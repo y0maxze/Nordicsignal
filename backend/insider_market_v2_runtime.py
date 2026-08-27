@@ -1,18 +1,21 @@
 """Resilient market-wide insider feed for Euronext Oslo Børs.
 
 The Euronext company-news table is authoritative for the existence, timestamp,
-issuer and topic of a release. Current rows use modal/data-node-nid links and the
-detail resolver can be WAF protected, so a blocked detail page must never make an
-official disclosure disappear from NordicSignal.
+issuer and topic of a release. Current rows use modal/data-node-nid links. The
+modal itself loads the official release from /ajax/node/company-press-release/{id},
+which NordicSignal uses as the primary detail source. If detail enrichment fails,
+the official list event remains visible instead of disappearing.
 
 This runtime uses Euronext's own topic filter for "Mandatory notification of trade
-primary insiders" (taxonomy id 1081), paginates the filtered list and enriches
-tracked issuers through the hardened per-company provider. Unknown issuers remain
-visible as pending-detail events until a verifiable detail source is available.
+primary insiders" (taxonomy id 1081), paginates the filtered list, enriches from
+the official modal endpoint first, then uses the hardened per-company provider and
+syndicated issuer releases as fallbacks.
 """
 
+from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
+import re
 import threading
 import time
 
@@ -29,11 +32,17 @@ _CACHE = {"at": 0.0, "value": None}
 _CACHE_TTL = 120
 _PROVIDER = NordicRegulatoryProvider()
 
+_DETAIL_CACHE_LOCK = threading.RLock()
+_DETAIL_CACHE = OrderedDict()
+_DETAIL_CACHE_TTL = 6 * 3600
+_DETAIL_CACHE_MAX = 256
+
 EURONEXT_INSIDER_LIST = "https://live.euronext.com/en/listview/company-press-releases-by-mkt/1061/all"
 EURONEXT_INSIDER_TOPIC_ID = "1081"
 EURONEXT_PAGE_SIZE = 50
 MAX_EURONEXT_PAGES = 8
-MAX_SYNDICATION_ENRICH = 18
+MAX_EURONEXT_DETAIL_FETCHES = 40
+MAX_SYNDICATION_ENRICH = 12
 
 
 def _norm(value):
@@ -112,13 +121,7 @@ def _legacy_announcements(cutoff):
 
 
 def _announcements(days):
-    """Return every recent primary-insider disclosure from Euronext's topic feed.
-
-    Euronext currently returns 50 filtered rows per page. Pages are newest-first,
-    therefore scanning can stop as soon as a page crosses the requested cutoff.
-    The upper page bound is a safety guard for Render rather than a data limit in
-    normal 7/14/30-day use.
-    """
+    """Return every recent primary-insider disclosure from Euronext's topic feed."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     found = []
     seen = set()
@@ -165,8 +168,6 @@ def _announcements(days):
             seen.add(key)
             found.append(item)
 
-        # The filtered view is reverse chronological. Once at least one dated row
-        # on the page is older than the requested window, subsequent pages are older.
         if crossed_cutoff and dated_rows:
             break
         if len(parsed) < EURONEXT_PAGE_SIZE:
@@ -198,7 +199,7 @@ def _company_matches(company, text):
     return bool(tokens and sum(token in hay for token in tokens) >= min(2, len(tokens)))
 
 
-def _normalise_row(raw, announcement, ticker=None, company=None, source=None):
+def _normalise_row(raw, announcement, ticker=None, company=None, source=None, source_url=None):
     row = dict(raw or {})
     company = company or announcement.get("company") or row.get("company") or ticker or "Oslo Børs-selskap"
     ticker = ticker or announcement.get("ticker") or row.get("ticker") or _ticker_for_company(company)
@@ -222,11 +223,147 @@ def _normalise_row(raw, announcement, ticker=None, company=None, source=None):
         "value_basis": "reported_transaction_price" if value is not None else row.get("value_basis"),
         "official": True,
         "source": source or row.get("source") or "Euronext Oslo Børs Newspoint",
-        "url": row.get("url") or announcement.get("url"),
+        "url": source_url or row.get("url") or announcement.get("url"),
         "node_id": announcement.get("node_id"),
         "details_pending": False,
     })
     return row
+
+
+def _detail_cache_get(node_id):
+    node_id = str(node_id or "").strip()
+    if not node_id:
+        return None
+    now = time.time()
+    with _DETAIL_CACHE_LOCK:
+        cached = _DETAIL_CACHE.get(node_id)
+        if not cached:
+            return None
+        if now - cached[0] >= _DETAIL_CACHE_TTL:
+            _DETAIL_CACHE.pop(node_id, None)
+            return None
+        _DETAIL_CACHE.move_to_end(node_id)
+        return [dict(row) for row in cached[1]]
+
+
+def _detail_cache_put(node_id, rows):
+    node_id = str(node_id or "").strip()
+    if not node_id:
+        return
+    with _DETAIL_CACHE_LOCK:
+        _DETAIL_CACHE[node_id] = (time.time(), [dict(row) for row in (rows or [])])
+        _DETAIL_CACHE.move_to_end(node_id)
+        while len(_DETAIL_CACHE) > _DETAIL_CACHE_MAX:
+            _DETAIL_CACHE.popitem(last=False)
+
+
+def _html_field(html, label):
+    label_re = re.escape(label)
+    match = re.search(
+        rf"<h3[^>]*>\s*{label_re}\s*</h3>\s*<p[^>]*>\s*(?:<span[^>]*>)?\s*([^<]+)",
+        html or "",
+        re.I | re.S,
+    )
+    return " ".join(match.group(1).split()).strip() if match else None
+
+
+def _associated_actor(segment):
+    text = " ".join(str(segment or "").split())
+    patterns = (
+        r"(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .'-]{1,100}\s(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC)),\s+(?:an\s+)?associated\s+(?:entity|party)\s+of\s+(?P<context>.{0,120}?)primary insider\s+(?P<person>[A-ZÆØÅ][A-Za-zÀ-ÿ .'-]{2,80}?)(?=,|\s+on\s+\d)",
+        r"(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .'-]{1,100}\s(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC)),\s+(?:et\s+)?nærstående\s+(?:selskap|foretak|part)\s+til\s+(?P<context>.{0,100}?)(?:primærinnsider|primaerinnsider)\s+(?P<person>[A-ZÆØÅ][A-Za-zÀ-ÿ .'-]{2,80}?)(?=,|\s+den\s+\d)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if not match:
+            continue
+        entity = match.group("entity").strip(" ,.-–—")
+        person = match.group("person").strip(" ,.-–—")
+        context = " ".join((match.groupdict().get("context") or "").split()).strip(" ,.-–—")
+        role = f"Tilknyttet {person}"
+        if context:
+            role += f" · {context[:80]}"
+        return entity, person, role
+    return None, None, None
+
+
+def _euronext_ajax_rows(announcement, allow_network=True):
+    node_id = str(announcement.get("node_id") or "").strip()
+    if not node_id:
+        return [], False
+    cached = _detail_cache_get(node_id)
+    if cached is not None:
+        return cached, False
+    if not allow_network:
+        return [], False
+
+    ajax_url = f"https://live.euronext.com/ajax/node/company-press-release/{node_id}"
+    response = news_runtime._SESSION.get(ajax_url, timeout=12, allow_redirects=True)
+    if response.status_code >= 400:
+        raise RuntimeError(f"Euronext detail HTTP {response.status_code}")
+    html = response.text
+    parser = insider_runtime._Parser()
+    parser.feed(html)
+    body = parser.text
+    low = _norm(body)
+    if not any(_norm(word) in low for word in base._INSIDER_WORDS):
+        _detail_cache_put(node_id, [])
+        return [], True
+
+    symbol = (_html_field(html, "Symbol") or announcement.get("ticker") or "").upper().strip() or None
+    company = _html_field(html, "Company Name") or _html_field(html, "Issuer") or announcement.get("company") or symbol
+    canonical_match = re.search(r'data-node-path=["\']([^"\']+)["\']', html, re.I)
+    canonical_url = urljoin("https://live.euronext.com", canonical_match.group(1)) if canonical_match else announcement.get("url")
+    newsweb_match = re.search(r'href=["\'](https://newsweb\.oslobors\.no/message/\d+)["\']', html, re.I)
+    newsweb_url = newsweb_match.group(1) if newsweb_match else None
+    title_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
+    title = re.sub(r"<[^>]+>", " ", title_match.group(1)).strip() if title_match else announcement.get("title") or "Primary insider transaction"
+
+    raw_rows = insider_runtime.parse_trades(
+        body,
+        symbol or company or "UNKNOWN",
+        title,
+        "Euronext Oslo Børs Newspoint",
+        canonical_url or ajax_url,
+    )
+    rows = []
+    target_date = _date_only(announcement.get("published_at"))
+    for raw in raw_rows:
+        meaningful = (
+            raw.get("direction") in {"buy", "sell"}
+            or raw.get("shares") is not None
+            or raw.get("person")
+            or raw.get("entity")
+            or raw.get("insider")
+        )
+        if not meaningful:
+            continue
+        row_date = _date_only(raw.get("trade_date") or raw.get("date"))
+        if target_date and row_date and abs((datetime.fromisoformat(row_date) - datetime.fromisoformat(target_date)).days) > 3:
+            continue
+        if not (raw.get("person") or raw.get("entity") or raw.get("insider")):
+            entity, person, role = _associated_actor(raw.get("summary") or body)
+            if entity:
+                raw["entity"] = entity
+                raw["insider"] = entity
+                raw["actor_type"] = "company"
+                raw["role"] = raw.get("role") or role
+                raw["related_primary_insider"] = person
+        row = _normalise_row(
+            raw,
+            announcement,
+            ticker=symbol,
+            company=company,
+            source="Euronext Oslo Børs Newspoint",
+            source_url=canonical_url or ajax_url,
+        )
+        if newsweb_url:
+            row["newsweb_url"] = newsweb_url
+        row["detail_source"] = "euronext_ajax"
+        rows.append(row)
+
+    _detail_cache_put(node_id, rows)
+    return [dict(row) for row in rows], True
 
 
 def _rows_from_known_provider(announcement, cache):
@@ -377,18 +514,31 @@ def market_insider_feed(limit=60, days=14, refresh=False):
     provider_cache = {}
     rows = []
     errors = []
+    detail_budget = MAX_EURONEXT_DETAIL_FETCHES
+    detail_network_fetches = 0
     syndication_budget = MAX_SYNDICATION_ENRICH
 
     for announcement in announcements:
         enriched = []
         try:
-            enriched = _rows_from_known_provider(announcement, provider_cache)
+            node_id = announcement.get("node_id")
+            cached_detail = _detail_cache_get(node_id) if node_id else None
+            if cached_detail is not None:
+                enriched = cached_detail
+            elif detail_budget > 0:
+                enriched, used_network = _euronext_ajax_rows(announcement, allow_network=True)
+                if used_network:
+                    detail_budget -= 1
+                    detail_network_fetches += 1
         except Exception as exc:
             errors.append(type(exc).__name__)
 
-        # Market-wide pagination can produce more than one hundred disclosures.
-        # Do not perform an unbounded Yahoo/article crawl for every unknown issuer;
-        # enrich only the freshest small set while keeping every official event visible.
+        if not enriched:
+            try:
+                enriched = _rows_from_known_provider(announcement, provider_cache)
+            except Exception as exc:
+                errors.append(type(exc).__name__)
+
         if not enriched and syndication_budget > 0:
             try:
                 enriched = _syndicated_rows(announcement)
@@ -426,10 +576,16 @@ def market_insider_feed(limit=60, days=14, refresh=False):
         1 for item in items
         if not item.get("signal_eligible") and not item.get("details_pending")
     )
+    source_meta = dict(source_meta or {})
+    source_meta.update({
+        "detail_source": "euronext_ajax",
+        "detail_network_fetches": detail_network_fetches,
+        "detail_cache_entries": len(_DETAIL_CACHE),
+    })
     value = {
         "scope": "oslo_bors_market",
         "status": "live" if announcements else "no_recent_disclosures",
-        "source": "Euronext Oslo Børs Newspoint + issuer/syndication enrichment",
+        "source": "Euronext Oslo Børs Newspoint + official AJAX detail + issuer fallbacks",
         "items": items,
         "pulses": pulses,
         "disclosure_count": len(announcements),
@@ -442,8 +598,8 @@ def market_insider_feed(limit=60, days=14, refresh=False):
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "note": (
             "Euronext's official insider-topic list determines that a disclosure exists. "
-            "Ordinary purchases/sales are only signalled after transaction details are verified. "
-            "Blocked detail pages remain visible as details_pending instead of disappearing."
+            "The official Euronext modal AJAX endpoint is used for transaction details. "
+            "Ordinary purchases/sales are only signalled after transaction details are verified."
         ),
         "runtime": "insider-market-v2",
     }
