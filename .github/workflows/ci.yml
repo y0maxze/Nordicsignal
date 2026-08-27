@@ -84,9 +84,10 @@ jobs:
           if grep -Fq 'Number(p)*100' frontend/index.html; then echo 'Short percent invariant failed'; exit 1; fi
           grep -Fq 'Number(p)>=3' frontend/index.html
           grep -q 'dashboard_performance.js' frontend/analysis.js
-          grep -q 'insider_clean_ui.js' frontend/analysis.js
           grep -q 'portfolio_dashboard.js' frontend/analysis.js
           grep -q 'requestIdleCallback' frontend/analysis.js
+          grep -q "setAttribute('href','/insider')" frontend/analysis.js
+          if grep -q 'insider_clean_ui.js' frontend/analysis.js; then echo 'Dedicated Insider UI must not load on dashboard critical path'; exit 1; fi
           grep -q "location.href='/stock?ticker='" frontend/analysis.js
           if grep -q 'analysis_legacy.js' frontend/analysis.js; then echo 'Legacy duplicate stock-detail UI must not be loaded'; exit 1; fi
           grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
