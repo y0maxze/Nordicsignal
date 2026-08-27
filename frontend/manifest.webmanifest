@@ -1,0 +1,13 @@
+{
+  "name": "NordicSignal",
+  "short_name": "NordicSignal",
+  "description": "Nordic market intelligence, portfolio monitoring and verified market events.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "lang": "no",
+  "categories": ["finance", "business"]
+}
