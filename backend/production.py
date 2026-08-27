@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 
 import main
 from database import connect
+import signal_events_runtime
 
 log = logging.getLogger("nordicsignal.production")
 app = main.app
@@ -29,12 +30,43 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_holding_tx_ticker_type_date ON holding_transactions(ticker,transaction_type,transaction_date,id)",
     "CREATE INDEX IF NOT EXISTS idx_signal_events_class_created ON signal_events(asset_class,created_at,id)",
     "CREATE INDEX IF NOT EXISTS idx_signal_catalog_class_seen ON signal_instrument_catalog(asset_class,last_seen_at)",
+    "CREATE INDEX IF NOT EXISTS idx_trend_activity_created ON trend_activity_events(created_at,id)",
 )
 
 _REFRESH_COOLDOWN_SECONDS = 60
 _REFRESH_STATE_LOCK = threading.Lock()
 _REFRESH_IN_PROGRESS = False
 _LAST_REFRESH_FINISHED_AT = 0.0
+_TREND_CAPTURE_LOCAL = threading.local()
+_ORIGINAL_MARKET_HISTORICAL = main.provider.historical
+
+
+def _capturing_market_historical(ticker, period="1y"):
+    """Reuse refresh history for trend/activity detection with zero extra Yahoo call."""
+    rows = _ORIGINAL_MARKET_HISTORICAL(ticker, period)
+    if period == "3m" and getattr(_TREND_CAPTURE_LOCAL, "enabled", False):
+        universe_row = next((item for item in main.UNIVERSE if item[0] == str(ticker).upper()), None)
+        company_name = universe_row[1] if universe_row else str(ticker).upper()
+        try:
+            signal_events_runtime.record_stock_trend_observation(ticker, company_name, rows)
+        except Exception:
+            # Trend detection is additive. It must never turn a successful price refresh
+            # into a failed NordicSignal score refresh.
+            log.exception("Trend/activity observation failed for %s", ticker)
+    return rows
+
+
+def _refresh_one_with_trend(ticker, include_insider=True):
+    _TREND_CAPTURE_LOCAL.enabled = True
+    try:
+        return main.refresh_one(ticker, include_insider)
+    finally:
+        _TREND_CAPTURE_LOCAL.enabled = False
+
+
+# Only the production refresh path enables the capture flag. Other history requests
+# (charts, backtests, instrument pages) remain read-only and cannot create signals.
+main.provider.historical = _capturing_market_historical
 
 
 def _bounded_env_int(name, default, low=1, high=4):
@@ -57,7 +89,7 @@ def _production_refresh_all(limit=None, include_insider=True):
     results = []
     with ThreadPoolExecutor(max_workers=_PROVIDER_WORKERS) as pool:
         futures = {
-            pool.submit(main.refresh_one, ticker, include_insider): ticker
+            pool.submit(_refresh_one_with_trend, ticker, include_insider): ticker
             for ticker in tickers
         }
         for future in as_completed(futures):
