@@ -1,13 +1,18 @@
 {
   "name": "NordicSignal",
   "short_name": "NordicSignal",
-  "description": "Nordic market intelligence, portfolio monitoring and verified market events.",
-  "start_url": "/app",
+  "description": "Nordic market intelligence, insider activity, investment checks and verified market events.",
+  "start_url": "/mobile",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#070707",
   "theme_color": "#070707",
   "lang": "no",
-  "categories": ["finance", "business"]
+  "categories": ["finance", "business"],
+  "shortcuts": [
+    {"name":"Insider Pulse","short_name":"Insider","url":"/insider"},
+    {"name":"Investment Check","short_name":"Investment","url":"/readiness"},
+    {"name":"Nyheter","short_name":"Nyheter","url":"/news"}
+  ]
 }
