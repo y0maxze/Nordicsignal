@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 
 from curl_cffi import requests
@@ -22,33 +23,29 @@ for label, url in (
 ):
     try:
         response = requests.get(url, impersonate="chrome", timeout=30)
-        dump(label, {"status": response.status_code, "body": response.text[:30000]})
+        dump(label, {"status": response.status_code, "body": response.text[:12000]})
     except Exception as exc:
         dump(label, {"error": type(exc).__name__, "detail": repr(exc)})
 
-for url in (news_runtime.EURONEXT_LATEST, news_runtime.EURONEXT_ARCHIVE):
+for source_index, url in enumerate((news_runtime.EURONEXT_LATEST, news_runtime.EURONEXT_ARCHIVE)):
     try:
         html = news_runtime._fetch_text(url)
         rows = general_news_runtime.parse_general_euronext_html(html, 60)
-        dump("EURONEXT SOURCE", {
-            "url": url,
-            "html_len": len(html),
-            "row_count": len(rows),
-            "rows": rows[:40],
-        })
+        dump("EURONEXT SOURCE", {"url": url, "html_len": len(html), "row_count": len(rows), "rows": rows[:10]})
+        if source_index == 0:
+            for needle in ("OCEAN SUN", "SOILTECH ASA", "Mandatory notification of trade"):
+                pos = html.lower().find(needle.lower())
+                snippet = html[max(0, pos-1800):pos+2600] if pos >= 0 else "NOT FOUND"
+                dump("RAW MARKUP " + needle, snippet)
+                if pos >= 0:
+                    hrefs = re.findall(r'href=["\']([^"\']+)["\']', snippet, flags=re.I)
+                    dump("HREFS " + needle, hrefs)
     except Exception as exc:
         dump("EURONEXT SOURCE ERROR", {"url": url, "error": type(exc).__name__, "detail": repr(exc)})
 
 try:
     candidates = im._candidate_announcements()
     dump("CANDIDATES", {"count": len(candidates), "items": candidates})
-    extracted = []
-    for item in candidates:
-        try:
-            extracted.append({"announcement": item, "rows": im._extract_disclosure(item)})
-        except Exception as exc:
-            extracted.append({"announcement": item, "error": type(exc).__name__, "detail": repr(exc)})
-    dump("EXTRACTED", extracted)
 except Exception as exc:
     dump("CANDIDATE ERROR", {"error": type(exc).__name__, "detail": repr(exc)})
 
