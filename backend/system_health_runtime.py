@@ -17,6 +17,7 @@ _TABLES = (
     "holdings",
     "holding_accounts",
     "holding_transactions",
+    "holding_purchase_lots",
     "paper_accounts",
     "paper_trades",
     "signal_events",
@@ -27,6 +28,7 @@ _LATEST_FIELDS = (
     ("scores", "created_at"),
     ("holdings", "updated_at"),
     ("holding_transactions", "created_at"),
+    ("holding_purchase_lots", "created_at"),
     ("paper_trades", "executed_at"),
     ("signal_events", "created_at"),
 )
