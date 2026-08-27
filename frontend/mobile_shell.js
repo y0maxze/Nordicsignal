@@ -54,7 +54,7 @@
   }
   function readSeen(){try{return new Set(JSON.parse(localStorage.getItem(ALERT_SEEN)||'[]'))}catch{return new Set()}}
   function writeSeen(set){localStorage.setItem(ALERT_SEEN,JSON.stringify([...set].slice(-160)))}
-  async function showAlert(item){try{const reg=await navigator.serviceWorker.ready;await reg.showNotification(item.title,{body:item.body,tag:item.id,data:{url:item.url||'/mobile'},icon:'/icon-192.png',badge:'/icon-192.png'})}catch{try{new Notification(item.title,{body:item.body,tag:item.id})}catch{}}}
+  async function showAlert(item){try{const reg=await navigator.serviceWorker.ready;await reg.showNotification(item.title,{body:item.body,tag:item.id,data:{url:item.url||'/mobile'}})}catch{try{new Notification(item.title,{body:item.body,tag:item.id})}catch{}}}
   async function pollAlerts({baseline=false}={}){
     if(localStorage.getItem(ALERT_ENABLED)!=='1'||typeof Notification==='undefined'||Notification.permission!=='granted')return;
     let items=[];try{items=await collectAlerts()}catch{return}
