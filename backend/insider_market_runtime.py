@@ -21,7 +21,7 @@ import news_runtime
 
 _CACHE_LOCK = threading.RLock()
 _CACHE = {"at": 0.0, "value": None}
-_CACHE_TTL = 180
+_CACHE_TTL = 120
 _MAX_DISCLOSURES = 36
 
 _INSIDER_WORDS = (
@@ -173,8 +173,12 @@ def _extract_disclosure(item):
     out = []
     for raw in rows:
         row = dict(raw)
-        activity_type, signal_eligible = _activity_type(body, row)
-        currency = _currency(body, row.get("price"))
+        # parse_trades keeps the sentence/segment that produced each trade in
+        # `summary`. Classify that segment, not the whole release: one disclosure
+        # can contain an internal transfer and a separate genuine share purchase.
+        segment = row.get("summary") or body
+        activity_type, signal_eligible = _activity_type(segment, row)
+        currency = _currency(segment, row.get("price")) or _currency(body, row.get("price"))
         value = row.get("transaction_value")
         row.update({
             "ticker": ticker,
