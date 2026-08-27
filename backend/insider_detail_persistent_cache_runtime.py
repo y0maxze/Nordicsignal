@@ -7,6 +7,7 @@ detail fetches on the next market scan. This layer mirrors non-empty parsed rows
 the database and hydrates the existing bounded RAM cache on demand.
 """
 
+from collections import defaultdict
 import json
 import time
 
@@ -75,11 +76,47 @@ def _db_put(node_id, rows):
         pass
 
 
+def _seed_from_persisted_market_feeds():
+    """Reuse already-parsed market-feed rows from the previous process/deploy."""
+    try:
+        conn = connect()
+        try:
+            rows = conn.execute(
+                "SELECT payload FROM runtime_feed_cache WHERE cache_key LIKE 'insider_market:v1:%'"
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        return 0
+
+    grouped = defaultdict(list)
+    for db_row in rows or []:
+        try:
+            payload = json.loads(db_row["payload"])
+        except Exception:
+            continue
+        for item in payload.get("items") or []:
+            if not isinstance(item, dict) or item.get("details_pending"):
+                continue
+            node_id = str(item.get("node_id") or "").strip()
+            if node_id:
+                grouped[node_id].append(dict(item))
+
+    seeded = 0
+    for node_id, detail_rows in grouped.items():
+        if _db_get(node_id):
+            continue
+        _db_put(node_id, detail_rows)
+        seeded += 1
+    return seeded
+
+
 def install():
     if getattr(market, "_persistent_detail_cache_installed", False):
         return
     try:
         _ensure_schema()
+        _seed_from_persisted_market_feeds()
     except Exception:
         # This is purely a performance layer. Live Euronext remains functional if
         # storage is temporarily unavailable.
