@@ -40,6 +40,7 @@ RUNTIME_MODULES = (
     "fund_news_runtime",
     "investment_readiness_runtime",
     "generic_paper_runtime",
+    "system_health_runtime",
     "http_cache_runtime",
 )
 
