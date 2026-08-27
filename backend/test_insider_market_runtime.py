@@ -83,17 +83,24 @@ class InsiderMarketRuntimeTests(unittest.TestCase):
             "url": "https://live.euronext.com/en/node/123",
             "published_at": "2026-08-27T08:00:00+00:00",
         }
+        source_meta = {"mode":"test","pages_scanned":1,"rows_scanned":1,"filter_live":True}
         im2._CACHE.update({"at": 0.0, "value": None})
-        with patch.object(im2, "_announcements", return_value=[announcement]), \
+        with patch.object(im2, "_announcements", return_value=([announcement], source_meta)), \
              patch.object(im2, "_rows_from_known_provider", return_value=[]), \
              patch.object(im2, "_syndicated_rows", return_value=[]):
             result = im2.market_insider_feed(limit=20, days=14, refresh=True)
         self.assertEqual(result["status"], "live")
         self.assertEqual(result["disclosure_count"], 1)
         self.assertEqual(result["pending_detail_count"], 1)
+        self.assertEqual(result["source_meta"], source_meta)
         self.assertEqual(len(result["items"]), 1)
         self.assertTrue(result["items"][0]["details_pending"])
         self.assertEqual(result["items"][0]["company"], "SOILTECH ASA")
+
+    def test_insider_topic_url_uses_euronext_taxonomy_and_page(self):
+        url = im2._insider_page_url(3)
+        self.assertIn("field_company_press_releases_target_id%5B1081%5D=1081", url)
+        self.assertTrue(url.endswith("page=3"))
 
 
 if __name__ == "__main__":
