@@ -14,6 +14,8 @@ const ASSET_ROUTES = new Map([
   ["/intelligence/", "/intelligence.html"],
   ["/instrument", "/instrument.html"],
   ["/instrument/", "/instrument.html"],
+  ["/holdings", "/holdings.html"],
+  ["/holdings/", "/holdings.html"],
   ["/paper", "/paper.html"],
   ["/paper/", "/paper.html"],
   ["/paper-trading", "/paper.html"],
@@ -37,8 +39,10 @@ const ASSET_ROUTES = new Map([
 ]);
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
+const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#070707"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="NordicSignal">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
+const MOBILE_SHELL = '<script src="/mobile_shell.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 
 function assetRequest(request, pathname) {
@@ -66,14 +70,18 @@ function isStockEntry(pathname) {
 
 function enhanceHtml(html, pathname) {
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
+  if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
-    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/development">Development</a>';
+    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
     if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
   }
   if (pathname === "/stock.html" && !html.includes('src="/stock_selector.js"')) {
     html = html.replace("</body>", `${STOCK_EXTRAS}</body>`);
+  }
+  if (!html.includes('src="/mobile_shell.js"')) {
+    html = html.replace("</body>", `${MOBILE_SHELL}</body>`);
   }
   if (pathname !== "/legal.html" && !html.includes('src="/access_gate.js"')) {
     html = html.replace("</body>", `${ACCESS_GATE}</body>`);
