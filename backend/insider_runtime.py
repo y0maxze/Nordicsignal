@@ -47,10 +47,7 @@ ISSUER_ARCHIVES={
  'BWLPG':'https://live.euronext.com/en/product/equities/BMG173841013-XOSL',
 }
 
-ISSUER_RELEASE_FEEDS={
- 'LSG':'https://www.globenewswire.com/en/search/organization/Ler%C3%B8y%2520Seafood%2520Group%2520ASA?page=1',
-}
-
+ISSUER_RELEASE_FEEDS={'LSG':'https://www.globenewswire.com/en/search/organization/Ler%C3%B8y%2520Seafood%2520Group%2520ASA?page=1'}
 PHRASES=('primary insider','primærinsider','mandatory notification of trade','notification of trade by primary insider','pdmr','meldepliktig handel for primærinnsidere')
 BUY=re.compile(r'\b(purchased|purchase|bought|buy|acquired|acquisition|kjøpt|kjøpte|kjøp|ervervet|ervervelse)\b',re.I)
 SELL=re.compile(r'\b(sold|sell|sale|disposed|avhendet|solgt|solgte|salg|avhendelse)\b',re.I)
@@ -58,24 +55,8 @@ TRADE_VERB=r'(?:purchased|purchase|bought|buy|acquired|acquisition|sold|sell|sal
 SHARES=re.compile(r'(?:purchased|purchase|bought|buy|acquired|sold|sell|disposed of|kjøpt|kjøpte|kjøp|solgt|solgte|salg|ervervet).{0,260}?(\d[\d .\u00a0,]*)\s+(?:shares|aksjer)\b',re.I|re.S)
 ROLE=r'(?:CEO|CFO|COO(?:\s+Market Operations)?|CTO|Chair|Chairman|Chairwoman|Board member|Director|Styremedlem|Styreleder|Konsernsjef|Finansdirektør|Finansdirektor)'
 ENTITY_SUFFIX=r'(?:AS|ASA|AB|A/S|Ltd\.?|Limited|PLC|Holding(?:s)?|Invest(?:ment)?(?:s)?)'
-
-_CACHE={}
-_CACHE_TTL=45
-
-_MONTHS={
- 'january':1,'jan':1,'januar':1,
- 'february':2,'feb':2,'februar':2,
- 'march':3,'mar':3,'mars':3,
- 'april':4,'apr':4,
- 'may':5,'mai':5,
- 'june':6,'jun':6,'juni':6,
- 'july':7,'jul':7,'juli':7,
- 'august':8,'aug':8,
- 'september':9,'sep':9,
- 'october':10,'oct':10,'oktober':10,'okt':10,
- 'november':11,'nov':11,
- 'december':12,'dec':12,'desember':12,'des':12,
-}
+_CACHE={};_CACHE_TTL=45
+_MONTHS={'january':1,'jan':1,'januar':1,'february':2,'feb':2,'februar':2,'march':3,'mar':3,'mars':3,'april':4,'apr':4,'may':5,'mai':5,'june':6,'jun':6,'juni':6,'july':7,'jul':7,'juli':7,'august':8,'aug':8,'september':9,'sep':9,'october':10,'oct':10,'oktober':10,'okt':10,'november':11,'nov':11,'december':12,'dec':12,'desember':12,'des':12}
 
 
 def norm(v): return re.sub(r'[^a-z0-9]+',' ',(v or '').lower().replace('ø','o').replace('æ','ae').replace('å','a')).strip()
@@ -96,8 +77,7 @@ def date_of(t):
 
 
 def issuer_ok(body,ticker,name,title=''):
-    n=norm(' '.join((body or '', title or '')))
-    cname,aliases=ISSUERS.get(ticker,(name,()))
+    n=norm(' '.join((body or '',title or '')));cname,aliases=ISSUERS.get(ticker,(name,()))
     return any(x and norm(x) in n for x in (cname,*aliases,name))
 
 
@@ -106,14 +86,10 @@ def _number(value):
     value=value.replace('\u00a0',' ').replace(' ','').strip()
     if not value:return None
     if ',' in value and '.' in value:
-        if value.rfind(',')>value.rfind('.'):
-            value=value.replace('.','').replace(',','.')
+        if value.rfind(',')>value.rfind('.'):value=value.replace('.','').replace(',','.')
         else:value=value.replace(',','')
     elif ',' in value:
         head,tail=value.rsplit(',',1)
-        # This helper parses transaction prices, not share counts. Oslo/Euronext
-        # releases routinely use decimal comma with 3-4 decimals (e.g. NOK 0,498).
-        # Preserve those decimals instead of treating them as thousands separators.
         if tail.isdigit() and 1<=len(tail)<=4 and head.replace('-','').isdigit():value=head+'.'+tail
         else:value=value.replace(',','')
     try:return float(value)
@@ -121,17 +97,26 @@ def _number(value):
 
 
 def _price_of(body):
-    patterns=(
-        r'\b(?:at|for)\s+(?:a\s+)?(?:price\s+(?:of\s+)?)?(?:NOK|SEK|DKK|EUR|USD)\s*([0-9][0-9 .\u00a0,]*)',
-        r'\b(?:price|kurs)\s*(?:of|på|til|:)?\s*(?:NOK|SEK|DKK|EUR|USD)?\s*([0-9][0-9 .\u00a0,]*)',
-        r'\btil\s+(?:en\s+)?kurs\s+(?:på\s+)?(?:NOK|SEK|DKK|EUR|USD)?\s*([0-9][0-9 .\u00a0,]*)',
-    )
+    patterns=(r'\b(?:at|for)\s+(?:a\s+)?(?:price\s+(?:of\s+)?)?(?:NOK|SEK|DKK|EUR|USD)\s*([0-9][0-9 .\u00a0,]*)',r'\b(?:price|kurs)\s*(?:of|på|til|:)?\s*(?:NOK|SEK|DKK|EUR|USD)?\s*([0-9][0-9 .\u00a0,]*)',r'\btil\s+(?:en\s+)?kurs\s+(?:på\s+)?(?:NOK|SEK|DKK|EUR|USD)?\s*([0-9][0-9 .\u00a0,]*)')
     for p in patterns:
         m=re.search(p,body or '',re.I)
         if m:
             value=_number(m.group(1))
             if value is not None and value>0:return value
     return None
+
+
+def _clean_entity_candidate(candidate):
+    text=' '.join(str(candidate or '').split()).strip(' ,.-–—')
+    if not text:return text
+    # Euronext prose can prefix the actual associated entity with a full sentence,
+    # e.g. "Ocean Sun AS has been notified that Krokryggen AS". Keep the final
+    # legal-entity phrase rather than treating the sentence as the actor name.
+    parts=re.split(r'\b(?:notified\s+that|informed\s+that|reported\s+that|at\s+|through\s+|via\s+|gjennom\s+)\b',text,flags=re.I)
+    text=parts[-1].strip(' ,.-–—')
+    matches=list(re.finditer(rf'([A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{0,80}}\s{ENTITY_SUFFIX})\b',text,re.I))
+    if matches:return matches[-1].group(1).strip(' ,.-–—')
+    return text
 
 
 def parse_trade(body,ticker,title,source,url):
@@ -148,14 +133,14 @@ def parse_trade(body,ticker,title,source,url):
     entity=None
     represented=re.search(rf'\b(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX}),\s*(?:represented|representert).*?\b(?:by|ved)\s+(?P<rep>[A-ZÆØÅ][A-Za-zÀ-ÿ .\'-]{{2,80}})',body or '',re.I)
     if represented:
-        entity=represented.group('entity').strip(' ,.-–—');representative=represented.group('rep').strip(' ,.-–—')
+        entity=_clean_entity_candidate(represented.group('entity'));representative=represented.group('rep').strip(' ,.-–—')
         if not role:role=f'Representert ved {representative}'
     else:
         entity_patterns=(rf'\b(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})(?=\s+{TRADE_VERB}\b)',rf'\b(?:through|via|by|gjennom)\s+(?P<entity>[A-ZÆØÅ][A-Za-zÀ-ÿ0-9& .\'-]{{1,100}}\s{ENTITY_SUFFIX})\b')
         for p in entity_patterns:
             mm=re.search(p,body or '',re.I)
             if mm:
-                candidate=mm.group('entity').strip(' ,.-–—');candidate=re.split(r'[.!?]\s+',candidate)[-1].strip(' ,.-–—');issuer_name=ISSUERS.get(ticker,(ticker,()))[0]
+                candidate=_clean_entity_candidate(mm.group('entity'));issuer_name=ISSUERS.get(ticker,(ticker,()))[0]
                 if norm(candidate)!=norm(issuer_name):entity=candidate
                 break
     price=_price_of(body);actor=person or entity;transaction_value=(float(shares)*price) if shares is not None and price is not None else None
@@ -196,7 +181,7 @@ def fetch(session,url,params=None):
 
 def canonical_url(url):
     try:
-        parts=urlsplit(url);path=re.sub(r'^/(?:en|fr|nb|nl|pt|de|it|el)(?=/)', '', parts.path, flags=re.I);return urlunsplit((parts.scheme,parts.netloc,path,parts.query,''))
+        parts=urlsplit(url);path=re.sub(r'^/(?:en|fr|nb|nl|pt|de|it|el)(?=/)', '',parts.path,flags=re.I);return urlunsplit((parts.scheme,parts.netloc,path,parts.query,''))
     except Exception:return url
 
 
