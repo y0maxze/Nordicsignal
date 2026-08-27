@@ -6,7 +6,6 @@ is returned immediately; slightly stale cache is served while one bounded backgr
 refresh updates it. Personalized holdings data is never stored here.
 """
 
-from datetime import datetime, timezone
 import json
 import threading
 import time
@@ -33,11 +32,14 @@ def _ensure_schema():
 
 
 def _read_cache(key):
-    conn = connect()
     try:
-        row = conn.execute("SELECT payload,updated_at FROM runtime_feed_cache WHERE cache_key=? LIMIT 1", (key,)).fetchone()
-    finally:
-        conn.close()
+        conn = connect()
+        try:
+            row = conn.execute("SELECT payload,updated_at FROM runtime_feed_cache WHERE cache_key=? LIMIT 1", (key,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return None
     if not row:
         return None
     try:
@@ -104,7 +106,10 @@ def _background_refresh(key, builder):
         try:
             payload = builder()
             if isinstance(payload, dict):
-                _write_cache(key, payload)
+                try:
+                    _write_cache(key, payload)
+                except Exception:
+                    pass
         except Exception:
             pass
         finally:
@@ -143,7 +148,12 @@ def install():
 
     def patched_install(app):
         original_install(app)
-        _ensure_schema()
+        try:
+            _ensure_schema()
+        except Exception:
+            # Cache persistence is an optimization only. The existing live providers
+            # remain the source of truth if storage is temporarily unavailable.
+            pass
         news_handler = _route_handler(app, "/api/news")
         insider_handler = _route_handler(app, "/api/insider-market")
 
