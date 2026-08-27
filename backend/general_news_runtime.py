@@ -6,6 +6,7 @@ must never masquerade as fresh company news.
 """
 
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from urllib.parse import quote_plus, urljoin
 import re
 import threading
@@ -46,8 +47,6 @@ def _is_generic_ir_navigation(item):
     title = news_runtime._norm(item.get("title"))
     if title in _GENERIC_IR_TITLES:
         return True
-    # Navigation labels are commonly short, undated category names. Actual report
-    # headlines normally contain a year, quarter, result wording or a dated release.
     if item.get("published_at") is None and not re.search(r"\b(?:19|20)\d{2}\b|\bq[1-4]\b", title):
         generic_words = {
             "calendar", "reports", "report", "webcast", "webcasts", "presentations",
@@ -73,8 +72,153 @@ def _ticker_from_title(title):
     return match.group(1) if match else None
 
 
+class _EuronextMarketTableParser(HTMLParser):
+    """Parse both legacy href rows and Euronext's current modal/data-node-nid rows."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self._row_depth = 0
+        self._cells = []
+        self._cell_depth = 0
+        self._cell_parts = []
+        self._cell_attrs = {}
+        self._anchor = None
+        self._anchor_parts = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("script", "style", "noscript"):
+            self._skip += 1
+            return
+        if self._skip:
+            return
+        if tag == "tr":
+            self._row_depth += 1
+            if self._row_depth == 1:
+                self._cells = []
+        elif tag == "td" and self._row_depth:
+            self._cell_depth += 1
+            if self._cell_depth == 1:
+                self._cell_parts = []
+                self._cell_attrs = attrs
+                self._anchor = None
+                self._anchor_parts = []
+        elif tag == "a" and self._cell_depth:
+            self._anchor = {
+                "href": attrs.get("href"),
+                "node_id": attrs.get("data-node-nid"),
+                "class": attrs.get("class") or "",
+                "text": "",
+            }
+            self._anchor_parts = []
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript"):
+            self._skip = max(0, self._skip - 1)
+            return
+        if self._skip:
+            return
+        if tag == "a" and self._anchor is not None:
+            self._anchor["text"] = " ".join(self._anchor_parts).strip()
+        elif tag == "td" and self._cell_depth:
+            if self._cell_depth == 1:
+                self._cells.append({
+                    "text": " ".join(self._cell_parts).strip(),
+                    "attrs": dict(self._cell_attrs),
+                    "anchor": dict(self._anchor) if self._anchor is not None else None,
+                })
+                self._cell_parts = []
+                self._cell_attrs = {}
+                self._anchor = None
+                self._anchor_parts = []
+            self._cell_depth -= 1
+        elif tag == "tr" and self._row_depth:
+            if self._row_depth == 1 and self._cells:
+                self.rows.append(list(self._cells))
+            self._row_depth -= 1
+
+    def handle_data(self, data):
+        if self._skip or not self._cell_depth:
+            return
+        text = " ".join(data.split())
+        if not text:
+            return
+        self._cell_parts.append(text)
+        if self._anchor is not None:
+            self._anchor_parts.append(text)
+
+
+def _parse_current_euronext_rows(html, limit):
+    parser = _EuronextMarketTableParser()
+    parser.feed(html)
+    items = []
+    seen = set()
+    for cells in parser.rows:
+        if len(cells) < 3:
+            continue
+        date_text = cells[0].get("text") or ""
+        company = cells[1].get("text") or ""
+        title_cell = cells[2]
+        anchor = title_cell.get("anchor") or {}
+        title = " ".join(str(anchor.get("text") or title_cell.get("text") or "").split()).strip()
+        if not company or not title:
+            continue
+
+        href = str(anchor.get("href") or "").strip()
+        node_id = str(anchor.get("node_id") or "").strip() or None
+        anchor_class = str(anchor.get("class") or "")
+        is_release = (
+            "standardRightCompanyPressRelease" in anchor_class
+            or bool(node_id)
+            or "/products/equities/company-news/" in href
+        )
+        if not is_release:
+            continue
+
+        if href:
+            url = urljoin("https://live.euronext.com", href)
+        elif node_id:
+            # The current Euronext list opens releases through a modal and leaves href
+            # empty. /node/<nid> is the canonical resolver users can open in-browser.
+            url = f"https://live.euronext.com/en/node/{node_id}"
+        else:
+            continue
+
+        identity = node_id or url
+        if identity in seen:
+            continue
+        seen.add(identity)
+        topic = cells[-1].get("text") or ""
+        row_text = " ".join(x.get("text") or "" for x in cells)
+        items.append({
+            "ticker": _ticker_from_title(title),
+            "company": company,
+            "title": title,
+            "topic": topic,
+            "node_id": node_id,
+            "publisher": "Euronext / Oslo Børs",
+            "url": url,
+            "published_at": news_runtime._parse_euronext_date(f"{date_text} {row_text}"),
+            "category": news_runtime._category(title, topic or row_text),
+            "summary": title,
+            "source_type": "exchange",
+            "official": True,
+            "verified_issuer": True,
+        })
+        if len(items) >= max(1, min(int(limit or 30), 60)):
+            break
+    return items
+
+
 def parse_general_euronext_html(html, limit=30):
     """Parse latest Oslo Børs company announcements without an issuer filter."""
+    current = _parse_current_euronext_rows(html, limit)
+    if current:
+        return current
+
+    # Legacy fallback for older cached/alternate Euronext markup with ordinary hrefs.
     parser = news_runtime._RowLinkParser()
     parser.feed(html)
     items = []
