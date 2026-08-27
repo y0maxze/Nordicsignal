@@ -1,16 +1,18 @@
-"""Resilient market-wide insider feed for current Euronext modal rows.
+"""Resilient market-wide insider feed for Euronext Oslo Børs.
 
-Euronext's Oslo company-news list now uses empty hrefs plus data-node-nid modal
-links. The list is authoritative for the existence/date/company/topic of a
-release, while details may be protected by WAF. This layer keeps the market feed
-visible and enriches it through the already hardened per-issuer provider and
-syndicated issuer copies. A blocked detail page must never make the entire pulse
-look empty.
+The Euronext company-news table is authoritative for the existence, timestamp,
+issuer and topic of a release. Current rows use modal/data-node-nid links and the
+detail resolver can be WAF protected, so a blocked detail page must never make an
+official disclosure disappear from NordicSignal.
+
+This runtime uses Euronext's own topic filter for "Mandatory notification of trade
+primary insiders" (taxonomy id 1081), paginates the filtered list and enriches
+tracked issuers through the hardened per-company provider. Unknown issuers remain
+visible as pending-detail events until a verifiable detail source is available.
 """
 
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote_plus
-import re
 import threading
 import time
 
@@ -21,10 +23,17 @@ import insider_runtime
 import news_runtime
 from providers import NordicRegulatoryProvider
 
+
 _CACHE_LOCK = threading.RLock()
 _CACHE = {"at": 0.0, "value": None}
 _CACHE_TTL = 120
 _PROVIDER = NordicRegulatoryProvider()
+
+EURONEXT_INSIDER_LIST = "https://live.euronext.com/en/listview/company-press-releases-by-mkt/1061/all"
+EURONEXT_INSIDER_TOPIC_ID = "1081"
+EURONEXT_PAGE_SIZE = 50
+MAX_EURONEXT_PAGES = 8
+MAX_SYNDICATION_ENRICH = 18
 
 
 def _norm(value):
@@ -38,14 +47,13 @@ def _ticker_for_company(company):
     best = None
     best_len = 0
     for ticker, (name, aliases) in insider_runtime.ISSUERS.items():
-        candidates = (name, *aliases)
-        for candidate in candidates:
-            c = _norm(candidate)
-            if not c:
+        for candidate in (name, *aliases):
+            candidate_n = _norm(candidate)
+            if not candidate_n:
                 continue
-            if needle == c or (len(c) >= 5 and (c in needle or needle in c)):
-                if len(c) > best_len:
-                    best, best_len = ticker, len(c)
+            if needle == candidate_n or (len(candidate_n) >= 5 and (candidate_n in needle or needle in candidate_n)):
+                if len(candidate_n) > best_len:
+                    best, best_len = ticker, len(candidate_n)
     return best
 
 
@@ -54,15 +62,31 @@ def _date_only(value):
 
 
 def _announcement_key(item):
-    return str(item.get("node_id") or item.get("url") or "") or (
+    node_id = str(item.get("node_id") or "").strip()
+    if node_id:
+        return ("node", node_id)
+    url = str(item.get("url") or "").strip()
+    if url:
+        return ("url", url)
+    return (
+        "row",
         _norm(item.get("company")),
         _date_only(item.get("published_at")),
         _norm(item.get("title")),
     )
 
 
-def _announcements(days):
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+def _insider_page_url(page):
+    page = max(0, int(page or 0))
+    return (
+        f"{EURONEXT_INSIDER_LIST}?"
+        f"field_company_press_releases_target_id%5B{EURONEXT_INSIDER_TOPIC_ID}%5D="
+        f"{EURONEXT_INSIDER_TOPIC_ID}&page={page}"
+    )
+
+
+def _legacy_announcements(cutoff):
+    """Fallback used only if the dedicated Euronext insider filter is unavailable."""
     found = []
     seen = set()
     for source_url in (news_runtime.EURONEXT_LATEST, news_runtime.EURONEXT_ARCHIVE):
@@ -72,20 +96,92 @@ def _announcements(days):
         except Exception:
             continue
         for raw in rows:
-            item = dict(raw)
-            if not base._is_insider_title(item.get("title"), item.get("category")):
+            if not base._is_insider_title(raw.get("title"), raw.get("category")):
                 continue
-            published = base._parse_iso(item.get("published_at"))
+            published = base._parse_iso(raw.get("published_at"))
             if published and published < cutoff:
                 continue
+            item = dict(raw)
             item["ticker"] = item.get("ticker") or _ticker_for_company(item.get("company"))
             key = _announcement_key(item)
             if key in seen:
                 continue
             seen.add(key)
             found.append(item)
-    found.sort(key=lambda x: x.get("published_at") or "", reverse=True)
     return found
+
+
+def _announcements(days):
+    """Return every recent primary-insider disclosure from Euronext's topic feed.
+
+    Euronext currently returns 50 filtered rows per page. Pages are newest-first,
+    therefore scanning can stop as soon as a page crosses the requested cutoff.
+    The upper page bound is a safety guard for Render rather than a data limit in
+    normal 7/14/30-day use.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    found = []
+    seen = set()
+    pages_scanned = 0
+    rows_scanned = 0
+    filter_live = False
+
+    for page in range(MAX_EURONEXT_PAGES):
+        try:
+            html = news_runtime._fetch_text(_insider_page_url(page))
+            parsed = general_news_runtime.parse_general_euronext_html(html, 60)
+        except Exception:
+            if page == 0:
+                break
+            continue
+
+        pages_scanned += 1
+        rows_scanned += len(parsed)
+        if not parsed:
+            break
+
+        filtered_rows = [
+            row for row in parsed
+            if base._is_insider_title(row.get("title"), row.get("category"))
+        ]
+        if filtered_rows:
+            filter_live = True
+
+        crossed_cutoff = False
+        dated_rows = 0
+        for raw in filtered_rows:
+            published = base._parse_iso(raw.get("published_at"))
+            if published:
+                dated_rows += 1
+                if published < cutoff:
+                    crossed_cutoff = True
+                    continue
+
+            item = dict(raw)
+            item["ticker"] = item.get("ticker") or _ticker_for_company(item.get("company"))
+            key = _announcement_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(item)
+
+        # The filtered view is reverse chronological. Once at least one dated row
+        # on the page is older than the requested window, subsequent pages are older.
+        if crossed_cutoff and dated_rows:
+            break
+        if len(parsed) < EURONEXT_PAGE_SIZE:
+            break
+
+    if not found and not filter_live:
+        found = _legacy_announcements(cutoff)
+
+    found.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    return found, {
+        "mode": "euronext_topic_1081" if filter_live else "legacy_fallback",
+        "pages_scanned": pages_scanned,
+        "rows_scanned": rows_scanned,
+        "filter_live": filter_live,
+    }
 
 
 def _company_matches(company, text):
@@ -95,7 +191,10 @@ def _company_matches(company, text):
         return False
     if company_n in hay:
         return True
-    tokens = [x for x in company_n.split() if len(x) >= 5 and x not in {"group", "holding", "holdings", "international"}]
+    tokens = [
+        token for token in company_n.split()
+        if len(token) >= 5 and token not in {"group", "holding", "holdings", "international"}
+    ]
     return bool(tokens and sum(token in hay for token in tokens) >= min(2, len(tokens)))
 
 
@@ -141,14 +240,11 @@ def _rows_from_known_provider(announcement, cache):
         except Exception:
             cache[ticker] = {}
     data = cache[ticker]
-    date = _date_only(announcement.get("published_at"))
+    release_date = _date_only(announcement.get("published_at"))
     candidates = []
     for raw in data.get("items") or []:
         raw_date = _date_only(raw.get("trade_date") or raw.get("date"))
-        # Use the same release-day rows when possible. If the disclosure does not
-        # expose a parseable date, retain it only when this is the issuer's latest
-        # announcement so we do not manufacture cross-release matches.
-        if date and raw_date and raw_date != date:
+        if release_date and raw_date and raw_date != release_date:
             continue
         candidates.append(_normalise_row(raw, announcement, ticker=ticker, company=company))
     return candidates
@@ -174,15 +270,13 @@ def _syndicated_rows(announcement):
         link = news.get("link") or ""
         if not link or not base._is_insider_title(title, news_runtime._category(title)):
             continue
-        if not _company_matches(company, title + " " + " ".join(news.get("relatedTickers") or [])):
-            # A generic title is acceptable only after the article body verifies issuer.
-            title_may_be_generic = _norm(title) in {
-                "mandatory notification of trade", "primary insider transaction",
-                "mandatory notification of trade primary insiders",
-            }
-        else:
-            title_may_be_generic = True
-        if not title_may_be_generic:
+        company_hit = _company_matches(company, title + " " + " ".join(news.get("relatedTickers") or []))
+        generic_title = _norm(title) in {
+            "mandatory notification of trade",
+            "primary insider transaction",
+            "mandatory notification of trade primary insiders",
+        }
+        if not (company_hit or generic_title):
             continue
         try:
             html = news_runtime._fetch_text(link)
@@ -193,7 +287,7 @@ def _syndicated_rows(announcement):
             continue
         if not _company_matches(company, title + " " + body):
             continue
-        if not any(_norm(x) in _norm(body) for x in base._INSIDER_WORDS):
+        if not any(_norm(word) in _norm(body) for word in base._INSIDER_WORDS):
             continue
         parse_symbol = announcement.get("ticker") or company
         rows = insider_runtime.parse_trades(
@@ -209,7 +303,10 @@ def _syndicated_rows(announcement):
             if target_date and row_date and row_date != target_date:
                 continue
             normalised.append(_normalise_row(
-                raw, announcement, ticker=announcement.get("ticker"), company=company,
+                raw,
+                announcement,
+                ticker=announcement.get("ticker"),
+                company=company,
                 source="Syndikert issuer-melding",
             ))
         if normalised:
@@ -252,8 +349,10 @@ def _pending_row(announcement):
 def _identity(row):
     if row.get("details_pending"):
         return (
-            "pending", row.get("node_id") or row.get("url") or "",
-            _norm(row.get("company")), _date_only(row.get("published_at") or row.get("date")),
+            "pending",
+            row.get("node_id") or row.get("url") or "",
+            _norm(row.get("company")),
+            _date_only(row.get("published_at") or row.get("date")),
         )
     return base._trade_identity(row)
 
@@ -263,26 +362,40 @@ def market_insider_feed(limit=60, days=14, refresh=False):
     days = max(1, min(int(days or 14), 90))
     now = time.time()
     with _CACHE_LOCK:
-        if not refresh and _CACHE["value"] is not None and now - _CACHE["at"] < _CACHE_TTL:
-            cached = dict(_CACHE["value"])
+        cached_value = _CACHE.get("value")
+        if (
+            not refresh
+            and cached_value is not None
+            and cached_value.get("days") == days
+            and now - _CACHE["at"] < _CACHE_TTL
+        ):
+            cached = dict(cached_value)
             cached["items"] = list(cached.get("items") or [])[:limit]
             return cached
 
-    announcements = _announcements(days)
+    announcements, source_meta = _announcements(days)
     provider_cache = {}
     rows = []
     errors = []
+    syndication_budget = MAX_SYNDICATION_ENRICH
+
     for announcement in announcements:
         enriched = []
         try:
             enriched = _rows_from_known_provider(announcement, provider_cache)
         except Exception as exc:
             errors.append(type(exc).__name__)
-        if not enriched:
+
+        # Market-wide pagination can produce more than one hundred disclosures.
+        # Do not perform an unbounded Yahoo/article crawl for every unknown issuer;
+        # enrich only the freshest small set while keeping every official event visible.
+        if not enriched and syndication_budget > 0:
             try:
                 enriched = _syndicated_rows(announcement)
             except Exception as exc:
                 errors.append(type(exc).__name__)
+            syndication_budget -= 1
+
         rows.extend(enriched or [_pending_row(announcement)])
 
     dedup = {}
@@ -296,16 +409,23 @@ def market_insider_feed(limit=60, days=14, refresh=False):
             dedup[key] = row
         elif current.get("display_value") is None and row.get("display_value") is not None:
             dedup[key] = row
+
     items = list(dedup.values())
-    items.sort(key=lambda x: (
-        x.get("trade_date") or x.get("date") or x.get("published_at") or "",
-        not bool(x.get("details_pending")),
-    ), reverse=True)
+    items.sort(
+        key=lambda item: (
+            item.get("trade_date") or item.get("date") or item.get("published_at") or "",
+            not bool(item.get("details_pending")),
+        ),
+        reverse=True,
+    )
 
     pulses = base._pulse_groups(items)
-    eligible_count = sum(1 for x in items if x.get("signal_eligible"))
-    pending_count = sum(1 for x in items if x.get("details_pending"))
-    non_signal_count = sum(1 for x in items if not x.get("signal_eligible") and not x.get("details_pending"))
+    eligible_count = sum(1 for item in items if item.get("signal_eligible"))
+    pending_count = sum(1 for item in items if item.get("details_pending"))
+    non_signal_count = sum(
+        1 for item in items
+        if not item.get("signal_eligible") and not item.get("details_pending")
+    )
     value = {
         "scope": "oslo_bors_market",
         "status": "live" if announcements else "no_recent_disclosures",
@@ -318,8 +438,13 @@ def market_insider_feed(limit=60, days=14, refresh=False):
         "excluded_non_signal_count": non_signal_count,
         "days": days,
         "errors": errors[:8],
+        "source_meta": source_meta,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "note": "Euronext-listen determines that an insider disclosure exists. Ordinary share purchases/sales are only signalled after transaction details are verified. A blocked detail page remains visible as details_pending instead of disappearing.",
+        "note": (
+            "Euronext's official insider-topic list determines that a disclosure exists. "
+            "Ordinary purchases/sales are only signalled after transaction details are verified. "
+            "Blocked detail pages remain visible as details_pending instead of disappearing."
+        ),
         "runtime": "insider-market-v2",
     }
     with _CACHE_LOCK:
