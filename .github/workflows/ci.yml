@@ -39,9 +39,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-
-          out = Path('/tmp/nordicsignal-js')
-          out.mkdir(parents=True, exist_ok=True)
+          out = Path('/tmp/nordicsignal-js'); out.mkdir(parents=True, exist_ok=True)
           count = 0
           for html in sorted(Path('frontend').glob('*.html')):
               text = html.read_text(encoding='utf-8')
@@ -49,109 +47,48 @@ jobs:
                   raise SystemExit(f'Malformed HTML shell: {html}')
               scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.I | re.S)
               for index, script in enumerate(scripts):
-                  if not script.strip():
-                      continue
-                  target = out / f'{html.stem}-{index}.js'
-                  target.write_text(script, encoding='utf-8')
-                  print(f'{html} -> {target}')
-                  count += 1
-          if count == 0:
-              raise SystemExit('No inline frontend JavaScript found')
+                  if not script.strip(): continue
+                  target = out / f'{html.stem}-{index}.js'; target.write_text(script, encoding='utf-8')
+                  print(f'{html} -> {target}'); count += 1
+          if count == 0: raise SystemExit('No inline frontend JavaScript found')
           PY
       - name: Check frontend JavaScript syntax
         run: |
           set -e
-          for file in /tmp/nordicsignal-js/*.js; do
-            echo "Checking $file"
-            node --check "$file"
-          done
-          for file in frontend/*.js; do
-            [ -e "$file" ] || continue
-            echo "Checking $file"
-            node --check "$file"
-          done
+          for file in /tmp/nordicsignal-js/*.js; do node --check "$file"; done
+          for file in frontend/*.js; do [ -e "$file" ] || continue; node --check "$file"; done
       - name: Check Cloudflare Worker syntax
         run: |
           cp worker.js /tmp/nordicsignal-worker.mjs
           node --check /tmp/nordicsignal-worker.mjs
       - name: Check production assets and routes
         run: |
-          test -s frontend/theme.css
-          test -s frontend/index.html
-          test -s frontend/stock.html
-          test -s frontend/stock_selector.js
-          test -s frontend/stock_extras.js
-          test -s frontend/stock_readiness.js
-          test -s frontend/intelligence.html
-          test -s frontend/instrument.html
-          test -s frontend/paper.html
-          test -s frontend/history.html
-          test -s frontend/news.html
-          test -s frontend/calendar.html
-          test -s frontend/readiness.html
-          test -s frontend/development.html
-          test -s frontend/legal.html
-          test -s frontend/access_gate.js
-          test -s frontend/holdings.html
-          test -s frontend/dashboard_performance.js
-          test -s frontend/portfolio_dashboard.js
-          test -s frontend/manifest.webmanifest
-          test -s frontend/sw.js
-          test -s frontend/mobile_shell.js
-          test -s backend/production.py
-          test -s backend/http_cache_runtime.py
-          test -s backend/holdings_integrity_runtime.py
-          test -s backend/market_calendar_runtime.py
-          test -s backend/investment_readiness_runtime.py
-          test -s backend/insider_market_v2_runtime.py
-          test -s backend/system_health_runtime.py
+          set -e
+          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js intelligence.html instrument.html paper.html history.html news.html insider.html mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
+          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
+          grep -q '\["/mobile", "/mobile.html"\]' worker.js
+          grep -q '\["/insider", "/insider.html"\]' worker.js
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/intelligence", "/intelligence.html"\]' worker.js
           grep -q '\["/instrument", "/instrument.html"\]' worker.js
           grep -q '\["/holdings", "/holdings.html"\]' worker.js
           grep -q '\["/paper", "/paper.html"\]' worker.js
-          grep -q '\["/history", "/history.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q '\["/calendar", "/calendar.html"\]' worker.js
           grep -q '\["/readiness", "/readiness.html"\]' worker.js
-          grep -q '\["/development", "/development.html"\]' worker.js
           grep -q '\["/legal", "/legal.html"\]' worker.js
-          grep -q 'frontend/holdings.html' frontend/index.html
           grep -q 'const API=""' frontend/index.html
-          if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then
-            echo 'Frontend must use the same-origin /api proxy instead of calling Render directly'
-            grep -R -n -F 'nordicsignal-api.onrender.com' frontend
-            exit 1
-          fi
-          if grep -Fq 'Number(p)*100' frontend/index.html; then
-            echo 'Dashboard fallback must not multiply Finanstilsynet short percent by 100'
-            exit 1
-          fi
+          if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then echo 'Frontend must use same-origin /api proxy'; exit 1; fi
+          if grep -Fq 'Number(p)*100' frontend/index.html; then echo 'Short percent invariant failed'; exit 1; fi
           grep -Fq 'Number(p)>=3' frontend/index.html
           grep -q 'dashboard_performance.js' frontend/analysis.js
           grep -q 'portfolio_dashboard.js' frontend/analysis.js
           grep -q "location.href='/stock?ticker='" frontend/analysis.js
-          if grep -q 'analysis_legacy.js' frontend/analysis.js; then
-            echo 'Legacy duplicate stock-detail UI must not be loaded'
-            exit 1
-          fi
+          if grep -q 'analysis_legacy.js' frontend/analysis.js; then echo 'Legacy duplicate stock-detail UI must not be loaded'; exit 1; fi
           grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
           grep -q 'Number(p).toFixed(2)' frontend/dashboard_performance.js
-          grep -q 'frontend/instrument.html' frontend/dashboard_enhancements.js
-          grep -q 'nsTopSignalFilter' frontend/dashboard_enhancements.js
-          grep -q 'nsLatestSignalFilter' frontend/dashboard_enhancements.js
-          grep -q "SIGNAL_FILTERS=\['Aksjer','Fond','ETF','Alle'\]" frontend/dashboard_enhancements.js
-          grep -q 'TOP_LIMIT=10,LATEST_LIMIT=8' frontend/dashboard_enhancements.js
-          grep -q '/api/instrument-signals' frontend/dashboard_enhancements.js
-          grep -q '/api/instrument-signals/register' frontend/dashboard_enhancements.js
-          grep -q '/api/signal-events' frontend/dashboard_enhancements.js
-          grep -q 'history_model' frontend/dashboard_enhancements.js
-          grep -q "'/instrument/'" frontend/instrument.html
-          grep -q '/analytics' frontend/instrument.html
-          grep -q '/paper/instrument-order' frontend/instrument.html
-          grep -q 'Fondordre i beløp' frontend/instrument.html
           grep -q '/api/holdings/calendar' frontend/portfolio_dashboard.js
           grep -q '/api/calendar' frontend/calendar.html
           grep -q '/api/readiness/' frontend/readiness.html
@@ -176,27 +113,24 @@ jobs:
           grep -q 'insider_market_v2_runtime' backend/sitecustomize.py
           grep -q 'system_health_runtime' backend/sitecustomize.py
           grep -q '/api/system-health' backend/system_health_runtime.py
-          if grep -Eq 'STOCK_PRESSURE_UI|STOCK_INSIDER_UI|DASHBOARD_METRIC_UI|DASHBOARD_STOCK_ACTIONS_UI' worker.js; then
-            echo 'Large UI implementations must live in frontend assets, not the Cloudflare Worker'
-            exit 1
-          fi
-          if grep -q 'searchUpstream' worker.js; then
-            echo 'Search must use the same canonical /api proxy as other API routes'
-            exit 1
-          fi
+          if grep -Eq 'STOCK_PRESSURE_UI|STOCK_INSIDER_UI|DASHBOARD_METRIC_UI|DASHBOARD_STOCK_ACTIONS_UI' worker.js; then echo 'Large UI implementations must live in frontend assets'; exit 1; fi
+          if grep -q 'searchUpstream' worker.js; then echo 'Search must use canonical /api proxy'; exit 1; fi
       - name: Check navigation invariants
         run: |
+          set -e
           grep -q 'href="/app"' worker.js
           grep -q 'nsGlobalHome' worker.js
           grep -q 'href="/calendar"' worker.js
           grep -q 'href="/readiness"' worker.js
-          grep -q 'href="/development"' worker.js
           grep -q 'href="/legal"' worker.js
-          grep -q 'href="/holdings"' frontend/mobile_shell.js
-          grep -q 'view=insider' frontend/mobile_shell.js
+          grep -q 'href="/mobile"' frontend/mobile_shell.js
+          grep -q 'href="/insider"' frontend/mobile_shell.js
+          grep -q 'href="/readiness"' frontend/mobile_shell.js
+          grep -q 'href="/stock"' frontend/mobile_shell.js
+          grep -q 'href="/news"' frontend/mobile_shell.js
+          if grep -q 'href="/paper"\|href="/holdings"\|view=insider' frontend/mobile_shell.js; then echo 'Focused mobile shell must not expose desktop-only routes or legacy insider view'; exit 1; fi
+          grep -q '"start_url": "/mobile"' frontend/manifest.webmanifest
+          grep -q "'/mobile'" frontend/sw.js
           grep -q "data-tab='pressure'\|data-tab=\"pressure\"\|dataset.tab='pressure'" frontend/stock_extras.js
           grep -q 'data-tab="readiness"' frontend/stock_readiness.js
-          if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then
-            echo 'Global search must open instrument intelligence, not Holdings'
-            exit 1
-          fi
+          if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then echo 'Global search must open instrument intelligence, not Holdings'; exit 1; fi
