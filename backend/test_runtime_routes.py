@@ -51,6 +51,8 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/instrument-signals/register',
             '/api/instrument-signals',
             '/api/signal-events',
+            '/api/dashboard-home',
+            '/api/performance',
         }
         missing = sorted(required - paths)
         self.assertFalse(missing, f'Missing runtime API routes: {missing}')
