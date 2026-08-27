@@ -73,6 +73,48 @@ class InsiderMarketRuntimeTests(unittest.TestCase):
         self.assertTrue(rows[0]["url"].endswith("/en/node/12906847"))
         self.assertTrue(str(rows[0]["published_at"]).startswith("2026-08-27"))
 
+    def test_official_euronext_ajax_detail_enriches_trade(self):
+        announcement = {
+            "company":"OCEAN SUN",
+            "ticker":None,
+            "title":"Mandatory notification of trade",
+            "node_id":"12906847",
+            "url":"https://live.euronext.com/en/node/12906847",
+            "published_at":"2026-08-27T08:49:00+00:00",
+        }
+        html = """
+        <div class="container" id="field_company_press_release_isin"
+             data-node-path="/products/equities/company-news/2026-08-27-mandatory-notification-trade"
+             data-isin="NO0010887565">
+          <h1>Mandatory notification of trade</h1>
+          <p>Ocean Sun AS has been notified that Krokryggen AS, an associated entity of board member and primary insider Trond Moengen, on 26 August 2026 purchased 200,000 shares in the Company at a share price of NOK 0,498 per share.</p>
+          <p><a href="https://newsweb.oslobors.no/message/680997">Access the news on Oslo Bors NewsWeb site</a></p>
+          <h3>Company Name</h3><p><span>OCEAN SUN</span></p>
+          <h3>Symbol</h3><p>OSUN</p>
+        </div>
+        """
+
+        class Response:
+            status_code = 200
+            text = html
+
+        im2._DETAIL_CACHE.clear()
+        with patch.object(im2.news_runtime._SESSION, "get", return_value=Response()):
+            rows, used_network = im2._euronext_ajax_rows(announcement, allow_network=True)
+        self.assertTrue(used_network)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["ticker"], "OSUN")
+        self.assertEqual(row["company"], "OCEAN SUN")
+        self.assertEqual(row["direction"], "buy")
+        self.assertEqual(row["shares"], 200000)
+        self.assertAlmostEqual(row["price"], 0.498, places=6)
+        self.assertAlmostEqual(row["display_value"], 99600.0, places=2)
+        self.assertEqual(row["entity"], "Krokryggen AS")
+        self.assertEqual(row["related_primary_insider"], "Trond Moengen")
+        self.assertEqual(row["newsweb_url"], "https://newsweb.oslobors.no/message/680997")
+        self.assertTrue(row["signal_eligible"])
+
     def test_v2_keeps_official_disclosure_visible_when_detail_is_blocked(self):
         announcement = {
             "company": "SOILTECH ASA",
@@ -85,14 +127,16 @@ class InsiderMarketRuntimeTests(unittest.TestCase):
         }
         source_meta = {"mode":"test","pages_scanned":1,"rows_scanned":1,"filter_live":True}
         im2._CACHE.update({"at": 0.0, "value": None})
+        im2._DETAIL_CACHE.clear()
         with patch.object(im2, "_announcements", return_value=([announcement], source_meta)), \
+             patch.object(im2, "_euronext_ajax_rows", return_value=([], True)), \
              patch.object(im2, "_rows_from_known_provider", return_value=[]), \
              patch.object(im2, "_syndicated_rows", return_value=[]):
             result = im2.market_insider_feed(limit=20, days=14, refresh=True)
         self.assertEqual(result["status"], "live")
         self.assertEqual(result["disclosure_count"], 1)
         self.assertEqual(result["pending_detail_count"], 1)
-        self.assertEqual(result["source_meta"], source_meta)
+        self.assertEqual(result["source_meta"]["mode"], "test")
         self.assertEqual(len(result["items"]), 1)
         self.assertTrue(result["items"][0]["details_pending"])
         self.assertEqual(result["items"][0]["company"], "SOILTECH ASA")
