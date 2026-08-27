@@ -31,22 +31,110 @@
     return ['Low','g'];
   }
 
-  function insiderAction(item){
-    const side=String(item?.transaction_type||item?.direction||'').toLowerCase();
-    if(side==='buy')return ['KJØP','g'];
-    if(side==='sell')return ['SALG','r'];
-    return ['ANNET','y'];
+  function escLocal(v){return typeof esc==='function'?esc(v):String(v??'—').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+  function n0(v){return v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:0})}
+  function compactMoney(v,currency){
+    if(v==null)return '—';
+    const n=Number(v),abs=Math.abs(n),prefix=n<0?'−':'';
+    let amount;
+    if(abs>=1e9)amount=(abs/1e9).toLocaleString('no-NO',{maximumFractionDigits:2})+' mrd.';
+    else if(abs>=1e6)amount=(abs/1e6).toLocaleString('no-NO',{maximumFractionDigits:2})+' mill.';
+    else if(abs>=1e3)amount=(abs/1e3).toLocaleString('no-NO',{maximumFractionDigits:1})+'k';
+    else amount=abs.toLocaleString('no-NO',{maximumFractionDigits:0});
+    return prefix+amount+' '+(currency||'');
+  }
+  function dateOnly(v){return v?String(v).slice(0,10):'—'}
+  function pulseValue(p){
+    const values=p?.values||[];
+    if(!values.length)return '—';
+    return values.map(x=>{
+      const buy=x.buy||0,sell=x.sell||0;
+      if(buy&&sell)return compactMoney(buy,x.currency)+' kjøp / '+compactMoney(sell,x.currency)+' salg';
+      if(buy)return compactMoney(buy,x.currency);
+      if(sell)return compactMoney(sell,x.currency);
+      return '—';
+    }).join(' · ');
+  }
+  function pulseTone(p){return p?.tone==='positive'?'g':p?.tone==='negative'?'r':'y'}
+  function companyCell(p){
+    const name=escLocal(p?.company||p?.ticker||'Ukjent selskap'),ticker=String(p?.ticker||'').trim();
+    if(ticker)return `<strong class="stock" onclick="showStock('${escLocal(ticker)}')">${name}</strong><div class="sub">${escLocal(ticker)}</div>`;
+    return `<strong>${name}</strong><div class="sub">Ticker ikke identifisert i feed</div>`;
+  }
+  function activityLabel(x){
+    const map={share_purchase:'ORDINÆRT KJØP',share_sale:'ORDINÆRT SALG',internal_transfer:'INTERN OVERFØRING',rights_or_derivatives:'RETTIGHETER / OPSJON',employee_program:'ANSATTPROGRAM',award:'TILDELING',other_disclosure:'ANNEN MELDING'};
+    return map[x?.activity_type]||'ANNEN MELDING';
+  }
+  function activityTone(x){
+    if(x?.signal_eligible&&x?.direction==='buy')return 'g';
+    if(x?.signal_eligible&&x?.direction==='sell')return 'r';
+    return 'y';
+  }
+  function actorName(x){return x?.person||x?.entity||x?.insider||'Ikke oppgitt'}
+  function actualValue(x){
+    if(x?.display_value==null)return '—';
+    return compactMoney(x.display_value,x.currency)+(x.value_basis==='reported_transaction_price'?'<div class="small">rapportert kurs</div>':'');
+  }
+
+  let insiderPulseTimer=null;
+  let insiderDays=14;
+
+  function insiderShell(){
+    return `<section class="cards" id="insiderStats"><div class="card"><div class="label">Ordinære handler</div><div class="value">—</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">—</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">—</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Filtrert støy</div><div class="value y">—</div><div class="sub">overføringer / opsjoner / program</div></div></section><section class="section" style="margin-bottom:17px"><div class="toolbar"><div><h2 style="margin:0">Insider Pulse</h2><div class="sub">Hele Oslo Børs · Euronext Newspoint · oppdateres automatisk</div></div><div class="controls"><button class="btn ${insiderDays===7?'active':''}" data-insider-days="7">7d</button><button class="btn ${insiderDays===14?'active':''}" data-insider-days="14">14d</button><button class="btn ${insiderDays===30?'active':''}" data-insider-days="30">30d</button><button class="btn" id="insiderRefreshBtn">Oppdater</button></div></div><div class="notice">NordicSignal skiller ordinære aksjekjøp/salg fra intern overføring, opsjoner, tegningsretter, tildelinger og ansattprogrammer. Bare ordinære handler brukes som kjøps-/salgssignal.</div><div id="insiderPulseHost"><div class="notice">Laster ferske innsidermeldinger fra hele Oslo Børs…</div></div></section><section class="section"><div class="toolbar"><div><h2 style="margin:0">Siste verifiserte innsidermeldinger</h2><div class="sub">Rå aktivitet under signaloppsummeringen</div></div></div><div id="insiderActivityHost"><div class="notice">Laster…</div></div></section>`;
+  }
+
+  function bindInsiderControls(){
+    document.querySelectorAll('[data-insider-days]').forEach(btn=>btn.onclick=()=>{
+      insiderDays=Number(btn.dataset.insiderDays)||14;
+      renderInsider();
+    });
+    const refresh=document.getElementById('insiderRefreshBtn');
+    if(refresh)refresh.onclick=()=>loadInsiderMarket(true);
+  }
+
+  function renderInsiderStats(d){
+    const stats=document.getElementById('insiderStats');if(!stats)return;
+    const pulses=d.pulses||[],items=d.items||[];
+    const clusters=pulses.filter(x=>x.flags?.includes('cluster_buying')).length;
+    const sells=items.filter(x=>x.signal_eligible&&x.direction==='sell').length;
+    stats.innerHTML=`<div class="card"><div class="label">Ordinære handler</div><div class="value">${escLocal(d.eligible_trade_count||0)}</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">${clusters}</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">${sells}</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Filtrert støy</div><div class="value y">${escLocal(d.excluded_non_signal_count||0)}</div><div class="sub">overføringer / opsjoner / program</div></div>`;
+  }
+
+  function renderPulseTable(d){
+    const host=document.getElementById('insiderPulseHost');if(!host)return;
+    const rows=(d.pulses||[]).filter(x=>x.buy_count||x.sell_count).slice(0,30);
+    if(!rows.length){host.innerHTML='<div class="notice">Ingen ordinære verifiserte insiderkjøp eller -salg funnet i valgt periode.</div>';return}
+    host.innerHTML=`<table class="table"><thead><tr><th>Selskap</th><th>Signal</th><th>Aktører</th><th>Kjøp / salg</th><th>Rapportert verdi</th><th>Siste</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${companyCell(p)}</td><td><strong class="${pulseTone(p)}">${escLocal(p.signal_label||'AKTIVITET')}</strong>${p.flags?.includes('large_buy')?'<div class="small g">stort rapportert kjøp</div>':''}</td><td>${(p.actors||[]).slice(0,3).map(escLocal).join('<br>')||'—'}${(p.actors||[]).length>3?`<div class="small">+${p.actors.length-3} flere</div>`:''}</td><td><span class="g">${escLocal(p.buy_count||0)} kjøp</span><br><span class="r">${escLocal(p.sell_count||0)} salg</span></td><td>${escLocal(pulseValue(p))}</td><td>${escLocal(dateOnly(p.latest_date))}${p.url?`<div><a href="${escLocal(p.url)}" target="_blank" rel="noopener" class="small">Original</a></div>`:''}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function renderActivityTable(d){
+    const host=document.getElementById('insiderActivityHost');if(!host)return;
+    const items=(d.items||[]).slice(0,60);
+    if(!items.length){host.innerHTML='<div class="notice">Ingen ferske innsidermeldinger funnet.</div>';return}
+    host.innerHTML=`<table class="table"><thead><tr><th>Dato</th><th>Selskap</th><th>Aktør</th><th>Type</th><th>Antall</th><th>Pris</th><th>Verdi</th><th>Kilde</th></tr></thead><tbody>${items.map(x=>`<tr><td>${escLocal(dateOnly(x.trade_date||x.date||x.published_at))}</td><td>${x.ticker?`<strong class="stock" onclick="showStock('${escLocal(x.ticker)}')">${escLocal(x.company||x.ticker)}</strong><div class="sub">${escLocal(x.ticker)}</div>`:`<strong>${escLocal(x.company||'Ukjent')}</strong>`}</td><td><strong>${escLocal(actorName(x))}</strong><div class="sub">${escLocal(x.role||'—')}</div></td><td><span class="${activityTone(x)}"><strong>${escLocal(activityLabel(x))}</strong></span>${!x.signal_eligible?'<div class="small">ikke brukt som handelssignal</div>':''}</td><td>${escLocal(n0(x.shares))}</td><td>${x.price==null?'—':escLocal(Number(x.price).toLocaleString('no-NO',{maximumFractionDigits:4})+' '+(x.currency||''))}</td><td>${actualValue(x)}</td><td>${x.url?`<a href="${escLocal(x.url)}" target="_blank" rel="noopener">Original</a>`:'—'}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  async function loadInsiderMarket(force){
+    const pulse=document.getElementById('insiderPulseHost');
+    try{
+      const d=await sameOriginGet('/api/insider-market?limit=80&days='+encodeURIComponent(insiderDays)+(force?'&refresh=true':''));
+      renderInsiderStats(d);renderPulseTable(d);renderActivityTable(d);
+    }catch(e){
+      if(pulse)pulse.innerHTML='<div class="notice">Insider Pulse er midlertidig utilgjengelig. Eksisterende Stock Intelligence-data påvirkes ikke.</div>';
+      const activity=document.getElementById('insiderActivityHost');if(activity)activity.innerHTML='<div class="notice">Kunne ikke hente markedsfeed akkurat nå.</div>';
+      console.warn('insider market feed unavailable',e);
+    }
   }
 
   window.renderInsider=async function(){
-    setTitle('Insider Activity','Recent primary-insider disclosures from Euronext Oslo Børs');
-    appview.innerHTML='<section class="section"><h2>Insider Activity</h2><div class="notice">Loading live regulatory disclosures…</div><div id="insiderTable"></div></section>';
-    const out=await mapLimit(universe,5,async x=>{
-      try{return {x,d:await sameOriginGet('/api/insider/'+encodeURIComponent(x.ticker))}}
-      catch{return {x,d:{items:[],status:'unavailable'}}}
-    });
-    const host=document.getElementById('insiderTable');if(!host)return;
-    host.innerHTML=`<table class="table"><thead><tr><th>Company</th><th>Person / foretak</th><th>Rolle</th><th>Handling</th><th>Siste melding</th><th>Kilde</th></tr></thead><tbody>${out.map(o=>{const d=o.d||{},item=(d.items||[])[0],actor=item?(item.person||item.entity||item.insider||'Ikke oppgitt'):'—',[action,cls]=insiderAction(item);return `<tr><td><strong class="stock" onclick="showStock('${esc(o.x.ticker)}')">${esc(o.x.name)}</strong><div class="sub">${esc(o.x.ticker)}</div></td><td><strong>${esc(actor)}</strong></td><td>${esc(item?.role||'—')}</td><td class="${cls}">${item?esc(action):'—'}</td><td>${item?esc(item.title||'Primary insider disclosure'):'No recent public disclosure found'}${item?.trade_date||item?.date?`<div class="sub">${esc(item.trade_date||item.date)}</div>`:''}</td><td><span class="small">${esc(d.source||'Unavailable')}</span></td></tr>`}).join('')}</tbody></table>`;
+    setTitle('Insider Pulse','Market-wide primary-insider activity from Euronext Oslo Børs');
+    appview.innerHTML=insiderShell();bindInsiderControls();
+    await loadInsiderMarket(false);
+    if(insiderPulseTimer)clearInterval(insiderPulseTimer);
+    insiderPulseTimer=setInterval(()=>{
+      const title=document.getElementById('title');
+      if(!document.hidden&&title&&title.textContent==='Insider Pulse')loadInsiderMarket(false);
+    },120000);
   };
 
   window.renderShort=async function(){
@@ -57,6 +145,6 @@
       catch{return {x,d:{status:'unavailable'}}}
     });
     const host=document.getElementById('shortTable');if(!host)return;
-    host.innerHTML=`<table class="table"><thead><tr><th>Company</th><th>Short % float</th><th>Short shares</th><th>Pressure</th><th>Latest</th></tr></thead><tbody>${out.map(o=>{const d=o.d||{},p=d.short_percent_float,[pressure,cls]=shortPressure(d,p);return `<tr><td><strong class="stock" onclick="showStock('${esc(o.x.ticker)}')">${esc(o.x.name)}</strong><div class="sub">${esc(o.x.ticker)}</div></td><td>${p==null?'—':Number(p).toFixed(2)+'%'}</td><td>${d.shares==null?'—':Number(d.shares).toLocaleString('no-NO')}</td><td class="${cls}">${pressure}</td><td>${esc(d.latest_date||'—')}</td></tr>`}).join('')}</tbody></table>`;
+    host.innerHTML=`<table class="table"><thead><tr><th>Company</th><th>Short % float</th><th>Short shares</th><th>Pressure</th><th>Latest</th></tr></thead><tbody>${out.map(o=>{const d=o.d||{},p=d.short_percent_float,[pressure,cls]=shortPressure(d,p);return `<tr><td><strong class="stock" onclick="showStock('${escLocal(o.x.ticker)}')">${escLocal(o.x.name)}</strong><div class="sub">${escLocal(o.x.ticker)}</div></td><td>${p==null?'—':Number(p).toFixed(2)+'%'}</td><td>${d.shares==null?'—':Number(d.shares).toLocaleString('no-NO')}</td><td class="${cls}">${pressure}</td><td>${escLocal(d.latest_date||'—')}</td></tr>`}).join('')}</tbody></table>`;
   };
 })();
