@@ -24,6 +24,7 @@ RUNTIME_MODULES = (
     "insider_market_v2_runtime",
     "insider_detail_normalization_runtime",
     "insider_company_cleanup_runtime",
+    "insider_detail_persistent_cache_runtime",
     "market_calendar_runtime",
     "holdings_routes",
     "holdings_tax_runtime",
