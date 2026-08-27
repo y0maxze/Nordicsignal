@@ -1,7 +1,9 @@
 import unittest
 from unittest.mock import patch
 
+import general_news_runtime as gn
 import insider_market_runtime as im
+import insider_market_v2_runtime as im2
 
 
 class InsiderMarketRuntimeTests(unittest.TestCase):
@@ -51,6 +53,47 @@ class InsiderMarketRuntimeTests(unittest.TestCase):
         self.assertEqual(out[1]["activity_type"], "share_purchase")
         self.assertTrue(out[1]["signal_eligible"])
         self.assertEqual(out[1]["currency"], "NOK")
+
+    def test_current_euronext_modal_row_is_parsed(self):
+        html = """
+        <table><tbody><tr>
+          <td class="views-field rawmap"><span class="nowrap">27 Aug 2026</span><br><span class="nowrap">10:49 CEST</span></td>
+          <td class="views-field views-field-field-company-name">OCEAN SUN</td>
+          <td class="views-field views-field-title"><a href="" class="standardRightCompanyPressRelease" data-node-nid="12906847" data-toggle="modal" data-target="#standardRightCompanyPressRelease">Mandatory notification of trade</a></td>
+          <td class="views-field">60102020 Renewable Energy Equipment</td>
+          <td class="views-field">Mandatory notification of trade primary insiders</td>
+        </tr></tbody></table>
+        """
+        rows = gn.parse_general_euronext_html(html, 20)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["company"], "OCEAN SUN")
+        self.assertEqual(rows[0]["title"], "Mandatory notification of trade")
+        self.assertEqual(rows[0]["node_id"], "12906847")
+        self.assertEqual(rows[0]["category"], "Insider")
+        self.assertTrue(rows[0]["url"].endswith("/en/node/12906847"))
+        self.assertTrue(str(rows[0]["published_at"]).startswith("2026-08-27"))
+
+    def test_v2_keeps_official_disclosure_visible_when_detail_is_blocked(self):
+        announcement = {
+            "company": "SOILTECH ASA",
+            "ticker": None,
+            "title": "Mandatory notification of trade",
+            "category": "Insider",
+            "node_id": "123",
+            "url": "https://live.euronext.com/en/node/123",
+            "published_at": "2026-08-27T08:00:00+00:00",
+        }
+        im2._CACHE.update({"at": 0.0, "value": None})
+        with patch.object(im2, "_announcements", return_value=[announcement]), \
+             patch.object(im2, "_rows_from_known_provider", return_value=[]), \
+             patch.object(im2, "_syndicated_rows", return_value=[]):
+            result = im2.market_insider_feed(limit=20, days=14, refresh=True)
+        self.assertEqual(result["status"], "live")
+        self.assertEqual(result["disclosure_count"], 1)
+        self.assertEqual(result["pending_detail_count"], 1)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertTrue(result["items"][0]["details_pending"])
+        self.assertEqual(result["items"][0]["company"], "SOILTECH ASA")
 
 
 if __name__ == "__main__":
