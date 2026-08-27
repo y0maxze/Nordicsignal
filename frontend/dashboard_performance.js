@@ -62,7 +62,7 @@
     return `<strong>${name}</strong><div class="sub">Ticker ikke identifisert i feed</div>`;
   }
   function activityLabel(x){
-    const map={share_purchase:'ORDINÆRT KJØP',share_sale:'ORDINÆRT SALG',internal_transfer:'INTERN OVERFØRING',rights_or_derivatives:'RETTIGHETER / OPSJON',employee_program:'ANSATTPROGRAM',award:'TILDELING',other_disclosure:'ANNEN MELDING'};
+    const map={share_purchase:'ORDINÆRT KJØP',share_sale:'ORDINÆRT SALG',internal_transfer:'INTERN OVERFØRING',rights_or_derivatives:'RETTIGHETER / OPSJON',employee_program:'ANSATTPROGRAM',award:'TILDELING',details_pending:'DETALJER VENTER',other_disclosure:'ANNEN MELDING'};
     return map[x?.activity_type]||'ANNEN MELDING';
   }
   function activityTone(x){
@@ -70,7 +70,7 @@
     if(x?.signal_eligible&&x?.direction==='sell')return 'r';
     return 'y';
   }
-  function actorName(x){return x?.person||x?.entity||x?.insider||'Ikke oppgitt'}
+  function actorName(x){return x?.person||x?.entity||x?.insider||(x?.details_pending?'Venter på detaljdata':'Ikke oppgitt')}
   function actualValue(x){
     if(x?.display_value==null)return '—';
     return compactMoney(x.display_value,x.currency)+(x.value_basis==='reported_transaction_price'?'<div class="small">rapportert kurs</div>':'');
@@ -80,7 +80,7 @@
   let insiderDays=14;
 
   function insiderShell(){
-    return `<section class="cards" id="insiderStats"><div class="card"><div class="label">Ordinære handler</div><div class="value">—</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">—</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">—</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Filtrert støy</div><div class="value y">—</div><div class="sub">overføringer / opsjoner / program</div></div></section><section class="section" style="margin-bottom:17px"><div class="toolbar"><div><h2 style="margin:0">Insider Pulse</h2><div class="sub">Hele Oslo Børs · Euronext Newspoint · oppdateres automatisk</div></div><div class="controls"><button class="btn ${insiderDays===7?'active':''}" data-insider-days="7">7d</button><button class="btn ${insiderDays===14?'active':''}" data-insider-days="14">14d</button><button class="btn ${insiderDays===30?'active':''}" data-insider-days="30">30d</button><button class="btn" id="insiderRefreshBtn">Oppdater</button></div></div><div class="notice">NordicSignal skiller ordinære aksjekjøp/salg fra intern overføring, opsjoner, tegningsretter, tildelinger og ansattprogrammer. Bare ordinære handler brukes som kjøps-/salgssignal.</div><div id="insiderPulseHost"><div class="notice">Laster ferske innsidermeldinger fra hele Oslo Børs…</div></div></section><section class="section"><div class="toolbar"><div><h2 style="margin:0">Siste verifiserte innsidermeldinger</h2><div class="sub">Rå aktivitet under signaloppsummeringen</div></div></div><div id="insiderActivityHost"><div class="notice">Laster…</div></div></section>`;
+    return `<section class="cards" id="insiderStats"><div class="card"><div class="label">Ordinære handler</div><div class="value">—</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">—</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">—</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Insidermeldinger</div><div class="value y">—</div><div class="sub">offisielle meldinger funnet</div></div></section><section class="section" style="margin-bottom:17px"><div class="toolbar"><div><h2 style="margin:0">Insider Pulse</h2><div class="sub">Hele Oslo Børs · Euronext Newspoint · oppdateres automatisk</div></div><div class="controls"><button class="btn ${insiderDays===7?'active':''}" data-insider-days="7">7d</button><button class="btn ${insiderDays===14?'active':''}" data-insider-days="14">14d</button><button class="btn ${insiderDays===30?'active':''}" data-insider-days="30">30d</button><button class="btn" id="insiderRefreshBtn">Oppdater</button></div></div><div class="notice">NordicSignal bruker Euronext-listen som bekreftelse på at en primærinsiderhendelse finnes. Kjøp/salg blir først signal når navn, retning og transaksjonsdata er verifisert. Blokkerte detaljsider vises som «Detaljer venter» i stedet for å forsvinne.</div><div id="insiderPulseHost"><div class="notice">Laster ferske innsidermeldinger fra hele Oslo Børs…</div></div></section><section class="section"><div class="toolbar"><div><h2 style="margin:0">Siste insidermeldinger</h2><div class="sub">Verifiserte handler og offisielle hendelser som venter på detaljberikelse</div></div></div><div id="insiderActivityHost"><div class="notice">Laster…</div></div></section>`;
   }
 
   function bindInsiderControls(){
@@ -97,21 +97,27 @@
     const pulses=d.pulses||[],items=d.items||[];
     const clusters=pulses.filter(x=>x.flags?.includes('cluster_buying')).length;
     const sells=items.filter(x=>x.signal_eligible&&x.direction==='sell').length;
-    stats.innerHTML=`<div class="card"><div class="label">Ordinære handler</div><div class="value">${escLocal(d.eligible_trade_count||0)}</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">${clusters}</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">${sells}</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Filtrert støy</div><div class="value y">${escLocal(d.excluded_non_signal_count||0)}</div><div class="sub">overføringer / opsjoner / program</div></div>`;
+    const disclosures=Number(d.disclosure_count??items.length??0);
+    const pending=Number(d.pending_detail_count||0);
+    stats.innerHTML=`<div class="card"><div class="label">Ordinære handler</div><div class="value">${escLocal(d.eligible_trade_count||0)}</div><div class="sub">verifiserte kjøp/salg</div></div><div class="card"><div class="label">Klyngekjøp</div><div class="value g">${clusters}</div><div class="sub">flere kjøpere i samme selskap</div></div><div class="card"><div class="label">Innsidersalg</div><div class="value r">${sells}</div><div class="sub">ordinære salg</div></div><div class="card"><div class="label">Insidermeldinger</div><div class="value y">${escLocal(disclosures)}</div><div class="sub">${pending?escLocal(pending)+' venter på detaljer':'alle funn behandlet'}</div></div>`;
   }
 
   function renderPulseTable(d){
     const host=document.getElementById('insiderPulseHost');if(!host)return;
     const rows=(d.pulses||[]).filter(x=>x.buy_count||x.sell_count).slice(0,30);
-    if(!rows.length){host.innerHTML='<div class="notice">Ingen ordinære verifiserte insiderkjøp eller -salg funnet i valgt periode.</div>';return}
+    if(!rows.length){
+      const pending=Number(d.pending_detail_count||0);
+      host.innerHTML=pending?`<div class="notice">${escLocal(pending)} offisielle primærinsidermeldinger er funnet. Transaksjonsdetaljene berikes nå og vises i listen under.</div>`:'<div class="notice">Ingen ordinære verifiserte insiderkjøp eller -salg funnet i valgt periode.</div>';
+      return;
+    }
     host.innerHTML=`<table class="table"><thead><tr><th>Selskap</th><th>Signal</th><th>Aktører</th><th>Kjøp / salg</th><th>Rapportert verdi</th><th>Siste</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${companyCell(p)}</td><td><strong class="${pulseTone(p)}">${escLocal(p.signal_label||'AKTIVITET')}</strong>${p.flags?.includes('large_buy')?'<div class="small g">stort rapportert kjøp</div>':''}</td><td>${(p.actors||[]).slice(0,3).map(escLocal).join('<br>')||'—'}${(p.actors||[]).length>3?`<div class="small">+${p.actors.length-3} flere</div>`:''}</td><td><span class="g">${escLocal(p.buy_count||0)} kjøp</span><br><span class="r">${escLocal(p.sell_count||0)} salg</span></td><td>${escLocal(pulseValue(p))}</td><td>${escLocal(dateOnly(p.latest_date))}${p.url?`<div><a href="${escLocal(p.url)}" target="_blank" rel="noopener" class="small">Original</a></div>`:''}</td></tr>`).join('')}</tbody></table>`;
   }
 
   function renderActivityTable(d){
     const host=document.getElementById('insiderActivityHost');if(!host)return;
     const items=(d.items||[]).slice(0,60);
-    if(!items.length){host.innerHTML='<div class="notice">Ingen ferske innsidermeldinger funnet.</div>';return}
-    host.innerHTML=`<table class="table"><thead><tr><th>Dato</th><th>Selskap</th><th>Aktør</th><th>Type</th><th>Antall</th><th>Pris</th><th>Verdi</th><th>Kilde</th></tr></thead><tbody>${items.map(x=>`<tr><td>${escLocal(dateOnly(x.trade_date||x.date||x.published_at))}</td><td>${x.ticker?`<strong class="stock" onclick="showStock('${escLocal(x.ticker)}')">${escLocal(x.company||x.ticker)}</strong><div class="sub">${escLocal(x.ticker)}</div>`:`<strong>${escLocal(x.company||'Ukjent')}</strong>`}</td><td><strong>${escLocal(actorName(x))}</strong><div class="sub">${escLocal(x.role||'—')}</div></td><td><span class="${activityTone(x)}"><strong>${escLocal(activityLabel(x))}</strong></span>${!x.signal_eligible?'<div class="small">ikke brukt som handelssignal</div>':''}</td><td>${escLocal(n0(x.shares))}</td><td>${x.price==null?'—':escLocal(Number(x.price).toLocaleString('no-NO',{maximumFractionDigits:4})+' '+(x.currency||''))}</td><td>${actualValue(x)}</td><td>${x.url?`<a href="${escLocal(x.url)}" target="_blank" rel="noopener">Original</a>`:'—'}</td></tr>`).join('')}</tbody></table>`;
+    if(!items.length){host.innerHTML='<div class="notice">Ingen ferske insidermeldinger funnet.</div>';return}
+    host.innerHTML=`<table class="table"><thead><tr><th>Dato</th><th>Selskap</th><th>Aktør</th><th>Type</th><th>Antall</th><th>Pris</th><th>Verdi</th><th>Kilde</th></tr></thead><tbody>${items.map(x=>`<tr><td>${escLocal(dateOnly(x.trade_date||x.date||x.published_at))}</td><td>${x.ticker?`<strong class="stock" onclick="showStock('${escLocal(x.ticker)}')">${escLocal(x.company||x.ticker)}</strong><div class="sub">${escLocal(x.ticker)}</div>`:`<strong>${escLocal(x.company||'Ukjent')}</strong>`}</td><td><strong>${escLocal(actorName(x))}</strong><div class="sub">${escLocal(x.role||'—')}</div></td><td><span class="${activityTone(x)}"><strong>${escLocal(activityLabel(x))}</strong></span>${x.details_pending?'<div class="small">offisiell Euronext-hendelse · berikelse venter</div>':!x.signal_eligible?'<div class="small">ikke brukt som handelssignal</div>':''}</td><td>${escLocal(n0(x.shares))}</td><td>${x.price==null?'—':escLocal(Number(x.price).toLocaleString('no-NO',{maximumFractionDigits:4})+' '+(x.currency||''))}</td><td>${actualValue(x)}</td><td>${x.url?`<a href="${escLocal(x.url)}" target="_blank" rel="noopener">Euronext</a>`:'—'}</td></tr>`).join('')}</tbody></table>`;
   }
 
   async function loadInsiderMarket(force){
