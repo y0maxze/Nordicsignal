@@ -1,5 +1,5 @@
-const CACHE_NAME='nordicsignal-shell-v1';
-const SHELL=['/app','/theme.css','/mobile_shell.js','/access_gate.js','/manifest.webmanifest'];
+const CACHE_NAME='nordicsignal-shell-v2';
+const SHELL=['/mobile','/insider','/news','/readiness','/stock','/calendar','/theme.css','/mobile_shell.js','/access_gate.js','/manifest.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).catch(()=>null));
@@ -7,9 +7,7 @@ self.addEventListener('install',event=>{
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key))))
-  );
+  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key)))));
   self.clients.claim();
 });
 
@@ -19,23 +17,27 @@ self.addEventListener('fetch',event=>{
   const url=new URL(request.url);
   if(url.origin!==self.location.origin)return;
   if(url.pathname.startsWith('/api/'))return;
-
   event.respondWith((async()=>{
     try{
       const response=await fetch(request);
-      if(response&&response.ok){
-        const copy=response.clone();
-        caches.open(CACHE_NAME).then(cache=>cache.put(request,copy)).catch(()=>null);
-      }
+      if(response&&response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy)).catch(()=>null)}
       return response;
     }catch(error){
-      const cached=await caches.match(request);
-      if(cached)return cached;
-      if(request.mode==='navigate'){
-        const app=await caches.match('/app');
-        if(app)return app;
-      }
+      const cached=await caches.match(request);if(cached)return cached;
+      if(request.mode==='navigate'){const mobile=await caches.match('/mobile');if(mobile)return mobile}
       throw error;
     }
+  })());
+});
+
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  const target=(event.notification.data&&event.notification.data.url)||'/mobile';
+  event.waitUntil((async()=>{
+    const list=await clients.matchAll({type:'window',includeUncontrolled:true});
+    for(const client of list){
+      try{const url=new URL(client.url);if(url.origin===self.location.origin){await client.focus();if('navigate' in client)await client.navigate(target);return}}catch{}
+    }
+    if(clients.openWindow)return clients.openWindow(target);
   })());
 });
