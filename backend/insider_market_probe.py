@@ -17,37 +17,36 @@ def dump(label, value):
         print(json.dumps(value, ensure_ascii=False, indent=2, default=str))
 
 
-for label, url in (
-    ("RENDER ENDPOINT", "https://nordicsignal-api.onrender.com/api/insider-market?days=14&refresh=true"),
-    ("CLOUDFLARE ENDPOINT", "https://nordicsignal.8pnwk5r8f4.workers.dev/api/insider-market?days=14&refresh=true"),
+node_id = "12906847"
+for url in (
+    f"https://live.euronext.com/en/node/{node_id}",
+    f"https://live.euronext.com/en/company-press-release/{node_id}",
+    f"https://live.euronext.com/en/ajax/company-press-release/{node_id}",
+    f"https://live.euronext.com/en/ajax/getCompanyPressRelease/{node_id}",
+    f"https://live.euronext.com/en/node/{node_id}?ajax=1",
 ):
     try:
-        response = requests.get(url, impersonate="chrome", timeout=30)
-        dump(label, {"status": response.status_code, "body": response.text[:12000]})
+        r = requests.get(url, impersonate="chrome", timeout=20, allow_redirects=True)
+        dump("NODE URL", {"url": url, "status": r.status_code, "final": r.url, "len": len(r.text), "body": r.text[:2500]})
     except Exception as exc:
-        dump(label, {"error": type(exc).__name__, "detail": repr(exc)})
-
-for source_index, url in enumerate((news_runtime.EURONEXT_LATEST, news_runtime.EURONEXT_ARCHIVE)):
-    try:
-        html = news_runtime._fetch_text(url)
-        rows = general_news_runtime.parse_general_euronext_html(html, 60)
-        dump("EURONEXT SOURCE", {"url": url, "html_len": len(html), "row_count": len(rows), "rows": rows[:10]})
-        if source_index == 0:
-            for needle in ("OCEAN SUN", "SOILTECH ASA", "Mandatory notification of trade"):
-                pos = html.lower().find(needle.lower())
-                snippet = html[max(0, pos-1800):pos+2600] if pos >= 0 else "NOT FOUND"
-                dump("RAW MARKUP " + needle, snippet)
-                if pos >= 0:
-                    hrefs = re.findall(r'href=["\']([^"\']+)["\']', snippet, flags=re.I)
-                    dump("HREFS " + needle, hrefs)
-    except Exception as exc:
-        dump("EURONEXT SOURCE ERROR", {"url": url, "error": type(exc).__name__, "detail": repr(exc)})
+        dump("NODE URL ERROR", {"url": url, "error": type(exc).__name__, "detail": repr(exc)})
 
 try:
-    candidates = im._candidate_announcements()
-    dump("CANDIDATES", {"count": len(candidates), "items": candidates})
+    html = news_runtime._fetch_text(news_runtime.EURONEXT_LATEST)
+    rows = general_news_runtime.parse_general_euronext_html(html, 60)
+    dump("EURONEXT SOURCE", {"html_len": len(html), "row_count": len(rows), "rows": rows[:10]})
+    patterns = [
+        r'[^\n]{0,250}standardRightCompanyPressRelease[^\n]{0,500}',
+        r'[^\n]{0,250}data-node-nid[^\n]{0,500}',
+        r'[^\n]{0,250}(?:ajax|Ajax|AJAX)[^\n]{0,500}',
+    ]
+    for pattern in patterns:
+        matches = re.findall(pattern, html, flags=re.I)
+        dump("MARKUP MATCH " + pattern, matches[:12])
+    scripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, flags=re.I)
+    dump("SCRIPTS", [x for x in scripts if any(k in x.lower() for k in ("company", "market", "main", "global", "euronext", "live"))][-30:])
 except Exception as exc:
-    dump("CANDIDATE ERROR", {"error": type(exc).__name__, "detail": repr(exc)})
+    dump("EURONEXT SOURCE ERROR", {"error": type(exc).__name__, "detail": repr(exc)})
 
 try:
     dump("LOCAL FEED", im.market_insider_feed(limit=100, days=14, refresh=True))
