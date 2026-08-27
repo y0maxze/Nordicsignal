@@ -64,8 +64,8 @@ jobs:
       - name: Check production assets and routes
         run: |
           set -e
-          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js intelligence.html instrument.html paper.html history.html news.html insider.html mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
-          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
+          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
+          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/mobile", "/mobile.html"\]' worker.js
@@ -84,11 +84,16 @@ jobs:
           if grep -Fq 'Number(p)*100' frontend/index.html; then echo 'Short percent invariant failed'; exit 1; fi
           grep -Fq 'Number(p)>=3' frontend/index.html
           grep -q 'dashboard_performance.js' frontend/analysis.js
+          grep -q 'insider_clean_ui.js' frontend/analysis.js
           grep -q 'portfolio_dashboard.js' frontend/analysis.js
           grep -q "location.href='/stock?ticker='" frontend/analysis.js
           if grep -q 'analysis_legacy.js' frontend/analysis.js; then echo 'Legacy duplicate stock-detail UI must not be loaded'; exit 1; fi
           grep -q 'mapLimit(universe,5' frontend/dashboard_performance.js
           grep -q 'Number(p).toFixed(2)' frontend/dashboard_performance.js
+          grep -q 'Søk selskap, ticker eller insider' frontend/insider_clean_ui.js
+          grep -q 'XPLRA' frontend/insider_clean_ui.js
+          grep -q 'src="/insider_clean_ui.js"' frontend/insider.html
+          grep -q '/api/insider-market?limit=100' frontend/insider_clean_ui.js
           grep -q '/api/holdings/calendar' frontend/portfolio_dashboard.js
           grep -q '/api/calendar' frontend/calendar.html
           grep -q '/api/readiness/' frontend/readiness.html
@@ -111,6 +116,8 @@ jobs:
           grep -q 'field_company_press_releases_target_id%5B' backend/insider_market_v2_runtime.py
           grep -q 'EURONEXT_INSIDER_TOPIC_ID = "1081"' backend/insider_market_v2_runtime.py
           grep -q 'insider_market_v2_runtime' backend/sitecustomize.py
+          grep -q 'insider_company_cleanup_runtime' backend/sitecustomize.py
+          grep -q 'canonical_issuer' backend/insider_company_cleanup_runtime.py
           grep -q 'system_health_runtime' backend/sitecustomize.py
           grep -q '/api/system-health' backend/system_health_runtime.py
           if grep -Eq 'STOCK_PRESSURE_UI|STOCK_INSIDER_UI|DASHBOARD_METRIC_UI|DASHBOARD_STOCK_ACTIONS_UI' worker.js; then echo 'Large UI implementations must live in frontend assets'; exit 1; fi
