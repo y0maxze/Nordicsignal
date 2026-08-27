@@ -18,18 +18,19 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
       - name: Probe production and source parser
+        continue-on-error: true
         run: |
-          set +e
+          : > /tmp/insider-probe.txt
           {
             echo '=== RENDER ENDPOINT ==='
-            curl -sS --max-time 30 'https://nordicsignal-api.onrender.com/api/insider-market?days=14&refresh=true'
+            curl -sS --max-time 30 'https://nordicsignal-api.onrender.com/api/insider-market?days=14&refresh=true' || true
             echo
             echo '=== CLOUDFLARE ENDPOINT ==='
-            curl -sS --max-time 30 'https://nordicsignal.8pnwk5r8f4.workers.dev/api/insider-market?days=14&refresh=true'
+            curl -sS --max-time 30 'https://nordicsignal.8pnwk5r8f4.workers.dev/api/insider-market?days=14&refresh=true' || true
             echo
             echo '=== LOCAL LIVE SOURCE/PARSER ==='
-            cd backend
-            python - <<'PY'
+            pushd backend >/dev/null
+            python - <<'PY' || true
             import json
             import insider_market_runtime as im
             import news_runtime
@@ -42,7 +43,7 @@ jobs:
                     print('HTML_LEN', len(html))
                     rows = general_news_runtime.parse_general_euronext_html(html, 60)
                     print('GENERAL_ROWS', len(rows))
-                    for row in rows[:20]:
+                    for row in rows[:30]:
                         print('ROW', row.get('published_at'), row.get('category'), row.get('ticker'), row.get('title'), row.get('url'))
                 except Exception as exc:
                     print('SOURCE_ERROR', type(exc).__name__, repr(exc))
@@ -65,9 +66,11 @@ jobs:
             except Exception as exc:
                 print('FEED_ERROR', type(exc).__name__, repr(exc))
             PY
-          } > /tmp/insider-probe.txt 2>&1
+            popd >/dev/null
+          } >> /tmp/insider-probe.txt 2>&1
           cat /tmp/insider-probe.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: insider-market-probe
           path: /tmp/insider-probe.txt
