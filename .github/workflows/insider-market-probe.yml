@@ -1,0 +1,74 @@
+name: Insider Market Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/insider-market-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Probe production and source parser
+        run: |
+          set +e
+          {
+            echo '=== RENDER ENDPOINT ==='
+            curl -sS --max-time 30 'https://nordicsignal-api.onrender.com/api/insider-market?days=14&refresh=true'
+            echo
+            echo '=== CLOUDFLARE ENDPOINT ==='
+            curl -sS --max-time 30 'https://nordicsignal.8pnwk5r8f4.workers.dev/api/insider-market?days=14&refresh=true'
+            echo
+            echo '=== LOCAL LIVE SOURCE/PARSER ==='
+            cd backend
+            python - <<'PY'
+            import json
+            import insider_market_runtime as im
+            import news_runtime
+            import general_news_runtime
+
+            for url in (news_runtime.EURONEXT_LATEST, news_runtime.EURONEXT_ARCHIVE):
+                print('SOURCE', url)
+                try:
+                    html = news_runtime._fetch_text(url)
+                    print('HTML_LEN', len(html))
+                    rows = general_news_runtime.parse_general_euronext_html(html, 60)
+                    print('GENERAL_ROWS', len(rows))
+                    for row in rows[:20]:
+                        print('ROW', row.get('published_at'), row.get('category'), row.get('ticker'), row.get('title'), row.get('url'))
+                except Exception as exc:
+                    print('SOURCE_ERROR', type(exc).__name__, repr(exc))
+
+            try:
+                candidates = im._candidate_announcements()
+                print('CANDIDATES', len(candidates))
+                for item in candidates:
+                    print('CANDIDATE', json.dumps(item, ensure_ascii=False))
+                    try:
+                        rows = im._extract_disclosure(item)
+                        print('EXTRACTED', json.dumps(rows, ensure_ascii=False)[:8000])
+                    except Exception as exc:
+                        print('EXTRACT_ERROR', type(exc).__name__, repr(exc))
+            except Exception as exc:
+                print('CANDIDATE_ERROR', type(exc).__name__, repr(exc))
+
+            try:
+                print('FEED', json.dumps(im.market_insider_feed(limit=100, days=14, refresh=True), ensure_ascii=False)[:30000])
+            except Exception as exc:
+                print('FEED_ERROR', type(exc).__name__, repr(exc))
+            PY
+          } > /tmp/insider-probe.txt 2>&1
+          cat /tmp/insider-probe.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insider-market-probe
+          path: /tmp/insider-probe.txt
+          retention-days: 1
