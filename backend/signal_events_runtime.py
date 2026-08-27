@@ -1,12 +1,17 @@
-"""Latest signal-change feed for stocks, funds and ETFs.
+"""Latest material signal-change feed for stocks, funds and ETFs.
 
-Top Signals is a current ranking. Latest Signals should instead answer a different
-question: what changed recently? This runtime emits only material score moves or
-signal-band changes, so the dashboard does not repeat the same ranked instruments
-in both panels.
+Top Signals answers "what is strongest now?". Latest Signals answers "what changed?".
+For stocks this feed combines model-score changes with price-trend reversals and
+unusual trading activity. Trend observations reuse the same Yahoo history already
+used by the market refresh when possible; a bounded background scan keeps the signal
+state fresh without blocking the UI.
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import json
+from statistics import median
+import threading
+import time
 
 from fastapi import HTTPException
 
@@ -18,6 +23,17 @@ import instrument_signal_runtime
 
 SUPPORTED = {"Aksjer", "Fond", "ETF", "Alle"}
 MIN_SCORE_MOVE = 2.0
+TREND_SPREAD_THRESHOLD_PCT = 0.35
+VOLUME_SURGE_RATIO = 1.80
+RECENT_VOLUME_SURGE_RATIO = 1.35
+EXTREME_VOLUME_RATIO = 2.50
+TREND_SCAN_INTERVAL_SECONDS = 30 * 60
+TREND_SCAN_WORKERS = 2
+
+_TREND_SCAN_LOCK = threading.Lock()
+_TREND_SCAN_RUNNING = False
+_LAST_TREND_SCAN_AT = 0.0
+_TREND_SCAN_LOCAL = threading.local()
 
 
 def _now():
@@ -56,6 +72,33 @@ def _ensure_schema():
           quote_type TEXT,
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS trend_activity_state (
+          symbol TEXT PRIMARY KEY,
+          trend_state TEXT NOT NULL,
+          activity_state TEXT NOT NULL,
+          metrics TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS trend_activity_events (
+          id {identity},
+          symbol TEXT NOT NULL,
+          name TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          direction TEXT NOT NULL,
+          signal TEXT NOT NULL,
+          event TEXT NOT NULL,
+          detail TEXT NOT NULL,
+          volume_ratio DOUBLE PRECISION,
+          recent_volume_ratio DOUBLE PRECISION,
+          return_1d_pct DOUBLE PRECISION,
+          return_5d_pct DOUBLE PRECISION,
+          trend_spread_pct DOUBLE PRECISION,
+          observed_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          event_key TEXT NOT NULL,
+          UNIQUE(symbol,event_key)
+        );
         """)
         conn.commit()
     finally:
@@ -72,11 +115,7 @@ def _event_text(previous_score, score, previous_signal, signal):
 
 
 def build_stock_events(rows, limit=20):
-    """Build one latest material change per ticker from score-history rows.
-
-    Rows must be newest first and include ticker, total and created_at. This helper is
-    pure enough for unit tests and deliberately ignores unchanged refreshes.
-    """
+    """Build one latest material score change per ticker from score-history rows."""
     grouped = {}
     for raw in rows or []:
         row = dict(raw)
@@ -101,6 +140,7 @@ def build_stock_events(rows, limit=20):
             "name": latest.get("name") or ticker,
             "sector": latest.get("sector"),
             "asset_class": "Aksjer",
+            "event_type": "score_change",
             "previous_score": previous_score,
             "score": current_score,
             "score_delta": delta,
@@ -115,6 +155,312 @@ def build_stock_events(rows, limit=20):
     return events[: max(1, min(int(limit or 20), 50))]
 
 
+def _mean(values):
+    values = [float(v) for v in values if v is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _pct_change(current, previous):
+    if current is None or previous in (None, 0):
+        return None
+    return (float(current) / float(previous) - 1.0) * 100.0
+
+
+def _trend_state(close, sma5, sma20):
+    if close is None or sma5 is None or sma20 in (None, 0):
+        return "neutral"
+    spread = (float(sma5) / float(sma20) - 1.0) * 100.0
+    if spread >= TREND_SPREAD_THRESHOLD_PCT and float(close) >= float(sma20):
+        return "up"
+    if spread <= -TREND_SPREAD_THRESHOLD_PCT and float(close) <= float(sma20):
+        return "down"
+    return "neutral"
+
+
+def analyze_trend_activity(history):
+    """Describe a stock's short/medium trend and abnormal volume from daily rows.
+
+    This deliberately uses simple, transparent rules: 5-day versus 20-day average,
+    recent returns, and volume relative to the preceding 20 sessions. It is an event
+    detector, not another 0-100 valuation model.
+    """
+    rows = []
+    for raw in history or []:
+        try:
+            close = float(raw.get("close"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if close <= 0:
+            continue
+        item = dict(raw)
+        item["close"] = close
+        try:
+            volume = float(item.get("volume")) if item.get("volume") is not None else None
+        except (TypeError, ValueError):
+            volume = None
+        item["volume"] = volume if volume is not None and volume >= 0 else None
+        rows.append(item)
+    rows.sort(key=lambda x: (x.get("timestamp") or 0, str(x.get("date") or "")))
+    if len(rows) < 25:
+        return {"eligible": False, "data_points": len(rows)}
+
+    closes = [x["close"] for x in rows]
+    current = closes[-1]
+    sma5 = _mean(closes[-5:])
+    sma20 = _mean(closes[-20:])
+    previous_close = closes[-2]
+    previous_sma5 = _mean(closes[-6:-1])
+    previous_sma20 = _mean(closes[-21:-1])
+    trend_state = _trend_state(current, sma5, sma20)
+    previous_trend_state = _trend_state(previous_close, previous_sma5, previous_sma20)
+    trend_spread_pct = _pct_change(sma5, sma20)
+
+    prior_volumes = [x.get("volume") for x in rows[-21:-1] if x.get("volume") not in (None, 0)]
+    normal_volume = median(prior_volumes) if len(prior_volumes) >= 10 else _mean(prior_volumes)
+    latest_volume = rows[-1].get("volume")
+    volume_ratio = (float(latest_volume) / float(normal_volume)) if latest_volume is not None and normal_volume not in (None, 0) else None
+    recent_volumes = [x.get("volume") for x in rows[-5:] if x.get("volume") not in (None, 0)]
+    earlier_volumes = [x.get("volume") for x in rows[-25:-5] if x.get("volume") not in (None, 0)]
+    earlier_normal = median(earlier_volumes) if len(earlier_volumes) >= 10 else _mean(earlier_volumes)
+    recent_average = _mean(recent_volumes)
+    recent_volume_ratio = (recent_average / earlier_normal) if recent_average is not None and earlier_normal not in (None, 0) else None
+
+    volume_ratio_value = float(volume_ratio or 0)
+    recent_ratio_value = float(recent_volume_ratio or 0)
+    if volume_ratio_value >= VOLUME_SURGE_RATIO or recent_ratio_value >= RECENT_VOLUME_SURGE_RATIO:
+        activity_state = "high"
+    elif volume_ratio_value >= 1.25 or recent_ratio_value >= 1.15:
+        activity_state = "elevated"
+    else:
+        activity_state = "normal"
+    extreme_activity = volume_ratio_value >= EXTREME_VOLUME_RATIO or recent_ratio_value >= 1.60
+
+    return_1d_pct = _pct_change(current, closes[-2])
+    return_5d_pct = _pct_change(current, closes[-6])
+    return_20d_pct = _pct_change(current, closes[-21])
+    previous_20 = closes[-21:-1]
+    breakout_up = bool(previous_20 and current >= max(previous_20) * 1.002)
+    breakout_down = bool(previous_20 and current <= min(previous_20) * 0.998)
+
+    one_day = float(return_1d_pct or 0)
+    five_day = float(return_5d_pct or 0)
+    if breakout_up or one_day >= 1.25 or five_day >= 2.5:
+        activity_direction = "up"
+    elif breakout_down or one_day <= -1.25 or five_day <= -2.5:
+        activity_direction = "down"
+    else:
+        activity_direction = "neutral"
+
+    observed_at = rows[-1].get("date") or _now()
+    return {
+        "eligible": True,
+        "data_points": len(rows),
+        "observed_at": observed_at,
+        "current": current,
+        "sma_5": sma5,
+        "sma_20": sma20,
+        "trend_spread_pct": trend_spread_pct,
+        "trend_state": trend_state,
+        "previous_trend_state": previous_trend_state,
+        "cross_up": trend_state == "up" and previous_trend_state != "up",
+        "cross_down": trend_state == "down" and previous_trend_state != "down",
+        "return_1d_pct": return_1d_pct,
+        "return_5d_pct": return_5d_pct,
+        "return_20d_pct": return_20d_pct,
+        "volume_ratio": volume_ratio,
+        "recent_volume_ratio": recent_volume_ratio,
+        "activity_state": activity_state,
+        "activity_direction": activity_direction,
+        "extreme_activity": extreme_activity,
+        "breakout_up": breakout_up,
+        "breakout_down": breakout_down,
+    }
+
+
+def _trend_state_row(symbol):
+    conn = connect()
+    try:
+        row = conn.execute("SELECT * FROM trend_activity_state WHERE symbol=? LIMIT 1", (symbol,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _set_trend_state(symbol, metrics):
+    encoded = json.dumps(metrics, ensure_ascii=False, separators=(",", ":"), default=str)
+    observed_at = str(metrics.get("observed_at") or _now())
+    now = _now()
+    conn = connect()
+    try:
+        existing = conn.execute("SELECT symbol FROM trend_activity_state WHERE symbol=? LIMIT 1", (symbol,)).fetchone()
+        values = (metrics.get("trend_state") or "neutral", metrics.get("activity_state") or "normal", encoded, observed_at, now, symbol)
+        if existing:
+            conn.execute("UPDATE trend_activity_state SET trend_state=?,activity_state=?,metrics=?,observed_at=?,updated_at=? WHERE symbol=?", values)
+        else:
+            conn.execute("INSERT INTO trend_activity_state(trend_state,activity_state,metrics,observed_at,updated_at,symbol) VALUES(?,?,?,?,?,?)", values)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _fmt_pct(value):
+    if value is None:
+        return None
+    value = float(value)
+    return ("+" if value > 0 else "") + f"{value:.1f}%"
+
+
+def _trend_event_candidate(metrics, previous=None):
+    if not metrics or not metrics.get("eligible"):
+        return None
+    current_trend = metrics.get("trend_state") or "neutral"
+    previous_trend = previous.get("trend_state") if previous else metrics.get("previous_trend_state") or "neutral"
+    previous_activity = previous.get("activity_state") if previous else "normal"
+    high_activity = metrics.get("activity_state") == "high"
+    new_activity = high_activity and previous_activity != "high"
+    turn_up = current_trend == "up" and previous_trend != "up"
+    turn_down = current_trend == "down" and previous_trend != "down"
+    direction = metrics.get("activity_direction") or "neutral"
+
+    kind = None
+    signal = "Watch"
+    if turn_up:
+        direction = "up"
+        signal = "Strong"
+        kind = "trend_activity" if high_activity else "trend_reversal"
+        event = "Trend snur opp · høy aktivitet" if high_activity else "Trend snur opp"
+    elif turn_down:
+        direction = "down"
+        signal = "Risk"
+        kind = "trend_activity" if high_activity else "trend_reversal"
+        event = "Trend snur ned · høy aktivitet" if high_activity else "Trend snur ned"
+    elif new_activity and direction == "up":
+        signal = "Strong"
+        kind = "activity_surge"
+        event = "Høy aktivitet · positivt kursmomentum"
+    elif new_activity and direction == "down":
+        signal = "Risk"
+        kind = "activity_surge"
+        event = "Høy aktivitet · negativt kursmomentum"
+    elif new_activity and metrics.get("extreme_activity"):
+        signal = "Watch"
+        kind = "activity_surge"
+        event = "Uvanlig høy handelsaktivitet"
+    else:
+        return None
+
+    details = []
+    if metrics.get("return_5d_pct") is not None:
+        details.append("5d " + _fmt_pct(metrics.get("return_5d_pct")))
+    ratios = [x for x in (metrics.get("volume_ratio"), metrics.get("recent_volume_ratio")) if x is not None]
+    if ratios:
+        details.append(f"volum {max(float(x) for x in ratios):.1f}× normalt")
+    if metrics.get("trend_spread_pct") is not None:
+        details.append("5d/20d trend " + _fmt_pct(metrics.get("trend_spread_pct")))
+    return {
+        "kind": kind,
+        "direction": direction,
+        "signal": signal,
+        "event": event,
+        "detail": " · ".join(details),
+    }
+
+
+def record_stock_trend_observation(ticker, name, history):
+    """Persist a trend/activity observation and emit only a new material event."""
+    symbol = str(ticker or "").strip().upper().replace(".OL", "")
+    if not symbol:
+        return {"status": "ignored", "reason": "missing ticker"}
+    metrics = analyze_trend_activity(history)
+    if not metrics.get("eligible"):
+        return {"status": "ignored", "reason": "insufficient history", "metrics": metrics}
+
+    previous = _trend_state_row(symbol)
+    candidate = _trend_event_candidate(metrics, previous)
+    emitted = False
+    if candidate:
+        observed_day = str(metrics.get("observed_at") or _now())[:10]
+        event_key = f"{observed_day}:{candidate['kind']}:{candidate['direction']}"
+        conn = connect()
+        try:
+            cursor = conn.execute(
+                "INSERT INTO trend_activity_events(symbol,name,kind,direction,signal,event,detail,volume_ratio,recent_volume_ratio,return_1d_pct,return_5d_pct,trend_spread_pct,observed_at,created_at,event_key) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,event_key) DO NOTHING",
+                (
+                    symbol,
+                    name or symbol,
+                    candidate["kind"],
+                    candidate["direction"],
+                    candidate["signal"],
+                    candidate["event"],
+                    candidate["detail"],
+                    metrics.get("volume_ratio"),
+                    metrics.get("recent_volume_ratio"),
+                    metrics.get("return_1d_pct"),
+                    metrics.get("return_5d_pct"),
+                    metrics.get("trend_spread_pct"),
+                    str(metrics.get("observed_at") or _now()),
+                    _now(),
+                    event_key,
+                ),
+            )
+            conn.commit()
+            emitted = bool(getattr(cursor, "rowcount", 0))
+        finally:
+            conn.close()
+    _set_trend_state(symbol, metrics)
+    return {"status": "ok", "emitted": emitted, "candidate": candidate, "metrics": metrics}
+
+
+def _trend_stock_events(limit):
+    limit = max(1, min(int(limit or 20), 50))
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT te.*,s.sector,sc.total current_score,COALESCE(sc.source,'stored') score_source "
+            "FROM trend_activity_events te "
+            "LEFT JOIN stocks s ON s.ticker=te.symbol "
+            "LEFT JOIN scores sc ON sc.id=(SELECT MAX(id) FROM scores x WHERE x.ticker=te.symbol) "
+            "WHERE COALESCE(s.active,1)=1 ORDER BY te.created_at DESC,te.id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+    items = []
+    for raw in rows:
+        x = dict(raw)
+        score = float(x["current_score"]) if x.get("current_score") is not None else None
+        source = x.get("score_source") or "stored"
+        items.append({
+            "ticker": x.get("symbol"),
+            "symbol": x.get("symbol"),
+            "name": x.get("name") or x.get("symbol"),
+            "sector": x.get("sector"),
+            "asset_class": "Aksjer",
+            "event_type": "trend_activity",
+            "trend_event_kind": x.get("kind"),
+            "direction": x.get("direction"),
+            "event": x.get("event"),
+            "detail": x.get("detail"),
+            "volume_ratio": x.get("volume_ratio"),
+            "recent_volume_ratio": x.get("recent_volume_ratio"),
+            "return_1d_pct": x.get("return_1d_pct"),
+            "return_5d_pct": x.get("return_5d_pct"),
+            "trend_spread_pct": x.get("trend_spread_pct"),
+            "score": score,
+            "previous_score": score,
+            "score_delta": 0.0,
+            "signal": x.get("signal") or "Watch",
+            "strength": _strength(x.get("signal")),
+            "updated_at": x.get("created_at"),
+            "observed_at": x.get("observed_at"),
+            "score_source": source,
+            "live_verified": source == "live",
+            "partial_live": source == "partial_live",
+        })
+    return items
+
+
 def _stock_events(limit):
     conn = connect()
     try:
@@ -125,7 +471,6 @@ def _stock_events(limit):
         ).fetchall()
     finally:
         conn.close()
-    # Only the newest two score snapshots per ticker are needed.
     trimmed, counts = [], {}
     for row in rows:
         ticker = row["ticker"]
@@ -133,7 +478,9 @@ def _stock_events(limit):
             continue
         trimmed.append(dict(row))
         counts[ticker] = counts.get(ticker, 0) + 1
-    return build_stock_events(trimmed, limit)
+    items = build_stock_events(trimmed, 50) + _trend_stock_events(50)
+    items.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
+    return items[: max(1, min(int(limit or 20), 50))]
 
 
 def _state_row(symbol):
@@ -204,7 +551,6 @@ def _refresh_external_state(provider, asset_class):
         symbol = str(item.get("symbol") or item.get("ticker") or "").upper()
         previous = _state_row(symbol)
         if previous is None:
-            # First observation is a baseline, not a fake "latest change".
             _set_state(item)
             continue
         changed = _record_external_event(item, previous)
@@ -229,6 +575,7 @@ def _external_events(asset_class, limit):
         delta = float(x.get("score") or 0) - float(x.get("previous_score") or 0)
         x.update({
             "ticker": x.get("symbol"),
+            "event_type": "score_change",
             "score_delta": delta,
             "strength": _strength(x.get("signal")),
             "updated_at": x.get("created_at"),
@@ -238,11 +585,67 @@ def _external_events(asset_class, limit):
     return items
 
 
+def _scan_provider():
+    provider = getattr(_TREND_SCAN_LOCAL, "provider", None)
+    if provider is None:
+        provider = YahooProvider()
+        _TREND_SCAN_LOCAL.provider = provider
+    return provider
+
+
+def _scan_one_stock(row):
+    provider = _scan_provider()
+    history = provider.historical(row["ticker"], "3m")
+    return record_stock_trend_observation(row["ticker"], row.get("name") or row["ticker"], history)
+
+
+def _run_trend_scan():
+    global _TREND_SCAN_RUNNING
+    conn = None
+    try:
+        conn = connect()
+        rows = [dict(x) for x in conn.execute("SELECT ticker,name FROM stocks WHERE active=1 ORDER BY ticker").fetchall()]
+    except Exception:
+        rows = []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    try:
+        with ThreadPoolExecutor(max_workers=TREND_SCAN_WORKERS) as pool:
+            futures = [pool.submit(_scan_one_stock, row) for row in rows]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    pass
+    finally:
+        with _TREND_SCAN_LOCK:
+            _TREND_SCAN_RUNNING = False
+
+
+def _maybe_schedule_trend_scan():
+    global _TREND_SCAN_RUNNING, _LAST_TREND_SCAN_AT
+    now = time.monotonic()
+    with _TREND_SCAN_LOCK:
+        if _TREND_SCAN_RUNNING or (now - _LAST_TREND_SCAN_AT) < TREND_SCAN_INTERVAL_SECONDS:
+            return "running" if _TREND_SCAN_RUNNING else "fresh"
+        _TREND_SCAN_RUNNING = True
+        _LAST_TREND_SCAN_AT = now
+    threading.Thread(target=_run_trend_scan, daemon=True, name="nordicsignal-trend-scan").start()
+    return "scheduled"
+
+
 def signal_events(asset_class="Aksjer", limit=12):
     requested = str(asset_class or "Aksjer").strip()
     if requested not in SUPPORTED:
         raise HTTPException(400, detail="asset_class must be Aksjer, Fond, ETF or Alle")
     limit = max(1, min(int(limit or 12), 30))
+    trend_scan = None
+    if requested in ("Aksjer", "Alle"):
+        trend_scan = _maybe_schedule_trend_scan()
     if requested == "Aksjer":
         items = _stock_events(limit)
     elif requested in ("Fond", "ETF"):
@@ -256,8 +659,14 @@ def signal_events(asset_class="Aksjer", limit=12):
     return {
         "asset_class": requested,
         "items": items,
-        "meaning": "material signal changes only",
+        "meaning": "material score changes plus verified trend/activity changes",
         "minimum_score_move": MIN_SCORE_MOVE,
+        "trend_activity": {
+            "enabled": True,
+            "trend_basis": "5d_vs_20d",
+            "volume_surge_ratio": VOLUME_SURGE_RATIO,
+            "background_scan": trend_scan,
+        },
         "updated_at": _now(),
     }
 
