@@ -104,6 +104,7 @@ def data_quality_snapshot():
         seed = [x["ticker"] for x in latest if x.get("source") == "seed"]
         checks.append(_check("no_seed_scores", not seed, "No active stock is using a seed score" if not seed else "Seed score active for: "+", ".join(seed[:8])))
 
+        score_latest = _latest(conn, "scores", "created_at")
         quote_latest = _latest(conn, "quotes", "captured_at")
         freshness["prices"] = _freshness_entry(quote_latest, "Yahoo Finance quote snapshots")
         quote_age = freshness["prices"]["age_seconds"]
@@ -114,8 +115,11 @@ def data_quality_snapshot():
             severity="warning",
         ))
 
-        freshness["fundamentals"] = _freshness_entry(_latest(conn, "fundamentals", "updated_at"), "Yahoo Finance fundamentals")
-        freshness["scores"] = _freshness_entry(_latest(conn, "scores", "created_at"), "NordicSignal score engine")
+        # Raw Yahoo research payloads are intentionally not persisted. The latest score
+        # timestamp is the auditable point at which those fundamentals were fetched and
+        # incorporated into the fundamentals component of the production score.
+        freshness["fundamentals"] = _freshness_entry(score_latest, "Yahoo Finance fundamentals incorporated into latest NordicSignal score")
+        freshness["scores"] = _freshness_entry(score_latest, "NordicSignal score engine")
         freshness["score_signals"] = _freshness_entry(_latest(conn, "signal_events", "created_at"), "NordicSignal score-change events")
         freshness["trend_activity"] = _freshness_entry(_latest(conn, "trend_activity_events", "created_at"), "NordicSignal trend/activity detector")
         freshness["market_news"] = _feed_cache_entry(conn, "market_news:v1", "Persisted market-news feed cache")
@@ -162,7 +166,7 @@ def data_quality_snapshot():
             "calendar":"Euronext financial calendar",
             "signal_evidence":"Yahoo Finance daily price/volume history replayed through NordicSignal rules",
         },
-        "freshness_policy":"Event timestamps describe the observation/event time. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
+        "freshness_policy":"Score/fundamentals freshness is the time Yahoo fundamentals were incorporated into the latest score. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
         "generated_at":_now(),
     }
 
