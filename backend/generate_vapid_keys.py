@@ -12,6 +12,8 @@ import base64
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+DEFAULT_SUBJECT = "https://nordicsignal.8pnwk5r8f4.workers.dev"
+
 
 def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
@@ -35,7 +37,7 @@ def main():
     print("Generate these once and keep the private value secret.\n")
     print(f"NORDICSIGNAL_VAPID_PUBLIC_KEY={pair['public_key']}")
     print(f"NORDICSIGNAL_VAPID_PRIVATE_KEY={pair['private_key']}")
-    print("NORDICSIGNAL_VAPID_SUBJECT=mailto:<your operational email>")
+    print(f"NORDICSIGNAL_VAPID_SUBJECT={DEFAULT_SUBJECT}")
     print("\nDo not commit these values. Regenerating the pair invalidates existing push subscriptions.")
 
 
