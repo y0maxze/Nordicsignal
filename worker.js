@@ -45,9 +45,15 @@ const ASSET_ROUTES = new Map([
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#070707"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="NordicSignal">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
-const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script>';
+const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script>';
 const MOBILE_SHELL = '<script src="/mobile_shell.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
+const SECURITY_HEADERS = {
+  "x-content-type-options":"nosniff",
+  "referrer-policy":"strict-origin-when-cross-origin",
+  "permissions-policy":"camera=(), microphone=(), geolocation=()",
+  "x-frame-options":"DENY",
+};
 
 function assetRequest(request, pathname) {
   const url = new URL(request.url);
@@ -55,11 +61,14 @@ function assetRequest(request, pathname) {
   return new Request(url, request);
 }
 
+function applySecurityHeaders(headers) {
+  for (const [key,value] of Object.entries(SECURITY_HEADERS)) headers.set(key,value);
+  return headers;
+}
+
 function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {"content-type":"application/json; charset=utf-8","cache-control":"no-store"},
-  });
+  const headers=applySecurityHeaders(new Headers({"content-type":"application/json; charset=utf-8","cache-control":"no-store"}));
+  return new Response(JSON.stringify(body), {status,headers});
 }
 
 function assetPath(pathname) {
@@ -99,21 +108,32 @@ async function serveAsset(request, env, pathname) {
   const type = response.headers.get("content-type") || "";
   if (!type.includes("text/html")) return response;
   const html = enhanceHtml(await response.text(), pathname);
-  const headers = new Headers(response.headers);
+  const headers = applySecurityHeaders(new Headers(response.headers));
   headers.delete("content-length");
   headers.set("cache-control", "no-store");
   return new Response(html, {status:response.status, headers});
 }
 
-async function proxyApi(request, url) {
+function isWriteRequest(request,url){
+  const method=request.method.toUpperCase();
+  return ["POST","PUT","PATCH","DELETE"].includes(method)||url.pathname==="/api/refresh"||url.pathname.endsWith("/refresh");
+}
+
+async function proxyApi(request, url, env) {
   const upstream = new URL(`${API_ORIGIN}${url.pathname}`);
   upstream.search = url.search;
   try {
-    const response = await fetch(upstream.toString(), request);
-    const headers = new Headers(response.headers);
-    headers.set("access-control-allow-origin", "*");
-    headers.set("cache-control", "no-store");
-    return new Response(response.body, {status:response.status, headers});
+    const headers = new Headers(request.headers);
+    if (isWriteRequest(request,url) && env && env.NORDICSIGNAL_WRITE_TOKEN) {
+      headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
+    }
+    const forwarded = new Request(upstream.toString(), request);
+    const secured = new Request(forwarded, {headers});
+    const response = await fetch(secured);
+    const responseHeaders = applySecurityHeaders(new Headers(response.headers));
+    responseHeaders.delete("access-control-allow-origin");
+    responseHeaders.set("cache-control", "no-store");
+    return new Response(response.body, {status:response.status, headers:responseHeaders});
   } catch (error) {
     return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:String(error)},502);
   }
@@ -125,7 +145,7 @@ export default {
     if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
       return json({status:"error",code:"ASSETS_BINDING_MISSING",message:"Cloudflare ASSETS binding is not available in this deployment.",path:url.pathname},500);
     }
-    if (url.pathname.startsWith("/api/")) return proxyApi(request, url);
+    if (url.pathname.startsWith("/api/")) return proxyApi(request, url, env);
     if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
     let pathname = assetPath(url.pathname);
     if (isStockEntry(url.pathname) && !url.searchParams.get("ticker") && !url.searchParams.get("symbol")) pathname = "/intelligence.html";
