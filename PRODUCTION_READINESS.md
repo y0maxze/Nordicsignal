@@ -12,7 +12,8 @@ NordicSignal is currently designed as an internal/single-user finance intelligen
 - Operational readiness endpoint: `/api/ops-readiness`.
 - Security status endpoint: `/api/security-status`.
 - Write/refresh audit log and bounded rate limiting.
-- Optional Worker-to-backend shared-secret verification.
+- Worker-to-backend shared-secret verification.
+- Private-mode lock that rejects direct Render API access for every API route except `/api/health`.
 - Security headers on Worker/API responses.
 - Real Web Push subscription/delivery code with local-notification fallback.
 - Historical signal-evidence replay for trend/activity signals at 5/20/60 trading-day horizons.
@@ -24,28 +25,40 @@ NordicSignal is currently designed as an internal/single-user finance intelligen
 
 Put Cloudflare Access or an equivalent server-side identity layer in front of NordicSignal. A password embedded in HTML/JavaScript is **not** acceptable authentication.
 
-After external access protection has been configured and tested, set on Render:
+Do not set `NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED=true` yet. First complete the Worker secret in step 2 and verify Cloudflare Access actually blocks an unauthenticated browser.
 
-```text
-NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED=true
-```
-
-Do not set this flag before a real unauthenticated request has been verified to be blocked.
-
-### 2. Worker-to-backend write secret
+### 2. Worker-to-backend internal secret
 
 Generate a long random secret and configure the **same value** as `NORDICSIGNAL_WRITE_TOKEN` in:
 
 - Cloudflare Worker secret/environment configuration
 - Render backend secret/environment configuration
 
-The browser never needs to know this value. Cloudflare adds it only to state-changing proxied requests.
+The browser never needs to know this value. Cloudflare attaches it to every proxied `/api/*` request.
 
-After configuration, `/api/security-status` should report:
+After both copies of the secret are configured, `/api/security-status` through the Worker should report:
 
 ```text
 shared_secret_configured: true
 write_protection: shared_secret
+```
+
+### 3. Enable the direct-backend lock
+
+Only after Cloudflare Access has been tested and the same internal secret exists on both Cloudflare and Render, set on Render:
+
+```text
+NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED=true
+```
+
+This switches the Render backend to fail-closed private mode. Every `/api/*` request except `/api/health` must then carry the internal Worker secret. A browser opening the direct `onrender.com` API URL should receive `401 BACKEND_PROXY_AUTH_REQUIRED`, while the same API route through the Cloudflare Worker should still return normally after Access login.
+
+Private readiness requires all three controls:
+
+```text
+external_auth: ready
+write_secret: ready
+direct_backend_lock: ready
 ```
 
 ## Required to enable true iPhone/PWA background push
@@ -55,7 +68,7 @@ Generate a VAPID key pair and configure on Render:
 ```text
 NORDICSIGNAL_VAPID_PUBLIC_KEY=<public application server key>
 NORDICSIGNAL_VAPID_PRIVATE_KEY=<private key; secret>
-NORDICSIGNAL_VAPID_SUBJECT=mailto:<operational contact>
+NORDICSIGNAL_VAPID_SUBJECT=https://nordicsignal.8pnwk5r8f4.workers.dev
 ```
 
 Never commit the private VAPID key to GitHub.
@@ -107,7 +120,7 @@ Use these together:
 - `/api/system-health` — storage/table/runtime health
 - `/api/data-quality` — finance-data validation and freshness
 - `/api/performance` — in-process API latency
-- `/api/security-status` — write protection and audit status
+- `/api/security-status` — Worker secret and direct-backend lock status
 - `/api/push/status` — Web Push readiness
 - `/api/ops-readiness` — consolidated maturity blockers
 
