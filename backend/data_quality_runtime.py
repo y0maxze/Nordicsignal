@@ -106,12 +106,25 @@ def data_quality_snapshot():
 
         score_latest = _latest(conn, "scores", "created_at")
         quote_latest = _latest(conn, "quotes", "captured_at")
-        freshness["prices"] = _freshness_entry(quote_latest, "Yahoo Finance quote snapshots")
-        quote_age = freshness["prices"]["age_seconds"]
+        # Portfolio/stock views fetch Yahoo quotes on request. Not every successful live
+        # quote read is written to `quotes`, so the persisted table must never be used as
+        # a proxy for the age of the price currently shown to the user.
+        freshness["prices"] = {
+            "source": "Yahoo Finance live quote endpoint",
+            "latest_at": None,
+            "age_seconds": None,
+            "mode": "live_on_request",
+            "note": "Live quote freshness is evaluated at request time; successful reads are not persisted on every request.",
+        }
+        freshness["persisted_price_snapshot"] = _freshness_entry(
+            quote_latest,
+            "Yahoo Finance quote snapshots persisted for diagnostics",
+        )
+        quote_age = freshness["persisted_price_snapshot"]["age_seconds"]
         checks.append(_check(
-            "quote_recency",
+            "persisted_quote_snapshot_recency",
             quote_age is not None and quote_age <= QUOTE_MAX_AGE_SECONDS,
-            "Latest stored quote is within four days" if quote_age is not None and quote_age <= QUOTE_MAX_AGE_SECONDS else "Stored quote snapshot is missing or older than four days",
+            "Latest persisted quote snapshot is within four days" if quote_age is not None and quote_age <= QUOTE_MAX_AGE_SECONDS else "Persisted quote snapshot is missing or older than four days",
             severity="warning",
         ))
 
@@ -166,7 +179,7 @@ def data_quality_snapshot():
             "calendar":"Euronext financial calendar",
             "signal_evidence":"Yahoo Finance daily price/volume history replayed through NordicSignal rules",
         },
-        "freshness_policy":"Score/fundamentals freshness is the time Yahoo fundamentals were incorporated into the latest score. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
+        "freshness_policy":"Live Yahoo prices are fetched on request and are not inferred from the persisted quotes table. The persisted_price_snapshot timestamp is diagnostic storage only. Score/fundamentals freshness is the time Yahoo fundamentals were incorporated into the latest score. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
         "generated_at":_now(),
     }
 
