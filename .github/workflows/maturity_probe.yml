@@ -1,0 +1,35 @@
+name: NordicSignal temporary maturity probe
+on:
+  push:
+    branches: [main]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production maturity endpoints
+        run: |
+          python - <<'PY'
+          import json,time,urllib.request
+          bases={'render':'https://nordicsignal-api.onrender.com','cloudflare':'https://nordicsignal.8pnwk5r8f4.workers.dev'}
+          def get(base,path):
+              req=urllib.request.Request(base+path,headers={'User-Agent':'NordicSignal-Maturity-Probe/2.0'})
+              with urllib.request.urlopen(req,timeout=90) as r:
+                  return r.status,json.loads(r.read().decode())
+          ready=False
+          for i in range(16):
+              try:
+                  status,data=get(bases['render'],'/api/data-quality')
+                  if status==200 and 'freshness' in data:
+                      ready=True;break
+              except Exception: pass
+              time.sleep(15)
+          if not ready: raise SystemExit('new data-quality deployment did not become ready')
+          for name,base in bases.items():
+              status,d=get(base,'/api/data-quality')
+              print('QUALITY',name,status,d.get('status'),d.get('error_count'),d.get('warning_count'),sorted((d.get('freshness') or {}).keys()))
+              status,p=get(base,'/api/push/status')
+              print('PUSH',name,status,p.get('delivery_ready'),p.get('active_subscriptions'))
+          req=urllib.request.Request(bases['cloudflare']+'/mobile_shell.js',headers={'User-Agent':'NordicSignal-Maturity-Probe/2.0'})
+          with urllib.request.urlopen(req,timeout=60) as r: body=r.read().decode()
+          print('STATIC mobile push test', 'Test push' in body, '/api/push/test' in body)
+          PY
