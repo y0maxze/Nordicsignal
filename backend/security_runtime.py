@@ -173,7 +173,7 @@ def install():
                 method = request.method.upper()
                 is_api = path.startswith("/api/")
                 is_write = is_api and method in {"POST", "PUT", "PATCH", "DELETE"}
-                is_refresh = is_api and path in {"/api/refresh"} or path.endswith("/refresh")
+                is_refresh = is_api and (path == "/api/refresh" or path.endswith("/refresh"))
                 origin = request.headers.get("origin") or ""
                 request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
                 auth_mode = "read_only"
