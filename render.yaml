@@ -11,6 +11,20 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: NORDICSIGNAL_WRITE_TOKEN
+        sync: false
+      - key: NORDICSIGNAL_VAPID_PUBLIC_KEY
+        sync: false
+      - key: NORDICSIGNAL_VAPID_PRIVATE_KEY
+        sync: false
+      - key: NORDICSIGNAL_VAPID_SUBJECT
+        value: "https://nordicsignal.8pnwk5r8f4.workers.dev"
+      - key: NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED
+        value: "false"
+      - key: NORDICSIGNAL_BACKUP_VERIFIED
+        value: "false"
+      - key: NORDICSIGNAL_LEGAL_REVIEW_CONFIRMED
+        value: "false"
       - key: NORDICSIGNAL_PROVIDER_WORKERS
         value: "2"
       - key: MALLOC_ARENA_MAX
