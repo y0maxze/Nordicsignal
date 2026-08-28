@@ -19,12 +19,13 @@ def _env_true(name):
 
 
 def readiness_snapshot():
-    from security_runtime import WRITE_TOKEN
+    from security_runtime import WRITE_TOKEN, security_status
     from push_runtime import push_status
     from data_quality_runtime import data_quality_snapshot
 
     quality = data_quality_snapshot()
     push = push_status()
+    security = security_status()
     external_auth = _env_true("NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED")
     backup = _env_true("NORDICSIGNAL_BACKUP_VERIFIED")
     legal = _env_true("NORDICSIGNAL_LEGAL_REVIEW_CONFIRMED")
@@ -32,8 +33,9 @@ def readiness_snapshot():
     controls = [
         {"id":"persistent_storage","label":"Persistent database","ready":bool(USING_POSTGRES),"required_for":"internal"},
         {"id":"data_quality","label":"Core data-quality checks","ready":quality.get("status") != "error","required_for":"internal"},
-        {"id":"write_secret","label":"Worker ↔ backend write secret","ready":bool(WRITE_TOKEN),"required_for":"private"},
+        {"id":"write_secret","label":"Worker ↔ backend internal secret","ready":bool(WRITE_TOKEN),"required_for":"private"},
         {"id":"external_auth","label":"Real user authentication / Cloudflare Access","ready":external_auth,"required_for":"private"},
+        {"id":"direct_backend_lock","label":"Direct Render API locked behind Worker","ready":bool(security.get("direct_backend_locked")),"required_for":"private"},
         {"id":"web_push","label":"VAPID Web Push delivery","ready":bool(push.get("delivery_ready")),"required_for":"optional"},
         {"id":"backup","label":"External backup + restore verified","ready":backup,"required_for":"commercial"},
         {"id":"legal_review","label":"External financial/legal review confirmed","ready":legal,"required_for":"commercial"},
@@ -49,8 +51,13 @@ def readiness_snapshot():
         "private_blockers":[x["id"] for x in private_blockers],
         "commercial_blockers":[x["id"] for x in commercial_blockers],
         "data_quality":{"status":quality.get("status"),"errors":quality.get("error_count"),"warnings":quality.get("warning_count")},
+        "security":{
+            "shared_secret_configured":security.get("shared_secret_configured"),
+            "private_mode":security.get("private_mode"),
+            "direct_backend_locked":security.get("direct_backend_locked"),
+        },
         "push":{"delivery_ready":push.get("delivery_ready"),"active_subscriptions":push.get("active_subscriptions")},
-        "note":"Environment flags only mark external controls complete after they are actually configured/verified. NordicSignal does not self-certify legal or backup readiness.",
+        "note":"Private readiness requires both Cloudflare Access and a closed direct Render API. Environment flags only mark external controls complete after they are actually configured and verified.",
         "generated_at":_now(),
     }
 
