@@ -8,16 +8,28 @@ NordicSignal is currently designed as an internal/single-user finance intelligen
 - Same-origin Cloudflare Worker API proxy.
 - API timing and performance telemetry.
 - Persistent news/insider feed caching and persistent Euronext detail caching.
-- Data-quality endpoint: `/api/data-quality`.
+- Data-quality endpoint: `/api/data-quality`, including source/cache freshness timestamps.
 - Operational readiness endpoint: `/api/ops-readiness`.
 - Security status endpoint: `/api/security-status`.
 - Write/refresh audit log and bounded rate limiting.
 - Worker-to-backend shared-secret verification.
 - Private-mode lock that rejects direct Render API access for every API route except `/api/health`.
 - Security headers on Worker/API responses.
-- Real Web Push subscription/delivery code with local-notification fallback.
-- Historical signal-evidence replay for trend/activity signals at 5/20/60 trading-day horizons.
+- Real Web Push subscription/delivery code with local-notification fallback and a mobile delivery-test control.
+- Safe local VAPID generator: `backend/generate_vapid_keys.py`.
+- Non-destructive restored-database verifier: `backend/backup_verify.py`.
+- Historical signal-evidence replay for trend/activity signals at 5/20/60 trading-day horizons, with sample-size-aware UI.
 - Mobile `Siden sist` priority brief.
+
+## Current operating mode
+
+Authentication is intentionally deferred while NordicSignal remains a single-user internal project. Keep:
+
+```text
+NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED=false
+```
+
+until real Cloudflare Access (or equivalent) has actually been enabled and tested. The public URL must therefore still be treated as discoverable; do not put passwords, API secrets or sensitive personal data in frontend code.
 
 ## Required before calling the deployment private
 
@@ -61,27 +73,52 @@ write_secret: ready
 direct_backend_lock: ready
 ```
 
-## Required to enable true iPhone/PWA background push
+## True iPhone/PWA background push
 
-Generate a VAPID key pair and configure on Render:
+The code is complete, but delivery remains disabled until VAPID secrets exist on Render.
+
+Generate a pair **once** from an environment where backend dependencies are installed:
 
 ```text
-NORDICSIGNAL_VAPID_PUBLIC_KEY=<public application server key>
-NORDICSIGNAL_VAPID_PRIVATE_KEY=<private key; secret>
+cd backend
+python generate_vapid_keys.py
+```
+
+The script prints:
+
+```text
+NORDICSIGNAL_VAPID_PUBLIC_KEY=...
+NORDICSIGNAL_VAPID_PRIVATE_KEY=...
+NORDICSIGNAL_VAPID_SUBJECT=...
+```
+
+Copy those values directly into Render environment variables. Never commit or paste the private key into source code. Regenerating the pair invalidates existing browser push subscriptions.
+
+Use:
+
+```text
 NORDICSIGNAL_VAPID_SUBJECT=https://nordicsignal.8pnwk5r8f4.workers.dev
 ```
 
-Never commit the private VAPID key to GitHub.
-
-After deployment, `/api/push/status` must report `delivery_ready: true`. Then install NordicSignal to the iPhone Home Screen, enable notifications from the installed PWA and use `/api/push/test` through the authenticated application to verify a real background notification.
+After deployment, `/api/push/status` must report `delivery_ready: true`. Install NordicSignal to the iPhone Home Screen, enable notifications from the installed PWA, then use the **Test push** button on the mobile overview. A successful test must be verified with the PWA minimized/closed, not merely while the page is foregrounded.
 
 A sleeping backend cannot originate a push until it wakes. If reliable low-latency alerts are required, use an always-on backend or an external scheduler/queue.
 
-## Required before calling backups verified
+## Backup + restore verification
 
-Use provider-managed PostgreSQL backups and/or an independent encrypted backup process. A backup is not considered verified until a restore into a separate database has succeeded and the restored tables/counts have been checked.
+Use provider-managed PostgreSQL backups and/or an independent encrypted backup process. A backup is not considered verified until a restore into a **separate** database has succeeded.
 
-Only after a successful restore test set:
+After restoring, compare production and restored database non-destructively:
+
+```text
+DATABASE_URL=<production read-only database URL>
+NORDICSIGNAL_RESTORE_DATABASE_URL=<separate restored database URL>
+python backend/backup_verify.py
+```
+
+The tool prints table counts/fingerprints only; it does not print row contents and does not mutate either database. It fails if an important table is missing or row counts differ. The restored application should also receive a normal smoke test before declaring backup readiness.
+
+Only after a successful restore comparison **and** smoke test set:
 
 ```text
 NORDICSIGNAL_BACKUP_VERIFIED=true
@@ -118,7 +155,7 @@ Do not use the flag as a self-certification mechanism.
 Use these together:
 
 - `/api/system-health` — storage/table/runtime health
-- `/api/data-quality` — finance-data validation and freshness
+- `/api/data-quality` — finance-data validation, provenance and freshness
 - `/api/performance` — in-process API latency
 - `/api/security-status` — Worker secret and direct-backend lock status
 - `/api/push/status` — Web Push readiness
