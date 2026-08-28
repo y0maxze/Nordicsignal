@@ -4,7 +4,7 @@ Delivery is enabled only when VAPID keys are configured as server secrets. The
 browser subscription is persisted in Postgres and new signal/trend events can be
 sent even when the PWA is closed, provided the backend process is awake.
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -103,7 +103,10 @@ def subscribe(payload):
         if row:
             conn.execute("UPDATE push_subscriptions SET endpoint=?,p256dh=?,auth=?,user_agent=?,enabled=?,failure_count=?,updated_at=? WHERE endpoint_hash=?", values)
         else:
-            conn.execute("INSERT INTO push_subscriptions(endpoint,p256dh,auth,user_agent,enabled,failure_count,created_at,updated_at,endpoint_hash) VALUES(?,?,?,?,?,?,?, ?,?)", (endpoint, payload.keys.p256dh, payload.keys.auth, payload.user_agent, 1, 0, now, now, key))
+            conn.execute(
+                "INSERT INTO push_subscriptions(endpoint,p256dh,auth,user_agent,enabled,failure_count,created_at,updated_at,endpoint_hash) VALUES(?,?,?,?,?,?,?,?,?)",
+                (endpoint, payload.keys.p256dh, payload.keys.auth, payload.user_agent, 1, 0, now, now, key),
+            )
         conn.commit()
     finally:
         conn.close()
