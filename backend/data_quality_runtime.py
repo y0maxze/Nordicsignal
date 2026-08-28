@@ -30,6 +30,16 @@ def _check(name, ok, detail, severity="error"):
     return {"name":name,"ok":bool(ok),"severity":severity,"detail":detail}
 
 
+def _valid_score(value):
+    if value is None:
+        return False
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= number <= 100.0
+
+
 def data_quality_snapshot():
     checks = []
     metrics = {}
@@ -47,7 +57,7 @@ def data_quality_snapshot():
         ).fetchall()
         latest = [dict(x) for x in rows]
         metrics["latest_score_rows"] = len(latest)
-        invalid_scores = [x["ticker"] for x in latest if float(x.get("total") or -1) < 0 or float(x.get("total") or 101) > 100]
+        invalid_scores = [x["ticker"] for x in latest if not _valid_score(x.get("total"))]
         checks.append(_check("score_range", not invalid_scores, "All latest scores are 0-100" if not invalid_scores else "Invalid scores: "+", ".join(invalid_scores[:8])))
         checks.append(_check("score_coverage", len(latest) == active_n and active_n > 0, f"{len(latest)}/{active_n} active stocks have a latest score"))
         ages = [(x["ticker"], _age_seconds(x.get("created_at"))) for x in latest]
