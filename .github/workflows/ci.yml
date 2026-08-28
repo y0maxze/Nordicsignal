@@ -64,8 +64,8 @@ jobs:
       - name: Check production assets and routes
         run: |
           set -e
-          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
-          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
+          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
+          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
           grep -q 'startCommand: uvicorn production:app' render.yaml
           grep -q 'uvicorn production:app' DEPLOY.md
           grep -q '\["/mobile", "/mobile.html"\]' worker.js
@@ -98,6 +98,8 @@ jobs:
           grep -q '/api/insider-market?limit=100' frontend/insider_clean_ui.js
           grep -q '/api/dashboard-home?mode=desktop&phase=' frontend/portfolio_dashboard.js
           grep -q '/api/dashboard-home?mode=mobile&phase=deferred' frontend/mobile.html
+          grep -q 'ns-mobile-last-seen-v1' frontend/mobile.html
+          grep -q '/api/ops-readiness' frontend/mobile.html
           if grep -q '/api/holdings/events\|/api/holdings/calendar' frontend/portfolio_dashboard.js; then echo 'Desktop home must use aggregated dashboard API'; exit 1; fi
           if grep -q '/api/holdings/events\|/api/insider-market\|/api/radar\|/api/holdings/calendar' frontend/mobile.html; then echo 'Mobile home must use aggregated dashboard API'; exit 1; fi
           grep -q '/api/calendar' frontend/calendar.html
@@ -105,6 +107,8 @@ jobs:
           grep -q '/api/readiness/' frontend/stock_readiness.js
           grep -q '/api/search?q=' frontend/intelligence.html
           grep -q '/api/search?q=' frontend/stock_selector.js
+          grep -q '/api/signal-evidence/' frontend/stock_evidence_ui.js
+          grep -q 'stock_evidence_ui.js' worker.js
           grep -q "pathname = \"/intelligence.html\"" worker.js
           grep -q 'NS-RISK-2026-08-27-2' frontend/access_gate.js
           grep -q 'NS-RISK-2026-08-27-2' frontend/legal.html
@@ -118,16 +122,34 @@ jobs:
           grep -q 'theme.css' worker.js
           grep -q 'stock_extras.js' worker.js
           grep -q 'Market Pressure' frontend/stock_extras.js
-          grep -q "CACHE_NAME='nordicsignal-shell-v3'" frontend/sw.js
+          grep -q "CACHE_NAME='nordicsignal-shell-v4'" frontend/sw.js
+          grep -q "addEventListener('push'" frontend/sw.js
+          grep -q '/api/push/public-key' frontend/mobile_shell.js
+          grep -q '/api/push/subscribe' frontend/mobile_shell.js
+          grep -q 'pywebpush==2.4.0' backend/requirements.txt
           grep -q 'field_company_press_releases_target_id%5B' backend/insider_market_v2_runtime.py
           grep -q 'EURONEXT_INSIDER_TOPIC_ID = "1081"' backend/insider_market_v2_runtime.py
           grep -q 'insider_market_v2_runtime' backend/sitecustomize.py
           grep -q 'insider_company_cleanup_runtime' backend/sitecustomize.py
+          grep -q 'signal_evidence_runtime' backend/sitecustomize.py
+          grep -q 'push_runtime' backend/sitecustomize.py
+          grep -q 'security_runtime' backend/sitecustomize.py
+          grep -q 'data_quality_runtime' backend/sitecustomize.py
+          grep -q 'ops_readiness_runtime' backend/sitecustomize.py
           grep -q 'persistent_feed_cache_runtime' backend/sitecustomize.py
           grep -q 'performance_runtime' backend/sitecustomize.py
           grep -q 'canonical_issuer' backend/insider_company_cleanup_runtime.py
           grep -q '/api/dashboard-home' backend/performance_runtime.py
           grep -q '/api/performance' backend/performance_runtime.py
+          grep -q '/api/signal-evidence/{ticker}' backend/signal_evidence_runtime.py
+          grep -q '/api/push/status' backend/push_runtime.py
+          grep -q '/api/push/subscribe' backend/push_runtime.py
+          grep -q '/api/security-status' backend/security_runtime.py
+          grep -q '/api/data-quality' backend/data_quality_runtime.py
+          grep -q '/api/ops-readiness' backend/ops_readiness_runtime.py
+          grep -q 'NORDICSIGNAL_WRITE_TOKEN' backend/security_runtime.py
+          grep -q 'NORDICSIGNAL_WRITE_TOKEN' worker.js
+          if grep -Fq 'headers.set("access-control-allow-origin", "*")' worker.js; then echo 'Worker must not force wildcard CORS'; exit 1; fi
           grep -q 'stale_while_revalidate' backend/persistent_feed_cache_runtime.py
           grep -q 'system_health_runtime' backend/sitecustomize.py
           grep -q '/api/system-health' backend/system_health_runtime.py
