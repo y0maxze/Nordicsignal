@@ -1,9 +1,10 @@
 """Security hardening for NordicSignal API.
 
-The current product is a single-user application and does not pretend that a client-
-side password is authentication. This layer adds useful controls today and supports a
-real Worker-to-backend shared secret when the same NORDICSIGNAL_WRITE_TOKEN is
-configured in Render and Cloudflare.
+NordicSignal does not treat a client-side password as authentication. This layer
+provides same-origin write controls today and, when private mode is enabled, closes
+the direct Render API so authenticated traffic must pass through the Cloudflare
+Worker. The same NORDICSIGNAL_WRITE_TOKEN is stored only as a secret in Cloudflare
+and Render; the browser never receives it.
 """
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ import extra_api
 from database import connect, USING_POSTGRES
 
 WRITE_TOKEN = os.getenv("NORDICSIGNAL_WRITE_TOKEN", "").strip()
+PRIVATE_MODE = os.getenv("NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED", "").strip().lower() in {"1", "true", "yes", "on"}
 DEFAULT_ORIGINS = (
     "https://nordicsignal.8pnwk5r8f4.workers.dev",
     "http://localhost",
@@ -34,6 +36,7 @@ REFRESH_LIMIT_PER_MINUTE = 4
 _MAX_CLIENTS = 512
 _RATE_LOCK = threading.RLock()
 _RATE = OrderedDict()
+_PUBLIC_API_PATHS = {"/api/health"}
 
 
 def _now():
@@ -64,7 +67,6 @@ def _ensure_schema():
 def _client_key(request):
     forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for") or "unknown"
     first = forwarded.split(",", 1)[0].strip()
-    # Keep raw client addresses out of process state and audit storage.
     return hashlib.sha256(first.encode("utf-8", "ignore")).hexdigest()[:20]
 
 
@@ -93,14 +95,26 @@ def _origin_allowed(value):
     return any(value == allowed or value.startswith(allowed + "/") for allowed in ALLOWED_ORIGINS)
 
 
-def _auth_ok(request):
-    if not WRITE_TOKEN:
-        return True, "same_origin_guard"
+def _supplied_token(request):
     supplied = request.headers.get("x-nordicsignal-internal-token", "")
     if not supplied:
         auth = request.headers.get("authorization", "")
         supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    return hmac.compare_digest(str(supplied), WRITE_TOKEN), "shared_secret"
+    return str(supplied)
+
+
+def _auth_ok(request):
+    if not WRITE_TOKEN:
+        return True, "same_origin_guard"
+    return hmac.compare_digest(_supplied_token(request), WRITE_TOKEN), "shared_secret"
+
+
+def _backend_proxy_auth_ok(request):
+    if not PRIVATE_MODE:
+        return True
+    if not WRITE_TOKEN:
+        return False
+    return hmac.compare_digest(_supplied_token(request), WRITE_TOKEN)
 
 
 def _audit(request_id, method, path, status_code, origin, auth_mode):
@@ -137,16 +151,21 @@ def security_status():
         latest = row["latest"] if row else None
     except Exception:
         pass
+    direct_locked = bool(PRIVATE_MODE and WRITE_TOKEN)
     return {
         "status": "ok",
-        "authentication": "external_access_not_configured",
+        "authentication": "external_access_configured" if PRIVATE_MODE else "external_access_not_configured",
         "write_protection": "shared_secret" if WRITE_TOKEN else "same_origin_guard",
+        "backend_read_protection": "shared_secret" if direct_locked else "public_until_private_mode",
         "shared_secret_configured": bool(WRITE_TOKEN),
+        "private_mode": bool(PRIVATE_MODE),
+        "direct_backend_locked": direct_locked,
+        "public_api_paths": sorted(_PUBLIC_API_PATHS),
         "audit_events": count,
         "latest_audit_at": latest,
         "rate_limits": {"writes_per_minute": WRITE_LIMIT_PER_MINUTE, "refresh_per_minute": REFRESH_LIMIT_PER_MINUTE},
         "allowed_origins": list(ALLOWED_ORIGINS),
-        "note": "For private/commercial use, put Cloudflare Access or equivalent real authentication in front of the app. Client-side password gates are intentionally not treated as security.",
+        "note": "When private mode is enabled, every API request except /api/health must carry the Worker-to-Render shared secret. This prevents bypassing Cloudflare Access through the public Render hostname.",
         "generated_at": _now(),
     }
 
@@ -178,8 +197,22 @@ def install():
                 request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
                 auth_mode = "read_only"
 
+                if is_api and path not in _PUBLIC_API_PATHS and PRIVATE_MODE:
+                    if not WRITE_TOKEN:
+                        return JSONResponse(
+                            {"status":"error","code":"PRIVATE_PROXY_SECRET_MISSING","message":"Private mode is enabled but the backend proxy secret is not configured","request_id":request_id},
+                            status_code=503,
+                        )
+                    if not _backend_proxy_auth_ok(request):
+                        return JSONResponse(
+                            {"status":"error","code":"BACKEND_PROXY_AUTH_REQUIRED","message":"Direct backend API access is disabled","request_id":request_id},
+                            status_code=401,
+                        )
+                    auth_mode = "shared_secret"
+
                 if is_write or is_refresh:
-                    auth_ok, auth_mode = _auth_ok(request)
+                    auth_ok, write_auth_mode = _auth_ok(request)
+                    auth_mode = "shared_secret" if auth_mode == "shared_secret" else write_auth_mode
                     if not auth_ok:
                         return JSONResponse({"status":"error","code":"WRITE_AUTH_REQUIRED","message":"Write operation is not authorized","request_id":request_id}, status_code=401)
                     if origin and not _origin_allowed(origin):
