@@ -1,8 +1,8 @@
 """Data-quality checks for NordicSignal's persisted finance state.
 
 This endpoint does not invent a single confidence number. It exposes concrete checks
-that can fail independently, so the UI and operator can see exactly what is stale or
-invalid before trusting a signal.
+that can fail independently, including source freshness, so stale data cannot hide
+behind a generic green status.
 """
 from datetime import datetime, timezone
 
@@ -10,6 +10,7 @@ import extra_api
 from database import connect, USING_POSTGRES
 
 SCORE_MAX_AGE_SECONDS = 30 * 60
+QUOTE_MAX_AGE_SECONDS = 4 * 24 * 60 * 60
 
 
 def _now():
@@ -22,6 +23,13 @@ def _age_seconds(value):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+    except Exception:
+        return None
+
+
+def _epoch_iso(value):
+    try:
+        return datetime.fromtimestamp(float(value), timezone.utc).isoformat()
     except Exception:
         return None
 
@@ -40,9 +48,37 @@ def _valid_score(value):
     return 0.0 <= number <= 100.0
 
 
+def _latest(conn, table, column):
+    if not table or not column or not all(ch.isalnum() or ch == "_" for ch in table + column):
+        return None
+    try:
+        row = conn.execute(f'SELECT MAX("{column}") latest FROM "{table}"').fetchone()
+        return row["latest"] if row else None
+    except Exception:
+        return None
+
+
+def _freshness_entry(value, source, kind="timestamp"):
+    latest = _epoch_iso(value) if kind == "epoch" else (str(value) if value not in (None, "") else None)
+    return {
+        "source": source,
+        "latest_at": latest,
+        "age_seconds": _age_seconds(latest) if latest else None,
+    }
+
+
+def _feed_cache_entry(conn, key, source):
+    try:
+        row = conn.execute("SELECT updated_at FROM runtime_feed_cache WHERE cache_key=? LIMIT 1", (key,)).fetchone()
+        return _freshness_entry(row["updated_at"] if row else None, source, kind="epoch")
+    except Exception:
+        return _freshness_entry(None, source)
+
+
 def data_quality_snapshot():
     checks = []
     metrics = {}
+    freshness = {}
     conn = connect()
     try:
         active = conn.execute("SELECT COUNT(*) n FROM stocks WHERE active=1").fetchone()
@@ -68,6 +104,30 @@ def data_quality_snapshot():
         seed = [x["ticker"] for x in latest if x.get("source") == "seed"]
         checks.append(_check("no_seed_scores", not seed, "No active stock is using a seed score" if not seed else "Seed score active for: "+", ".join(seed[:8])))
 
+        quote_latest = _latest(conn, "quotes", "captured_at")
+        freshness["prices"] = _freshness_entry(quote_latest, "Yahoo Finance quote snapshots")
+        quote_age = freshness["prices"]["age_seconds"]
+        checks.append(_check(
+            "quote_recency",
+            quote_age is not None and quote_age <= QUOTE_MAX_AGE_SECONDS,
+            "Latest stored quote is within four days" if quote_age is not None and quote_age <= QUOTE_MAX_AGE_SECONDS else "Stored quote snapshot is missing or older than four days",
+            severity="warning",
+        ))
+
+        freshness["fundamentals"] = _freshness_entry(_latest(conn, "fundamentals", "updated_at"), "Yahoo Finance fundamentals")
+        freshness["scores"] = _freshness_entry(_latest(conn, "scores", "created_at"), "NordicSignal score engine")
+        freshness["score_signals"] = _freshness_entry(_latest(conn, "signal_events", "created_at"), "NordicSignal score-change events")
+        freshness["trend_activity"] = _freshness_entry(_latest(conn, "trend_activity_events", "created_at"), "NordicSignal trend/activity detector")
+        freshness["market_news"] = _feed_cache_entry(conn, "market_news:v1", "Persisted market-news feed cache")
+
+        insider_candidates = []
+        try:
+            rows = conn.execute("SELECT cache_key,updated_at FROM runtime_feed_cache WHERE cache_key LIKE 'insider_market:v1:%' ORDER BY updated_at DESC LIMIT 1").fetchall()
+            insider_candidates = [dict(x) for x in rows]
+        except Exception:
+            pass
+        freshness["insider_feed"] = _freshness_entry(insider_candidates[0]["updated_at"] if insider_candidates else None, "Persisted Euronext Insider Pulse cache", kind="epoch")
+
         try:
             row = conn.execute("SELECT COUNT(*) n FROM trend_activity_events WHERE volume_ratio<0 OR recent_volume_ratio<0").fetchone()
             bad = int(row["n"] or 0) if row else 0
@@ -92,6 +152,7 @@ def data_quality_snapshot():
         "persistent_storage":bool(USING_POSTGRES),
         "checks":checks,
         "metrics":metrics,
+        "freshness":freshness,
         "error_count":len(errors),
         "warning_count":len(warnings),
         "source_policy":{
@@ -99,7 +160,9 @@ def data_quality_snapshot():
             "insider":"Euronext Oslo Børs / Oslo Børs Newspoint",
             "short":"Finanstilsynet SSR",
             "calendar":"Euronext financial calendar",
+            "signal_evidence":"Yahoo Finance daily price/volume history replayed through NordicSignal rules",
         },
+        "freshness_policy":"Event timestamps describe the observation/event time. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
         "generated_at":_now(),
     }
 
