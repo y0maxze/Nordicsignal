@@ -114,17 +114,14 @@ async function serveAsset(request, env, pathname) {
   return new Response(html, {status:response.status, headers});
 }
 
-function isWriteRequest(request,url){
-  const method=request.method.toUpperCase();
-  return ["POST","PUT","PATCH","DELETE"].includes(method)||url.pathname==="/api/refresh"||url.pathname.endsWith("/refresh");
-}
-
 async function proxyApi(request, url, env) {
   const upstream = new URL(`${API_ORIGIN}${url.pathname}`);
   upstream.search = url.search;
   try {
     const headers = new Headers(request.headers);
-    if (isWriteRequest(request,url) && env && env.NORDICSIGNAL_WRITE_TOKEN) {
+    // In private mode Render accepts API traffic only from this Worker. Send the
+    // internal secret on every proxied API call; the browser never sees its value.
+    if (env && env.NORDICSIGNAL_WRITE_TOKEN) {
       headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
     }
     const forwarded = new Request(upstream.toString(), request);
