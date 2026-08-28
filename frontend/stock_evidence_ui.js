@@ -3,6 +3,7 @@
   const esc=v=>String(v??'—').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const pct=v=>v==null?'—':(Number(v)>0?'+':'')+Number(v).toLocaleString('no-NO',{maximumFractionDigits:2})+'%';
   const hit=v=>v==null?'—':Number(v).toLocaleString('no-NO',{maximumFractionDigits:1})+'%';
+  const sampleLabel=n=>Number(n||0)<20?'for lite grunnlag':Number(n||0)<50?'tidlig historikk':'bedre historikk';
 
   function styles(){
     if(document.getElementById('nsEvidenceStyles'))return;
@@ -12,15 +13,16 @@
   }
 
   function metric(h,label){
-    const x=h||{},cls=x.directional_hit_rate_pct>=60?'nsEvidenceGood':x.directional_hit_rate_pct<45?'nsEvidenceBad':'nsEvidenceWarn';
-    return `<div class="nsEvidenceMetric"><span>${esc(label)}</span><b class="${cls}">${hit(x.directional_hit_rate_pct)} treff</b><div class="nsEvidenceMeta">Median ${pct(x.median_return_pct)} · N=${esc(x.directional_n??x.n??0)}</div></div>`;
+    const x=h||{},n=Number(x.directional_n??x.n??0),rate=x.directional_hit_rate_pct;
+    const cls=n<20?'nsEvidenceWarn':rate>=60?'nsEvidenceGood':rate<45?'nsEvidenceBad':'nsEvidenceWarn';
+    return `<div class="nsEvidenceMetric"><span>${esc(label)}</span><b class="${cls}">${hit(rate)} treff</b><div class="nsEvidenceMeta">Median ${pct(x.median_return_pct)} · N=${esc(n)} · ${esc(sampleLabel(n))}</div></div>`;
   }
 
   function render(d){
     const root=document.getElementById('nsSignalEvidence');if(!root)return;
     const sum=d?.summary||{},overall=sum.overall||{},h=overall.horizons||{},groups=sum.by_event||[];
     const maturity=sum.maturity==='useful_history'?'Mer historikk':sum.maturity==='early'?'Tidlig historikk':'Lite datagrunnlag';
-    root.innerHTML=`<div class="nsEvidenceHead"><div><h2 style="margin:0">NordicSignal signal-evidens · ${esc(ticker)}</h2><div class="muted">Historisk replay av samme trend-/aktivitetsregler som brukes i Latest Signals.</div></div><button class="btn" id="nsEvidenceRefresh">Oppdater historikk</button></div><div class="notice" style="margin-top:12px"><b>${esc(maturity)} · ${esc(sum.sample_count||0)} signalhendelser</b><br>Treffrate betyr at kursretningen etter signalet samsvarte med signalretningen. Dette er backtest, ikke garanti for fremtidig avkastning.</div><div class="nsEvidenceGrid">${metric(h['5'],'5 børsdager')}${metric(h['20'],'20 børsdager')}${metric(h['60'],'60 børsdager')}</div>${groups.length?`<div class="tablewrap"><table class="nsEvidenceTable"><thead><tr><th>Signaltype</th><th>N</th><th>5d treff</th><th>20d treff</th><th>60d treff</th><th>20d median</th></tr></thead><tbody>${groups.slice(0,8).map(g=>{const gh=g.horizons||{};return `<tr><td><b>${esc(g.event)}</b></td><td>${esc(g.sample_count)}</td><td>${hit(gh['5']?.directional_hit_rate_pct)}</td><td>${hit(gh['20']?.directional_hit_rate_pct)}</td><td>${hit(gh['60']?.directional_hit_rate_pct)}</td><td>${pct(gh['20']?.median_return_pct)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div class="muted" style="margin-top:10px">Kilde: ${esc(d.source)} · ${esc(d.period_years)} års dagshistorikk · ${esc(d.method)}</div>`;
+    root.innerHTML=`<div class="nsEvidenceHead"><div><h2 style="margin:0">NordicSignal signal-evidens · ${esc(ticker)}</h2><div class="muted">Historisk replay av samme trend-/aktivitetsregler som brukes i Latest Signals.</div></div><button class="btn" id="nsEvidenceRefresh">Oppdater historikk</button></div><div class="notice" style="margin-top:12px"><b>${esc(maturity)} · ${esc(sum.sample_count||0)} signalhendelser</b><br>Treffrate betyr at kursretningen etter signalet samsvarte med signalretningen. N under 20 behandles som for lite datagrunnlag og får aldri sterk grønn markering. Dette er backtest, ikke garanti for fremtidig avkastning.</div><div class="nsEvidenceGrid">${metric(h['5'],'5 børsdager')}${metric(h['20'],'20 børsdager')}${metric(h['60'],'60 børsdager')}</div>${groups.length?`<div class="tablewrap"><table class="nsEvidenceTable"><thead><tr><th>Signaltype</th><th>N</th><th>5d treff</th><th>20d treff</th><th>60d treff</th><th>20d median</th></tr></thead><tbody>${groups.slice(0,8).map(g=>{const gh=g.horizons||{};return `<tr><td><b>${esc(g.event)}</b><div class="muted">${esc(sampleLabel(g.sample_count))}</div></td><td>${esc(g.sample_count)}</td><td>${hit(gh['5']?.directional_hit_rate_pct)} · N=${esc(gh['5']?.directional_n??0)}</td><td>${hit(gh['20']?.directional_hit_rate_pct)} · N=${esc(gh['20']?.directional_n??0)}</td><td>${hit(gh['60']?.directional_hit_rate_pct)} · N=${esc(gh['60']?.directional_n??0)}</td><td>${pct(gh['20']?.median_return_pct)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div class="muted" style="margin-top:10px">Kilde: ${esc(d.source)} · ${esc(d.period_years)} års dagshistorikk · ${esc(d.method)}</div>`;
     const b=document.getElementById('nsEvidenceRefresh');if(b)b.onclick=()=>load(true);
   }
 
