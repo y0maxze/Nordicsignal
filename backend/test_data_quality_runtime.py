@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from datetime import datetime, timezone, timedelta
 
@@ -16,6 +17,12 @@ class DataQualityRuntimeTests(unittest.TestCase):
         row=dq._check('freshness', False, 'stale', severity='warning')
         self.assertFalse(row['ok'])
         self.assertEqual(row['severity'],'warning')
+
+    def test_persisted_quote_age_is_not_reported_as_live_price_age(self):
+        source=inspect.getsource(dq.data_quality_snapshot)
+        self.assertIn('"mode": "live_on_request"', source)
+        self.assertIn('freshness["persisted_price_snapshot"]', source)
+        self.assertNotIn('quote_age = freshness["prices"]', source)
 
 
 if __name__=='__main__':
