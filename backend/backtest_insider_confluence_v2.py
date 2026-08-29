@@ -1,7 +1,8 @@
 """Historical insider-cluster + reversal confluence backtest.
 
-Diagnostic only. Uses Euronext primary-insider disclosures and Yahoo daily prices.
-No production score changes are made here.
+Diagnostic only. Uses official Euronext primary-insider disclosures and Yahoo daily
+prices. The global Euronext topic feed is used first; when its history is shallow,
+we additionally crawl company-news pages ticker by ticker. No production score changes.
 """
 from __future__ import annotations
 
@@ -11,8 +12,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import insider_market_v2_runtime as market
+import insider_runtime
 from insider_signal_v2_runtime import analyze as analyze_insider
-from providers import YahooProvider
+from providers import YahooProvider, NordicRegulatoryProvider, _TextParser
 from trend_reversal_runtime import calculate_reversal
 
 TICKERS = {
@@ -22,7 +24,8 @@ TICKERS = {
 HORIZONS = (5, 10, 20, 60)
 DAYS = 730
 CLUSTER_WINDOW_DAYS = 14
-MAX_DETAIL_RELEASES = 320
+MAX_TOPIC_DETAIL_RELEASES = 320
+COMPANY_PAGES = 12
 
 
 def _day(value):
@@ -40,117 +43,172 @@ def _is_buy(row):
     return str(row.get("direction") or row.get("transaction_type") or row.get("activity_type") or "").lower() in {"buy","purchase","acquisition","acquire"}
 
 
+def _normalise_trade(row, ticker, source_url):
+    out=dict(row or {})
+    out["ticker"]=ticker
+    direction=str(out.get("direction") or out.get("transaction_type") or "").lower()
+    if direction:
+        out["transaction_type"]=direction
+    out["url"]=out.get("url") or source_url
+    return out
+
+
+def collect_company_archive(days):
+    cutoff=datetime.now(timezone.utc).date()-timedelta(days=days)
+    provider=NordicRegulatoryProvider()
+    all_trades=[]
+    seen_urls=set()
+    stats={}
+    keywords=("insider","primary","primær","pdmr","mandatory notification")
+
+    for ticker in sorted(TICKERS):
+        links=[]
+        empty_pages=0
+        for page in range(COMPANY_PAGES):
+            try:
+                html=provider._html(provider.EURONEXT_NEWS,{"keys":ticker,"page":page})
+                parser=_TextParser(); parser.feed(html)
+            except Exception:
+                continue
+            page_links=[]
+            for href,text in parser.links:
+                if not href:
+                    continue
+                low=str(text or "").lower()
+                if any(k in low for k in keywords):
+                    full=href if href.startswith("http") else "https://live.euronext.com"+href
+                    if full not in seen_urls:
+                        page_links.append((full,text))
+                        seen_urls.add(full)
+            if not page_links:
+                empty_pages += 1
+                if empty_pages >= 2:
+                    break
+            else:
+                empty_pages=0
+                links.extend(page_links)
+
+        parsed_count=0
+        for url,title in links:
+            try:
+                html=provider._html(url)
+                p=_TextParser(); p.feed(html); body=p.text
+                raw_rows=insider_runtime.parse_trades(body,ticker,title or "Primary insider transaction","Euronext Oslo Børs Newspoint",url)
+            except Exception:
+                continue
+            for raw in raw_rows or []:
+                row=_normalise_trade(raw,ticker,url)
+                day=_day(row.get("trade_date") or row.get("date"))
+                if day and day < cutoff:
+                    continue
+                meaningful=_is_buy(row) or str(row.get("direction") or "").lower()=="sell" or row.get("shares") is not None
+                if meaningful:
+                    all_trades.append(row); parsed_count += 1
+        stats[ticker]={"release_links":len(links),"parsed_trades":parsed_count}
+    return all_trades, stats
+
+
 def fetch_prices(provider, ticker):
-    symbol = provider.symbol(ticker)
-    data = provider._get(f"{provider.BASE}/v8/finance/chart/{symbol}", {"range":"5y","interval":"1d","events":"div,splits"})
-    result = data["chart"]["result"][0]
-    ts = result.get("timestamp") or []
-    quote = (result.get("indicators",{}).get("quote") or [{}])[0]
-    closes = quote.get("close") or []
-    volumes = quote.get("volume") or []
+    symbol=provider.symbol(ticker)
+    data=provider._get(f"{provider.BASE}/v8/finance/chart/{symbol}",{"range":"5y","interval":"1d","events":"div,splits"})
+    result=data["chart"]["result"][0]
+    ts=result.get("timestamp") or []
+    quote=(result.get("indicators",{}).get("quote") or [{}])[0]
+    closes=quote.get("close") or []; volumes=quote.get("volume") or []
     rows=[]
     for i,t in enumerate(ts):
-        if i >= len(closes) or closes[i] is None:
-            continue
-        rows.append({"date":datetime.fromtimestamp(t, timezone.utc).date().isoformat(),"close":float(closes[i]),"volume":volumes[i] if i < len(volumes) else None})
+        if i>=len(closes) or closes[i] is None: continue
+        rows.append({"date":datetime.fromtimestamp(t,timezone.utc).date().isoformat(),"close":float(closes[i]),"volume":volumes[i] if i<len(volumes) else None})
     return rows
 
 
-def nearest_index(rows, target):
-    eligible=[(i,_day(r["date"])) for i,r in enumerate(rows) if _day(r["date"]) and _day(r["date"]) <= target]
+def nearest_index(rows,target):
+    eligible=[(i,_day(r["date"])) for i,r in enumerate(rows) if _day(r["date"]) and _day(r["date"])<=target]
     return eligible[-1][0] if eligible else None
 
 
-def pct(a,b):
-    return ((b/a)-1.0)*100.0 if a else None
+def pct(a,b): return ((b/a)-1.0)*100.0 if a else None
 
 
 def summarize(values):
     vals=[float(v) for v in values if v is not None]
-    if not vals:
-        return {"n":0,"mean_pct":None,"median_pct":None,"positive_rate_pct":None}
+    if not vals: return {"n":0,"mean_pct":None,"median_pct":None,"positive_rate_pct":None}
     return {"n":len(vals),"mean_pct":round(statistics.fmean(vals),3),"median_pct":round(statistics.median(vals),3),"positive_rate_pct":round(sum(v>0 for v in vals)/len(vals)*100,2)}
+
+
+def dedup_trades(trades):
+    out=[]; seen=set()
+    for row in trades:
+        key=(str(row.get("ticker") or "").upper(),str(row.get("trade_date") or row.get("date") or "")[:10],_actor(row),str(row.get("direction") or row.get("transaction_type") or "").lower(),row.get("shares"),row.get("price"))
+        if key in seen: continue
+        seen.add(key); out.append(row)
+    return out
 
 
 def build_cluster_events(trades):
     grouped=defaultdict(list)
     for row in trades:
-        ticker=str(row.get("ticker") or "").upper()
-        day=_day(row.get("trade_date") or row.get("date") or row.get("published_at"))
-        if ticker in TICKERS and day and _is_buy(row):
-            grouped[ticker].append((day,row))
+        ticker=str(row.get("ticker") or "").upper(); day=_day(row.get("trade_date") or row.get("date") or row.get("published_at"))
+        if ticker in TICKERS and day and _is_buy(row): grouped[ticker].append((day,row))
     events=[]
-    for ticker, items in grouped.items():
-        items.sort(key=lambda x:x[0])
-        last_event=None
-        for i,(anchor,_) in enumerate(items):
-            window=[dict(r) for d,r in items if timedelta(0) <= anchor-d <= timedelta(days=CLUSTER_WINDOW_DAYS)]
+    for ticker,items in grouped.items():
+        items.sort(key=lambda x:x[0]); last_event=None
+        for anchor,_ in items:
+            window=[dict(r) for d,r in items if timedelta(0)<=anchor-d<=timedelta(days=CLUSTER_WINDOW_DAYS)]
             actors={_actor(r) for r in window if _actor(r)}
-            if len(actors) < 2:
-                continue
-            enriched=analyze_insider({"items":window}, window_days=CLUSTER_WINDOW_DAYS)["insider_signal_v2"]
-            if last_event and (anchor-last_event).days < CLUSTER_WINDOW_DAYS:
-                continue
+            if len(actors)<2: continue
+            if last_event and (anchor-last_event).days<CLUSTER_WINDOW_DAYS: continue
+            enriched=analyze_insider({"items":window},window_days=CLUSTER_WINDOW_DAYS)["insider_signal_v2"]
             events.append({"ticker":ticker,"date":anchor.isoformat(),"actors":len(actors),"insider":enriched})
             last_event=anchor
     return events
 
 
 def main():
-    market.MAX_EURONEXT_PAGES = 40
-    announcements, meta = market._announcements(DAYS)
+    market.MAX_EURONEXT_PAGES=40
+    announcements,meta=market._announcements(DAYS)
     relevant=[a for a in announcements if str(a.get("ticker") or "").upper() in TICKERS]
-    trades=[]; detail_errors=[]
-    for ann in relevant[:MAX_DETAIL_RELEASES]:
+    topic_trades=[]; detail_errors=[]
+    for ann in relevant[:MAX_TOPIC_DETAIL_RELEASES]:
         try:
-            rows,_=market._euronext_ajax_rows(ann, allow_network=True)
-            trades.extend(rows or [])
+            rows,_=market._euronext_ajax_rows(ann,allow_network=True); topic_trades.extend(rows or [])
         except Exception as exc:
             detail_errors.append({"node_id":ann.get("node_id"),"error":str(exc)})
 
+    archive_trades,archive_stats=collect_company_archive(DAYS)
+    trades=dedup_trades(topic_trades+archive_trades)
     clusters=build_cluster_events(trades)
-    provider=YahooProvider()
-    price_cache={}
-    evaluated=[]
+
+    provider=YahooProvider(); price_cache={}; evaluated=[]
     for event in clusters:
         ticker=event["ticker"]
         if ticker not in price_cache:
             try: price_cache[ticker]=fetch_prices(provider,ticker)
             except Exception: price_cache[ticker]=[]
-        rows=price_cache[ticker]
-        idx=nearest_index(rows,_day(event["date"]))
-        if idx is None or idx < 35:
-            continue
+        rows=price_cache[ticker]; idx=nearest_index(rows,_day(event["date"]))
+        if idx is None or idx<35: continue
         reversal=calculate_reversal(rows[max(0,idx-179):idx+1])
-        fwd={}
-        for h in HORIZONS:
-            fwd[str(h)]=pct(rows[idx]["close"],rows[idx+h]["close"]) if idx+h < len(rows) else None
+        fwd={str(h):pct(rows[idx]["close"],rows[idx+h]["close"]) if idx+h<len(rows) else None for h in HORIZONS}
         vr=(reversal.get("metrics") or {}).get("volume_ratio")
         evaluated.append({**event,"reversal":reversal,"forward_return_pct":fwd,"confluence_70":bool((reversal.get("score") or 0)>=70),"confluence_75":bool((reversal.get("score") or 0)>=75),"confluence_75_vol15":bool((reversal.get("score") or 0)>=75 and (vr or 0)>=1.5)})
 
     cohorts={
-        "cluster_all": evaluated,
-        "cluster_strong": [e for e in evaluated if (e["insider"] or {}).get("label")=="STRONG"],
-        "cluster_plus_reversal70": [e for e in evaluated if e["confluence_70"]],
-        "cluster_plus_reversal75": [e for e in evaluated if e["confluence_75"]],
-        "cluster_plus_reversal75_vol15": [e for e in evaluated if e["confluence_75_vol15"]],
+        "cluster_all":evaluated,
+        "cluster_strong":[e for e in evaluated if (e["insider"] or {}).get("label")=="STRONG"],
+        "cluster_plus_reversal70":[e for e in evaluated if e["confluence_70"]],
+        "cluster_plus_reversal75":[e for e in evaluated if e["confluence_75"]],
+        "cluster_plus_reversal75_vol15":[e for e in evaluated if e["confluence_75_vol15"]],
     }
-    results={}
-    for name, events in cohorts.items():
-        results[name]={"events":len(events),"horizons":{str(h):summarize([e["forward_return_pct"][str(h)] for e in events]) for h in HORIZONS}}
-
-    report={"generated_at":datetime.now(timezone.utc).isoformat(),"source":"Euronext topic 1081 + Yahoo daily","days":DAYS,"announcement_meta":meta,"announcements":len(announcements),"relevant_announcements":len(relevant),"detail_releases_processed":min(len(relevant),MAX_DETAIL_RELEASES),"parsed_trades":len(trades),"cluster_events":len(clusters),"evaluated_events":len(evaluated),"detail_errors":detail_errors[:30],"results":results,"events":evaluated,"limitations":["Euronext pagination/detail availability can limit historical coverage","current-universe survivorship bias","no transaction costs/slippage","cluster actor parsing depends on public disclosure detail quality"]}
+    results={name:{"events":len(events),"horizons":{str(h):summarize([e["forward_return_pct"][str(h)] for e in events]) for h in HORIZONS}} for name,events in cohorts.items()}
+    report={"generated_at":datetime.now(timezone.utc).isoformat(),"source":"Euronext topic 1081 + per-company Euronext archive + Yahoo daily","days":DAYS,"announcement_meta":meta,"announcements":len(announcements),"relevant_announcements":len(relevant),"topic_trades":len(topic_trades),"archive_trades":len(archive_trades),"parsed_trades":len(trades),"cluster_events":len(clusters),"evaluated_events":len(evaluated),"archive_stats":archive_stats,"detail_errors":detail_errors[:30],"results":results,"events":evaluated,"limitations":["Public Euronext archive depth/pagination may still limit historical coverage","current-universe survivorship bias","no transaction costs/slippage","actor parsing depends on disclosure text quality"]}
     with open("insider_confluence_backtest.json","w",encoding="utf-8") as f: json.dump(report,f,ensure_ascii=False,indent=2)
     print("=== INSIDER CONFLUENCE BACKTEST ===")
-    print(f"announcements={len(announcements)} relevant={len(relevant)} trades={len(trades)} clusters={len(clusters)} evaluated={len(evaluated)}")
-    for name, block in results.items():
+    print(f"topic_announcements={len(announcements)} relevant={len(relevant)} topic_trades={len(topic_trades)} archive_trades={len(archive_trades)} dedup_trades={len(trades)} clusters={len(clusters)} evaluated={len(evaluated)}")
+    for name,block in results.items():
         print(f"{name}: {block['events']} events")
         for h in HORIZONS:
-            s=block['horizons'][str(h)]
-            print(f"  {h}d n={s['n']} mean={s['mean_pct']}% median={s['median_pct']}% positive={s['positive_rate_pct']}%")
-    if len(evaluated) < 5:
-        raise SystemExit("Historical insider coverage too low for a meaningful confluence check")
+            s=block['horizons'][str(h)]; print(f"  {h}d n={s['n']} mean={s['mean_pct']}% median={s['median_pct']}% positive={s['positive_rate_pct']}%")
+    if len(evaluated)<5: raise SystemExit("Historical insider coverage too low for a meaningful confluence check")
 
 
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()
