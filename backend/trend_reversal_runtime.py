@@ -28,6 +28,21 @@ def _ema(values, period):
     return ema
 
 
+def _ema_series(values, period):
+    """Return EMA values aligned to input in O(n), seeded like _ema()."""
+    values = [float(v) for v in values]
+    out = [None] * len(values)
+    if len(values) < period:
+        return out
+    alpha = 2.0 / (period + 1.0)
+    ema = sum(values[:period]) / period
+    out[period - 1] = ema
+    for i in range(period, len(values)):
+        ema = alpha * values[i] + (1.0 - alpha) * ema
+        out[i] = ema
+    return out
+
+
 def _rsi(values, period=14):
     values = [float(v) for v in values if _num(v) is not None]
     if len(values) <= period:
@@ -48,15 +63,16 @@ def _rsi(values, period=14):
 
 
 def _macd_hist(values):
+    values = [float(v) for v in values if _num(v) is not None]
     if len(values) < 35:
         return None, None
-    macd_series = []
-    for end in range(26, len(values) + 1):
-        window = values[:end]
-        fast = _ema(window, 12)
-        slow = _ema(window, 26)
-        if fast is not None and slow is not None:
-            macd_series.append(fast - slow)
+    fast_series = _ema_series(values, 12)
+    slow_series = _ema_series(values, 26)
+    macd_series = [
+        fast_series[i] - slow_series[i]
+        for i in range(len(values))
+        if fast_series[i] is not None and slow_series[i] is not None
+    ]
     if len(macd_series) < 10:
         return None, None
     signal = _ema(macd_series, 9)
