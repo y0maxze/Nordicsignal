@@ -5,9 +5,30 @@ Oslo Børs set. It never modifies production scoring.
 """
 import json
 
-from opportunity_confluence_runtime import live_opportunity
+from opportunity_confluence_runtime import live_opportunity, _company_name
+from providers import NordicRegulatoryProvider
 
 TICKERS = ("XPLRA", "LSG", "MPCC", "EQNR", "DNB")
+
+
+def _insider_debug(ticker):
+    try:
+        feed = NordicRegulatoryProvider().insider(ticker, _company_name(ticker)) or {}
+        items = feed.get("items") or []
+        return {
+            "raw_status": feed.get("status"),
+            "raw_source": feed.get("source"),
+            "raw_item_count": len(items),
+            "verified_detail_count": feed.get("verified_detail_count"),
+            "raw_buy_count": feed.get("buy_count"),
+            "raw_sell_count": feed.get("sell_count"),
+            "dates": sorted({str(x.get("trade_date") or x.get("date") or x.get("published_at") or "")[:10] for x in items if x}),
+            "actors": sorted({str(x.get("person") or x.get("related_primary_insider") or x.get("entity") or x.get("insider") or "").strip() for x in items if x and (x.get("person") or x.get("related_primary_insider") or x.get("entity") or x.get("insider"))}),
+            "actions": [str(x.get("transaction_type") or x.get("direction") or x.get("activity_type") or "") for x in items[:20]],
+            "signal": feed.get("insider_signal_v2"),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 def main():
@@ -32,6 +53,7 @@ def main():
                 "independent_buyers": components.get("independent_buyers"),
                 "buy_value_nok": components.get("buy_value_nok"),
                 "reasons": opp.get("reasons") or [],
+                "insider_debug": _insider_debug(ticker),
             }
             results.append(row)
             print(json.dumps(row, ensure_ascii=False))
