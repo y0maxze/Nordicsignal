@@ -6,6 +6,14 @@ aggregate 0-100 stock score.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import extra_api
+import insider_runtime
+from insider_signal_v2_runtime import analyze as analyze_insider
+from providers import YahooProvider, NordicRegulatoryProvider
+from trend_reversal_runtime import calculate_reversal
+
 VERSION = "2026-08-30-v1"
 
 
@@ -47,7 +55,6 @@ def calculate_opportunity(reversal=None, insider=None):
     score = 0.0
     reasons = []
 
-    # Reversal evidence: deliberately requires stronger scores before it dominates.
     if reversal_score >= 75:
         score += 45
         reasons.append("Reversal score >= 75")
@@ -58,8 +65,6 @@ def calculate_opportunity(reversal=None, insider=None):
         score += 15
         reasons.append("Reversal candidate only")
 
-    # Historical v2 backtest showed materially stronger outcomes when reversal
-    # signals were accompanied by 1.5x-2.0x bullish volume.
     volume_state = "NONE"
     if volume_ratio is not None and volume_ratio >= 2.0:
         score += 25
@@ -70,7 +75,6 @@ def calculate_opportunity(reversal=None, insider=None):
         volume_state = "CONFIRMED"
         reasons.append("Bullish volume >= 1.5x normal")
 
-    # Insider evidence remains capped until the historical insider sample grows.
     insider_weight = 0
     if insider_label == "STRONG":
         insider_weight = 20
@@ -82,7 +86,6 @@ def calculate_opportunity(reversal=None, insider=None):
         insider_weight = 4
     score += insider_weight
 
-    # Small corroboration bonuses. They cannot create a signal on their own.
     if independent_buyers >= 3:
         score += 5
         reasons.append("3+ independent insider buyers")
@@ -90,7 +93,6 @@ def calculate_opportunity(reversal=None, insider=None):
         score += 5
         reasons.append("Insider purchases >= NOK 1m")
 
-    # Require actual confluence for the strongest labels.
     strong_reversal = reversal_score >= 75
     volume_confirmed = volume_ratio is not None and volume_ratio >= 1.5
     insider_positive = insider_label in {"STRONG", "POSITIVE"}
@@ -135,8 +137,65 @@ def calculate_opportunity(reversal=None, insider=None):
     }
 
 
+def _company_name(ticker):
+    entry = insider_runtime.ISSUERS.get(ticker)
+    return entry[0] if entry else ticker
+
+
+def live_opportunity(ticker):
+    symbol = str(ticker or "").strip().upper().replace(".OL", "")
+    if not symbol or len(symbol) > 16 or not all(ch.isalnum() or ch in ".-" for ch in symbol):
+        return {"ticker": symbol, "status": "invalid_ticker"}
+
+    price_provider = YahooProvider()
+    regulatory = NordicRegulatoryProvider()
+    history = price_provider.historical(symbol, "6m")
+    reversal = calculate_reversal(history)
+    try:
+        insider_feed = regulatory.insider(symbol, _company_name(symbol)) or {}
+        insider_enriched = analyze_insider(insider_feed)
+        insider_signal = insider_enriched.get("insider_signal_v2") or {}
+    except Exception as exc:
+        insider_signal = {"label": "NONE", "points": 0, "error": str(exc)}
+
+    opportunity = calculate_opportunity(reversal, insider_signal)
+    return {
+        "ticker": symbol,
+        "status": "ok",
+        "opportunity": opportunity,
+        "reversal": reversal,
+        "insider_signal_v2": insider_signal,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _replace_route(app, path, handler):
+    for route in getattr(app, "routes", []):
+        if getattr(route, "path", None) == path and "GET" in (getattr(route, "methods", None) or set()):
+            route.endpoint = handler
+            dependant = getattr(route, "dependant", None)
+            if dependant is not None:
+                dependant.call = handler
+            return True
+    return False
+
+
 def install():
-    return None
+    if getattr(extra_api, "_opportunity_confluence_runtime", False):
+        return
+    original_install = extra_api.install
+
+    def patched_install(app):
+        original_install(app)
+
+        def opportunity_route(ticker: str):
+            return live_opportunity(ticker)
+
+        if not _replace_route(app, "/api/opportunity/{ticker}", opportunity_route):
+            app.get("/api/opportunity/{ticker}")(opportunity_route)
+
+    extra_api.install = patched_install
+    extra_api._opportunity_confluence_runtime = True
 
 
 install()
