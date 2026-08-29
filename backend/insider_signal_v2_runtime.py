@@ -10,7 +10,10 @@ from providers import NordicRegulatoryProvider
 
 
 def _num(value):
-    return float(value) if isinstance(value, (int, float)) else None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _date(value):
@@ -21,11 +24,21 @@ def _date(value):
 
 
 def _actor_key(row):
-    return str(row.get("actor") or row.get("insider_name") or row.get("name") or row.get("title") or "").strip().lower()
+    """Return the economic actor, preferring parsed person/entity fields over titles."""
+    value = (
+        row.get("person")
+        or row.get("related_primary_insider")
+        or row.get("entity")
+        or row.get("insider")
+        or row.get("actor")
+        or row.get("insider_name")
+        or row.get("name")
+    )
+    return str(value or "").strip().lower()
 
 
 def _role_weight(row):
-    text = " ".join(str(row.get(k) or "") for k in ("role", "position", "title")).lower()
+    text = " ".join(str(row.get(k) or "") for k in ("role", "position", "title", "summary")).lower()
     if "ceo" in text or "chief executive" in text:
         return 1.35
     if "cfo" in text or "chief financial" in text:
@@ -40,7 +53,7 @@ def _role_weight(row):
 
 
 def _trade_value(row):
-    for key in ("display_transaction_value", "transaction_value", "value"):
+    for key in ("display_transaction_value", "transaction_value", "display_value", "value"):
         value = _num(row.get(key))
         if value is not None and value >= 0:
             return value
@@ -49,10 +62,35 @@ def _trade_value(row):
 
 
 def _is_transfer(row):
-    text = " ".join(str(row.get(k) or "") for k in ("title", "description", "detail", "event", "transaction_type")).lower()
+    text = " ".join(
+        str(row.get(k) or "")
+        for k in ("title", "summary", "description", "detail", "event", "transaction_type", "activity_type")
+    ).lower()
     explicit = row.get("economic_exposure_unchanged") is True or row.get("internal_transfer") is True
-    phrases = ("unchanged", "transfer", "transferred", "overføring", "redelivery", "borrowed shares")
+    phrases = (
+        "unchanged", "transfer", "transferred", "overføring", "redelivery", "borrowed shares",
+        "same beneficial owner", "no change in economic exposure",
+    )
     return explicit or any(p in text for p in phrases)
+
+
+def _action(row):
+    raw = str(
+        row.get("transaction_type")
+        or row.get("direction")
+        or row.get("action")
+        or row.get("activity_type")
+        or ""
+    ).strip().lower()
+    if raw in {"buy", "purchase", "purchased", "acquisition", "acquire", "acquired"}:
+        return "buy"
+    if raw in {"sell", "sale", "sold", "disposal", "dispose", "disposed"}:
+        return "sell"
+    if any(word in raw for word in ("purchase", "acqui", "kjøp", "buy")):
+        return "buy"
+    if any(word in raw for word in ("sale", "sell", "sold", "dispos", "salg")):
+        return "sell"
+    return raw
 
 
 def analyze(result, window_days=14):
@@ -61,13 +99,13 @@ def analyze(result, window_days=14):
     buys = []
     sells = []
     excluded = []
-    dates = [_date(x.get("trade_date") or x.get("date")) for x in items]
+    dates = [_date(x.get("trade_date") or x.get("date") or x.get("published_at")) for x in items]
     dates = [x for x in dates if x]
     anchor = max(dates) if dates else datetime.now(timezone.utc).date()
 
     for row in items:
-        action = str(row.get("transaction_type") or row.get("action") or "").lower()
-        day = _date(row.get("trade_date") or row.get("date"))
+        action = _action(row)
+        day = _date(row.get("trade_date") or row.get("date") or row.get("published_at"))
         if day and (anchor - day).days > window_days:
             continue
         if _is_transfer(row):
@@ -123,7 +161,7 @@ def analyze(result, window_days=14):
         "score_effect": 0,
         "policy": "informational_only_pending_backtest",
     }
-    out["insider_signal_v2_version"] = "2026-08-29-v1"
+    out["insider_signal_v2_version"] = "2026-08-30-v2"
     return out
 
 
