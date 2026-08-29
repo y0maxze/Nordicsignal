@@ -103,7 +103,7 @@ def calculate_reversal(history):
     closes = [float(x["close"]) for x in rows]
     volumes = [_num(x.get("volume")) for x in rows]
     if len(closes) < 35:
-        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-29-v2.1"}
+        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-30-v2.2"}
 
     score = 0.0
     reasons = []
@@ -194,6 +194,7 @@ def calculate_reversal(history):
         "confidence": "high" if score >= 75 else "medium" if score >= 70 else "low",
         "reasons": reasons,
         "metrics": {
+            "close": round(closes[-1], 4),
             "ema8": round(ema8, 4) if ema8 is not None else None,
             "ema21": round(ema21, 4) if ema21 is not None else None,
             "rsi14": round(rsi_now, 2) if rsi_now is not None else None,
@@ -204,7 +205,7 @@ def calculate_reversal(history):
             "higher_low": structure["higher_low"],
             "higher_high": structure["higher_high"],
         },
-        "version": "2026-08-29-v2.1",
+        "version": "2026-08-30-v2.2",
     }
 
 
