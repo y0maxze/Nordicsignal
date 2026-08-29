@@ -33,3 +33,33 @@ def test_net_selling_reduces_signal():
     ]})["insider_signal_v2"]
     assert signal["points"] < 1
     assert signal["sell_value_nok"] > signal["buy_value_nok"]
+
+
+def test_euronext_normalized_person_entity_direction_schema_is_supported():
+    signal = analyze({"items": [
+        {"direction": "buy", "trade_date": "2026-08-19", "person": "Sten Kirkbak", "role": "CEO", "shares": 37500, "price": 26.65},
+        {"activity_type": "purchase", "trade_date": "2026-08-19", "person": "Knut Staalen", "role": "CFO", "shares": 8000, "price": 26.91},
+        {"direction": "buy", "trade_date": "2026-08-20", "entity": "COO Holding AS", "related_primary_insider": "Jens Leth", "role": "COO", "shares": 4000, "price": 26.86},
+    ]})["insider_signal_v2"]
+    assert signal["label"] == "STRONG"
+    assert signal["independent_buyers"] == 3
+    assert signal["buy_count"] == 3
+
+
+def test_xplra_like_real_cluster_counts_six_buyers_and_excludes_internal_transfer():
+    items = [
+        {"direction": "buy", "trade_date": "2026-08-19", "person": "Sten Kirkbak", "role": "CEO", "shares": 37500, "price": 26.65},
+        {"direction": "buy", "trade_date": "2026-08-19", "person": "Knut Staalen", "role": "CFO", "shares": 8000, "price": 26.91},
+        {"direction": "buy", "trade_date": "2026-08-20", "person": "Thomas Embla Bonnerud", "role": "Board member", "shares": 2250, "price": 26.75},
+        {"direction": "buy", "trade_date": "2026-08-20", "person": "Jens Leth", "role": "COO", "shares": 4000, "price": 26.86},
+        {"direction": "buy", "trade_date": "2026-08-20", "person": "Tomislav Krznaric", "role": "Business Unit Director", "shares": 4000, "price": 26.76},
+        {"direction": "buy", "trade_date": "2026-08-20", "person": "Kristin Hellebust", "role": "CLO", "shares": 2950, "price": 27.0},
+        {"direction": "buy", "trade_date": "2026-08-20", "person": "Kristin Hellebust", "role": "CLO", "shares": 2500, "price": 25.0},
+        {"direction": "buy", "trade_date": "2026-08-20", "entity": "Cosimo AS", "related_primary_insider": "Trygve Bruland", "shares": 160000, "price": 26.75, "summary": "transfer to wholly owned company; no change in economic exposure", "economic_exposure_unchanged": True},
+    ]
+    signal = analyze({"items": items})["insider_signal_v2"]
+    assert signal["label"] == "STRONG"
+    assert signal["independent_buyers"] == 6
+    assert signal["buy_count"] == 7
+    assert signal["excluded_transfer_like_count"] == 1
+    assert 1_600_000 <= signal["buy_value_nok"] <= 1_700_000
