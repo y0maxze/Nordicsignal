@@ -23,6 +23,7 @@ RUNTIME_MODULES = (
     "general_news_runtime",
     "insider_market_runtime",
     "insider_market_v2_runtime",
+    "insider_history_runtime",
     "insider_detail_normalization_runtime",
     "insider_company_cleanup_runtime",
     "insider_detail_persistent_cache_runtime",
@@ -64,8 +65,6 @@ def _install(module_name):
         if callable(install):
             install()
     except Exception:
-        # Optional integrations must not stop the core FastAPI service, but the
-        # failure must be visible in Render logs so production gaps are debuggable.
         log.exception("Optional runtime module failed: %s", module_name)
 
 
