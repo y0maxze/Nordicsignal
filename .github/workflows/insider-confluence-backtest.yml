@@ -21,6 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run insider confluence backtest
+        continue-on-error: true
         run: python backtest_insider_confluence_v2.py
       - name: Upload confluence report
         if: always()
