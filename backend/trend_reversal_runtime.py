@@ -103,7 +103,7 @@ def calculate_reversal(history):
     closes = [float(x["close"]) for x in rows]
     volumes = [_num(x.get("volume")) for x in rows]
     if len(closes) < 35:
-        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-29-v2"}
+        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-29-v2.1"}
 
     score = 0.0
     reasons = []
@@ -155,15 +155,19 @@ def calculate_reversal(history):
     valid_volumes = [v for v in volumes[-21:-1] if v is not None and v > 0]
     latest_volume = volumes[-1] if volumes else None
     volume_ratio = None
+    volume_confirmation = "NONE"
     if latest_volume is not None and valid_volumes:
         avg_volume = sum(valid_volumes) / len(valid_volumes)
         if avg_volume > 0:
             volume_ratio = latest_volume / avg_volume
-            if volume_ratio >= 2.0 and closes[-1] > closes[-2]:
+            bullish_day = closes[-1] > closes[-2]
+            if volume_ratio >= 2.0 and bullish_day:
                 score += 10
+                volume_confirmation = "STRONG"
                 reasons.append("Strong bullish volume expansion")
-            elif volume_ratio >= 1.5 and closes[-1] > closes[-2]:
+            elif volume_ratio >= 1.5 and bullish_day:
                 score += 6
+                volume_confirmation = "CONFIRMED"
                 reasons.append("Bullish volume expansion")
 
     trailing_high = max(closes[-120:])
@@ -175,8 +179,10 @@ def calculate_reversal(history):
     score = max(0.0, min(100.0, score))
     if score >= 75:
         regime = "CONFIRMED_UPTREND" if structure["higher_high"] and ema8 is not None and ema21 is not None and ema8 > ema21 else "EARLY_REVERSAL"
-    elif score >= 55:
+    elif score >= 70:
         regime = "EARLY_REVERSAL"
+    elif score >= 55:
+        regime = "REVERSAL_CANDIDATE"
     elif score >= 35:
         regime = "BOTTOMING"
     else:
@@ -185,7 +191,7 @@ def calculate_reversal(history):
     return {
         "score": round(score, 1),
         "regime": regime,
-        "confidence": "high" if score >= 75 else "medium" if score >= 50 else "low",
+        "confidence": "high" if score >= 75 else "medium" if score >= 70 else "low",
         "reasons": reasons,
         "metrics": {
             "ema8": round(ema8, 4) if ema8 is not None else None,
@@ -193,11 +199,12 @@ def calculate_reversal(history):
             "rsi14": round(rsi_now, 2) if rsi_now is not None else None,
             "macd_histogram": round(hist_now, 5) if hist_now is not None else None,
             "volume_ratio": round(volume_ratio, 2) if volume_ratio is not None else None,
+            "volume_confirmation": volume_confirmation,
             "drawdown_pct": round(drawdown_pct, 2),
             "higher_low": structure["higher_low"],
             "higher_high": structure["higher_high"],
         },
-        "version": "2026-08-29-v2",
+        "version": "2026-08-29-v2.1",
     }
 
 
