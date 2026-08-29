@@ -19,6 +19,7 @@ TICKERS = [
 ]
 HORIZONS = (5, 10, 20, 60)
 MIN_HISTORY = 35
+INDICATOR_WINDOW = 180
 COOLDOWN = 10
 
 
@@ -73,7 +74,8 @@ def backtest_ticker(ticker, rows):
             if i + h < len(rows):
                 baseline[h].append(pct(rows[i]["close"], rows[i + h]["close"]))
 
-        result = calculate_reversal(rows[: i + 1])
+        start = max(0, i - INDICATOR_WINDOW + 1)
+        result = calculate_reversal(rows[start : i + 1])
         score = result.get("score")
         if score is None:
             prev_score = score
@@ -145,6 +147,7 @@ def main():
         "method": {
             "universe": "current NordicSignal Oslo universe",
             "lookback": "5y daily Yahoo chart data",
+            "indicator_window_trading_days": INDICATOR_WINDOW,
             "entry": "first cross above 55 or 75 after being below threshold",
             "cooldown_trading_days": COOLDOWN,
             "horizons_trading_days": list(HORIZONS),
