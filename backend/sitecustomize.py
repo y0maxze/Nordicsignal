@@ -45,6 +45,7 @@ RUNTIME_MODULES = (
     "signal_evidence_runtime",
     "trend_reversal_runtime",
     "opportunity_confluence_runtime",
+    "opportunity_tracking_runtime",
     "fund_news_runtime",
     "investment_readiness_runtime",
     "generic_paper_runtime",
