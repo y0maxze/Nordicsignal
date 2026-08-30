@@ -49,6 +49,7 @@ RUNTIME_MODULES = (
     "opportunity_tracking_runtime",
     "opportunity_performance_v2_runtime",
     "opportunity_calibration_gate_runtime",
+    "opportunity_data_coverage_runtime",
     "opportunity_autoscan_runtime",
     "fund_news_runtime",
     "investment_readiness_runtime",
