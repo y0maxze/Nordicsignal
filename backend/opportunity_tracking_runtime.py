@@ -88,6 +88,22 @@ def _state(ticker):
         conn.close()
 
 
+def _stock_name(ticker):
+    conn = connect()
+    try:
+        row = conn.execute("SELECT name FROM stocks WHERE ticker=?", (ticker,)).fetchone()
+        if not row:
+            return ticker
+        try:
+            return row["name"] or ticker
+        except (TypeError, KeyError):
+            return row[0] or ticker
+    except Exception:
+        return ticker
+    finally:
+        conn.close()
+
+
 def _set_state(ticker, result):
     opp = result.get("opportunity") or {}
     label = str(opp.get("label") or "NO_OPPORTUNITY")
@@ -107,8 +123,7 @@ def _set_state(ticker, result):
 
 
 def _entry_price(result):
-    reversal = result.get("reversal") or {}
-    metrics = reversal.get("metrics") or {}
+    metrics = ((result.get("reversal") or {}).get("metrics") or {})
     for key in ("close", "current", "price"):
         try:
             value = float(metrics.get(key))
@@ -119,10 +134,29 @@ def _entry_price(result):
     return None
 
 
+def _entry_date_from_result(result):
+    metrics = ((result.get("reversal") or {}).get("metrics") or {})
+    value = str(metrics.get("close_date") or "")[:10]
+    return value if len(value) == 10 else None
+
+
+def _entry_date_from_event(event):
+    try:
+        payload = json.loads(event.get("payload") or "{}")
+        market_day = _entry_date_from_result(payload)
+        if market_day:
+            return market_day
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    observed = str(event.get("observed_at") or "")[:10]
+    return observed if len(observed) == 10 else None
+
+
 def record_opportunity(result, name=None):
     ticker = str(result.get("ticker") or "").upper().replace(".OL", "")
     if not ticker or result.get("status") != "ok":
         return {"emitted": False, "reason": "invalid_result"}
+
     opp = result.get("opportunity") or {}
     label = str(opp.get("label") or "NO_OPPORTUNITY")
     previous = _state(ticker)
@@ -132,7 +166,8 @@ def record_opportunity(result, name=None):
     if previous is not None and label != previous_label and label in TRACKED_LABELS:
         components = opp.get("components") or {}
         observed_at = str(result.get("generated_at") or _now())
-        event_key = f"{observed_at[:10]}:{previous_label}->{label}"
+        market_day = _entry_date_from_result(result) or observed_at[:10]
+        event_key = f"{market_day}:{previous_label}->{label}"
         payload = json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
         conn = connect()
         try:
@@ -140,7 +175,7 @@ def record_opportunity(result, name=None):
                 "INSERT INTO opportunity_events(ticker,name,previous_label,label,score,entry_price,reversal_score,volume_ratio,insider_label,independent_buyers,buy_value_nok,payload,observed_at,created_at,event_key) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(ticker,event_key) DO NOTHING",
                 (
-                    ticker, name or ticker, previous_label, label, opp.get("score"), _entry_price(result),
+                    ticker, name or _stock_name(ticker), previous_label, label, opp.get("score"), _entry_price(result),
                     components.get("reversal_score"), components.get("volume_ratio"), components.get("insider_label"),
                     components.get("independent_buyers"), components.get("buy_value_nok"), payload, observed_at, _now(), event_key,
                 ),
@@ -149,6 +184,7 @@ def record_opportunity(result, name=None):
             emitted = bool(getattr(cur, "rowcount", 0))
         finally:
             conn.close()
+
     _set_state(ticker, result)
     return {"emitted": emitted, "previous_label": previous_label, "label": label}
 
@@ -162,7 +198,7 @@ def _history(provider, ticker):
         except (TypeError, ValueError, AttributeError):
             continue
         date = str(row.get("date") or "")[:10]
-        if close > 0 and date:
+        if close > 0 and len(date) == 10:
             valid.append({"date": date, "close": close})
     valid.sort(key=lambda x: x["date"])
     return valid
@@ -175,6 +211,7 @@ def settle_forward_returns(ticker, rows=None):
     rows = rows if rows is not None else _history(YahooProvider(), ticker)
     if not rows:
         return 0
+
     conn = connect()
     try:
         events = [dict(x) for x in conn.execute(
@@ -182,10 +219,13 @@ def settle_forward_returns(ticker, rows=None):
         ).fetchall()]
         settled = 0
         for event in events:
-            day = str(event.get("observed_at") or "")[:10]
-            start_idx = next((i for i, row in enumerate(rows) if row["date"] >= day), None)
+            market_day = _entry_date_from_event(event)
+            if not market_day:
+                continue
+            start_idx = next((i for i, row in enumerate(rows) if row["date"] >= market_day), None)
             if start_idx is None:
                 continue
+
             entry = event.get("entry_price")
             if entry is None:
                 entry = rows[start_idx]["close"]
@@ -193,6 +233,9 @@ def settle_forward_returns(ticker, rows=None):
                 entry = float(entry)
             except (TypeError, ValueError):
                 continue
+            if entry <= 0:
+                continue
+
             for horizon in HORIZONS:
                 exists = conn.execute(
                     "SELECT event_id FROM opportunity_forward_returns WHERE event_id=? AND horizon_days=?",
@@ -201,7 +244,7 @@ def settle_forward_returns(ticker, rows=None):
                 if exists or start_idx + horizon >= len(rows):
                     continue
                 target = rows[start_idx + horizon]
-                ret = ((float(target["close"]) / entry) - 1.0) * 100.0 if entry else None
+                ret = ((float(target["close"]) / entry) - 1.0) * 100.0
                 conn.execute(
                     "INSERT INTO opportunity_forward_returns(event_id,horizon_days,target_date,target_price,return_pct,settled_at) VALUES(?,?,?,?,?,?)",
                     (event["id"], horizon, target["date"], target["close"], ret, _now()),
@@ -218,37 +261,46 @@ def _event_items(limit=30):
     try:
         rows = conn.execute(
             "SELECT oe.*,s.sector FROM opportunity_events oe LEFT JOIN stocks s ON s.ticker=oe.ticker "
-            "ORDER BY oe.created_at DESC,oe.id DESC LIMIT ?", (max(1, min(int(limit or 30), 50)),)
+            "ORDER BY oe.created_at DESC,oe.id DESC LIMIT ?",
+            (max(1, min(int(limit or 30), 50)),),
         ).fetchall()
     finally:
         conn.close()
+
     items = []
     for raw in rows:
         x = dict(raw)
-        strength = "strong" if x.get("label") == "EARLY_OPPORTUNITY_HIGH" else "watch"
+        strong = x.get("label") == "EARLY_OPPORTUNITY_HIGH"
         detail = f"Reversal {x.get('reversal_score') or 0:.0f} · volum {x.get('volume_ratio') or 0:.1f}× · insider {x.get('insider_label') or 'NONE'}"
         items.append({
-            "ticker": x.get("ticker"), "symbol": x.get("ticker"), "name": x.get("name") or x.get("ticker"),
-            "sector": x.get("sector"), "asset_class": "Aksjer", "event_type": "early_opportunity",
-            "signal": "Strong" if strength == "strong" else "Watch", "strength": strength,
-            "event": str(x.get("label") or "").replace("_", " ").title(), "detail": detail,
-            "opportunity_score": x.get("score"), "reversal_score": x.get("reversal_score"),
-            "volume_ratio": x.get("volume_ratio"), "insider_label": x.get("insider_label"),
-            "independent_buyers": x.get("independent_buyers"), "buy_value_nok": x.get("buy_value_nok"),
-            "updated_at": x.get("created_at"), "observed_at": x.get("observed_at"),
-            "score_source": "opportunity_v1", "score": x.get("score"), "score_delta": 0.0,
+            "ticker": x.get("ticker"),
+            "symbol": x.get("ticker"),
+            "name": x.get("name") or x.get("ticker"),
+            "sector": x.get("sector"),
+            "asset_class": "Aksjer",
+            "event_type": "early_opportunity",
+            "signal": "Strong" if strong else "Watch",
+            "strength": "strong" if strong else "watch",
+            "event": str(x.get("label") or "").replace("_", " ").title(),
+            "detail": detail,
+            "opportunity_score": x.get("score"),
+            "reversal_score": x.get("reversal_score"),
+            "volume_ratio": x.get("volume_ratio"),
+            "insider_label": x.get("insider_label"),
+            "independent_buyers": x.get("independent_buyers"),
+            "buy_value_nok": x.get("buy_value_nok"),
+            "updated_at": x.get("created_at"),
+            "observed_at": x.get("observed_at"),
+            "score_source": "opportunity_v1",
+            "score": x.get("score"),
+            "score_delta": 0.0,
         })
     return items
 
 
 def _scan_one(row):
-    result = opportunity.live_opportunity(row["ticker"])
-    record = record_opportunity(result, row.get("name") or row["ticker"])
-    try:
-        settle_forward_returns(row["ticker"])
-    except Exception:
-        pass
-    return record
+    # live_opportunity is already wrapped by install() to persist exactly once.
+    return opportunity.live_opportunity(row["ticker"])
 
 
 def _run_scan():
@@ -262,6 +314,7 @@ def _run_scan():
     finally:
         if conn is not None:
             conn.close()
+
     try:
         with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as pool:
             futures = [pool.submit(_scan_one, row) for row in rows]
@@ -288,10 +341,13 @@ def _maybe_schedule_scan():
 
 
 def opportunity_performance(limit=100):
+    limit = max(1, min(int(limit or 100), 500))
     conn = connect()
     try:
+        total_row = conn.execute("SELECT COUNT(*) AS n FROM opportunity_events").fetchone()
+        total_events = int(total_row["n"] if total_row else 0)
         events = [dict(x) for x in conn.execute(
-            "SELECT * FROM opportunity_events ORDER BY created_at DESC,id DESC LIMIT ?", (max(1, min(int(limit or 100), 500)),)
+            "SELECT * FROM opportunity_events ORDER BY created_at DESC,id DESC LIMIT ?", (limit,)
         ).fetchall()]
         returns = [dict(x) for x in conn.execute(
             "SELECT r.* FROM opportunity_forward_returns r JOIN opportunity_events e ON e.id=r.event_id "
@@ -299,11 +355,13 @@ def opportunity_performance(limit=100):
         ).fetchall()]
     finally:
         conn.close()
+
     grouped = {h: [] for h in HORIZONS}
     for row in returns:
         h = int(row.get("horizon_days") or 0)
         if h in grouped and row.get("return_pct") is not None:
             grouped[h].append(float(row["return_pct"]))
+
     summary = {}
     for h, values in grouped.items():
         summary[str(h)] = {
@@ -311,7 +369,13 @@ def opportunity_performance(limit=100):
             "mean_return_pct": round(sum(values) / len(values), 3) if values else None,
             "positive_rate_pct": round(sum(v > 0 for v in values) / len(values) * 100.0, 2) if values else None,
         }
-    return {"events": len(events), "horizons": summary, "recent_events": events[:20], "updated_at": _now()}
+    return {
+        "events": total_events,
+        "horizons": summary,
+        "recent_events": events[:20],
+        "updated_at": _now(),
+        "policy": "informational_only_pending_forward_validation",
+    }
 
 
 def install():
@@ -320,17 +384,22 @@ def install():
     _ensure_schema()
 
     original_live = opportunity.live_opportunity
+
     def tracked_live(ticker):
         result = original_live(ticker)
         try:
-            record_opportunity(result)
-            settle_forward_returns(result.get("ticker"))
+            symbol = str(result.get("ticker") or "").upper().replace(".OL", "")
+            record_opportunity(result, _stock_name(symbol) if symbol else None)
+            if symbol:
+                settle_forward_returns(symbol)
         except Exception:
             pass
         return result
+
     opportunity.live_opportunity = tracked_live
 
     original_signal_events = signal_events_runtime.signal_events
+
     def signal_events_with_opportunity(asset_class="Aksjer", limit=12):
         result = original_signal_events(asset_class, limit)
         requested = str(asset_class or "Aksjer")
@@ -339,17 +408,25 @@ def install():
             items = list(result.get("items") or []) + _event_items(limit)
             items.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
             result["items"] = items[: max(1, min(int(limit or 12), 30))]
-            result["opportunity_tracking"] = {"enabled": True, "background_scan": scan_state, "horizons": list(HORIZONS)}
+            result["opportunity_tracking"] = {
+                "enabled": True,
+                "background_scan": scan_state,
+                "horizons": list(HORIZONS),
+            }
             result["meaning"] = "material score, trend/activity and Early Opportunity changes"
         return result
+
     signal_events_runtime.signal_events = signal_events_with_opportunity
 
     original_install = extra_api.install
+
     def patched_install(app):
         original_install(app)
+
         @app.get("/api/opportunity-performance")
         def opportunity_performance_route(limit: int = 100):
             return opportunity_performance(limit)
+
     extra_api.install = patched_install
     extra_api._opportunity_tracking_runtime = True
 
