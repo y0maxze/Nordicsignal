@@ -7,6 +7,8 @@ aggregate 0-100 stock score.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import threading
+import time
 
 import extra_api
 import insider_runtime
@@ -15,7 +17,10 @@ from insider_signal_v2_runtime import analyze as analyze_insider
 from providers import YahooProvider, NordicRegulatoryProvider
 from trend_reversal_runtime import calculate_reversal
 
-VERSION = "2026-08-30-v1.1"
+VERSION = "2026-08-30-v1.2"
+_TARGET_CACHE_LOCK = threading.RLock()
+_TARGET_CACHE = {"at": 0.0, "days": None, "items": []}
+_TARGET_CACHE_TTL = 120
 
 
 def _num(value, default=0.0):
@@ -55,7 +60,6 @@ def calculate_opportunity(reversal=None, insider=None):
 
     score = 0.0
     reasons = []
-
     if reversal_score >= 75:
         score += 45
         reasons.append("Reversal score >= 75")
@@ -76,16 +80,14 @@ def calculate_opportunity(reversal=None, insider=None):
         volume_state = "CONFIRMED"
         reasons.append("Bullish volume >= 1.5x normal")
 
-    insider_weight = 0
     if insider_label == "STRONG":
-        insider_weight = 20
+        score += 20
         reasons.append("Strong insider cluster")
     elif insider_label == "POSITIVE":
-        insider_weight = 12
+        score += 12
         reasons.append("Positive insider cluster")
     elif insider_label == "MIXED":
-        insider_weight = 4
-    score += insider_weight
+        score += 4
 
     if independent_buyers >= 3:
         score += 5
@@ -143,42 +145,152 @@ def _company_name(ticker):
     return entry[0] if entry else ticker
 
 
-def _live_insider_evidence(symbol):
-    """Prefer the market-wide official feed, then fall back to issuer provider.
+def _cached_announcements(days=14):
+    now = time.time()
+    with _TARGET_CACHE_LOCK:
+        if (
+            _TARGET_CACHE.get("items") is not None
+            and _TARGET_CACHE.get("days") == days
+            and now - float(_TARGET_CACHE.get("at") or 0.0) < _TARGET_CACHE_TTL
+        ):
+            return [dict(x) for x in (_TARGET_CACHE.get("items") or [])]
 
-    Some Euronext issuer pages return a live status with zero parsed detail rows while
-    the market-wide topic feed still contains the official disclosure. Using the market
-    feed first prevents a known false NONE for recent clusters such as XPLRA.
+    items, _meta = insider_market_v2_runtime._announcements(days)
+    with _TARGET_CACHE_LOCK:
+        _TARGET_CACHE.update({"at": now, "days": days, "items": [dict(x) for x in (items or [])]})
+    return [dict(x) for x in (items or [])]
+
+
+def _announcement_matches(symbol, announcement):
+    ticker = str(announcement.get("ticker") or "").upper().replace(".OL", "")
+    if ticker == symbol:
+        return True
+    company = announcement.get("company")
+    try:
+        return insider_market_v2_runtime._ticker_for_company(company) == symbol
+    except Exception:
+        return False
+
+
+def _row_key(row):
+    actor = (
+        row.get("person")
+        or row.get("related_primary_insider")
+        or row.get("entity")
+        or row.get("insider")
+        or ""
+    )
+    return (
+        str(row.get("node_id") or row.get("url") or ""),
+        str(actor).strip().lower(),
+        str(row.get("trade_date") or row.get("date") or "")[:10],
+        str(row.get("direction") or row.get("transaction_type") or "").lower(),
+        row.get("shares"),
+        row.get("price"),
+    )
+
+
+def _targeted_market_rows(symbol, days=14):
+    """Enrich only disclosures for one symbol across the complete recent topic archive."""
+    rows = []
+    seen = set()
+    announcements = [x for x in _cached_announcements(days) if _announcement_matches(symbol, x)]
+    for announcement in announcements[:30]:
+        try:
+            detail_rows, _network = insider_market_v2_runtime._euronext_ajax_rows(announcement, allow_network=True)
+        except Exception:
+            detail_rows = []
+        for raw in detail_rows or []:
+            row = dict(raw)
+            ticker = str(row.get("ticker") or "").upper().replace(".OL", "")
+            if ticker and ticker != symbol:
+                continue
+            if row.get("details_pending"):
+                continue
+            key = _row_key(row)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+    return rows
+
+
+def _persist_targeted_rows(rows):
+    if not rows:
+        return
+    try:
+        import insider_history_runtime
+        insider_history_runtime.persist_items(rows)
+    except Exception:
+        pass
+
+
+def _live_insider_evidence(symbol):
+    """Build complete 14-day verified insider evidence for one ticker.
+
+    The normal market feed is fast but capped at 100 returned rows. We merge it with
+    ticker-targeted enrichment from the complete recent Euronext topic archive so a
+    busy disclosure period cannot silently remove older-but-still-relevant trades.
     """
     market_error = None
+    merged = []
+    seen = set()
+    source_parts = []
+
     try:
         market_feed = insider_market_v2_runtime.market_insider_feed(limit=100, days=14, refresh=False) or {}
-        rows = [
-            dict(x) for x in (market_feed.get("items") or [])
-            if str(x.get("ticker") or "").upper().replace(".OL", "") == symbol
-            and not x.get("details_pending")
-        ]
-        if rows:
-            enriched = analyze_insider({
-                "status": "live",
-                "source": market_feed.get("source"),
-                "items": rows,
-                "verified_detail_count": len(rows),
-            })
-            signal = enriched.get("insider_signal_v2") or {}
-            signal["evidence_source"] = "euronext_market_feed"
-            signal["evidence_item_count"] = len(rows)
-            return signal
+        for raw in market_feed.get("items") or []:
+            row = dict(raw)
+            if str(row.get("ticker") or "").upper().replace(".OL", "") != symbol or row.get("details_pending"):
+                continue
+            key = _row_key(row)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+        if merged:
+            source_parts.append("market_feed")
     except Exception as exc:
         market_error = str(exc)
+
+    try:
+        targeted = _targeted_market_rows(symbol, 14)
+        for row in targeted:
+            key = _row_key(row)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+        if targeted:
+            source_parts.append("targeted_topic_archive")
+    except Exception as exc:
+        market_error = market_error or str(exc)
+
+    if merged:
+        _persist_targeted_rows(merged)
+        enriched = analyze_insider({
+            "status": "live",
+            "source": "Euronext Oslo Børs Newspoint",
+            "items": merged,
+            "verified_detail_count": len(merged),
+        })
+        signal = enriched.get("insider_signal_v2") or {}
+        signal["evidence_source"] = "+".join(source_parts) or "euronext_verified"
+        signal["evidence_item_count"] = len(merged)
+        signal["evidence_coverage"] = "verified_detail"
+        if market_error:
+            signal["partial_error"] = market_error
+        return signal
 
     try:
         regulatory = NordicRegulatoryProvider()
         issuer_feed = regulatory.insider(symbol, _company_name(symbol)) or {}
         enriched = analyze_insider(issuer_feed)
         signal = enriched.get("insider_signal_v2") or {}
+        item_count = len(issuer_feed.get("items") or [])
         signal["evidence_source"] = "issuer_provider_fallback"
-        signal["evidence_item_count"] = len(issuer_feed.get("items") or [])
+        signal["evidence_item_count"] = item_count
+        signal["evidence_coverage"] = "verified_detail" if item_count else "no_recent_detail"
         if market_error:
             signal["market_feed_error"] = market_error
         return signal
@@ -187,6 +299,8 @@ def _live_insider_evidence(symbol):
             "label": "NONE",
             "points": 0,
             "evidence_source": "unavailable",
+            "evidence_item_count": 0,
+            "evidence_coverage": "unavailable",
             "error": str(exc),
             "market_feed_error": market_error,
         }
@@ -197,11 +311,9 @@ def live_opportunity(ticker):
     if not symbol or len(symbol) > 16 or not all(ch.isalnum() or ch in ".-" for ch in symbol):
         return {"ticker": symbol, "status": "invalid_ticker"}
 
-    price_provider = YahooProvider()
-    history = price_provider.historical(symbol, "6m")
+    history = YahooProvider().historical(symbol, "6m")
     reversal = calculate_reversal(history)
     insider_signal = _live_insider_evidence(symbol)
-
     opportunity = calculate_opportunity(reversal, insider_signal)
     return {
         "ticker": symbol,
