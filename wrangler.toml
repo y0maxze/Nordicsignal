@@ -1,7 +1,10 @@
 name = "nordicsignal"
-main = "worker.js"
+main = "scheduler_worker.js"
 compatibility_date = "2026-08-22"
 workers_dev = true
+
+[triggers]
+crons = ["*/10 * * * *"]
 
 [assets]
 directory = "./frontend"
