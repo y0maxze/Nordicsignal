@@ -58,6 +58,7 @@ RUNTIME_MODULES = (
     "opportunity_statistical_gate_runtime",
     "opportunity_walkforward_gate_runtime",
     "opportunity_shadow_dataset_runtime",
+    "opportunity_shadow_quality_runtime",
     "opportunity_autoscan_runtime",
     "opportunity_learning_health_runtime",
     "fund_news_runtime",
