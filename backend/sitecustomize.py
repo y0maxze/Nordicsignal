@@ -56,6 +56,7 @@ RUNTIME_MODULES = (
     "opportunity_versioned_learning_runtime",
     "opportunity_version_identity_runtime",
     "opportunity_autoscan_runtime",
+    "opportunity_learning_health_runtime",
     "fund_news_runtime",
     "investment_readiness_runtime",
     "generic_paper_runtime",
