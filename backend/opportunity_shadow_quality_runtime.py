@@ -12,7 +12,7 @@ import opportunity_shadow_dataset_runtime as shadow
 import opportunity_tracking_runtime as tracking
 import opportunity_version_identity_runtime as identity_runtime
 
-MIN_MARKET_DAYS = 20
+MIN_MARKET_DAYS = 40
 DAILY_UNIVERSE_COVERAGE_PCT = 90.0
 MIN_COMPLETE_DAY_SHARE_PCT = 90.0
 FEATURE_COMPLETENESS_PCT = 98.0
