@@ -85,15 +85,17 @@ def backtest_ticker(ticker, rows):
         crossed_70 = score >= 70 and (prev_score is None or prev_score < 70)
         crossed_75 = score >= 75 and (prev_score is None or prev_score < 75)
         if (crossed_55 or crossed_70 or crossed_75) and i - last_event_i >= COOLDOWN:
-            forward = {}
-            for h in HORIZONS:
-                forward[str(h)] = pct(rows[i]["close"], rows[i + h]["close"]) if i + h < len(rows) else None
+            forward = {
+                str(h): pct(rows[i]["close"], rows[i + h]["close"]) if i + h < len(rows) else None
+                for h in HORIZONS
+            }
             events.append({
                 "ticker": ticker,
                 "date": rows[i]["date"],
                 "close": rows[i]["close"],
                 "score": score,
                 "regime": result.get("regime"),
+                "engine_version": result.get("version"),
                 "metrics": result.get("metrics") or {},
                 "forward_return_pct": forward,
             })
@@ -106,8 +108,7 @@ def backtest_ticker(ticker, rows):
 def summarize_group(events, baseline):
     horizon_stats = {}
     for h in HORIZONS:
-        event_values = [e["forward_return_pct"][str(h)] for e in events]
-        event_stats = summarize(event_values)
+        event_stats = summarize([e["forward_return_pct"][str(h)] for e in events])
         baseline_stats = summarize(baseline[h])
         excess = None
         if event_stats["mean_pct"] is not None and baseline_stats["mean_pct"] is not None:
@@ -150,10 +151,11 @@ def main():
         "score_75_plus_volume_2_0": [e for e in all_events if e["score"] >= 75 and (e["metrics"].get("volume_ratio") or 0) >= 2.0],
     }
     results = {name: summarize_group(items, baseline) for name, items in groups.items()}
+    engine_versions = sorted({str(e.get("engine_version")) for e in all_events if e.get("engine_version")})
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "engine_version": "2026-08-29-v2.1",
+        "engine_versions": engine_versions,
         "method": {
             "universe": "current NordicSignal Oslo universe",
             "lookback": "5y daily Yahoo chart data",
@@ -162,6 +164,7 @@ def main():
             "cooldown_trading_days": COOLDOWN,
             "horizons_trading_days": list(HORIZONS),
             "lookahead": "none in signal calculation",
+            "volume_semantics": "volume_ratio is bullish-day volume only; raw_volume_ratio is retained separately",
             "baseline": "all eligible stock-days in the same downloaded history",
             "limitations": [
                 "current-universe survivorship bias",
@@ -181,7 +184,7 @@ def main():
         json.dump(report, f, ensure_ascii=False, indent=2)
 
     print("\n=== REVERSAL BACKTEST SUMMARY ===")
-    print(f"events: {len(all_events)} | tickers with errors: {len(errors)}")
+    print(f"engine_versions={engine_versions} | events={len(all_events)} | tickers with errors={len(errors)}")
     for name, block in results.items():
         print(f"{name}: {block['events']} events")
         for h in HORIZONS:
