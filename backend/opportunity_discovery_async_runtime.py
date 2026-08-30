@@ -1,4 +1,5 @@
 """Keep extended Opportunity discovery off the latency-critical core scan path."""
+from difflib import SequenceMatcher
 import threading
 import time
 
@@ -6,6 +7,14 @@ import opportunity_data_coverage_runtime as coverage
 
 _REFRESH_LOCK = threading.Lock()
 _REFRESHING = False
+
+
+def conservative_name_similarity(left, right):
+    """Avoid short substring names resolving to the wrong Oslo issuer."""
+    a, b = coverage._norm_name(left), coverage._norm_name(right)
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
 
 
 def _refresh_cache():
@@ -57,6 +66,7 @@ def discovery_refreshing():
 
 
 def install():
+    coverage._name_similarity = conservative_name_similarity
     coverage._discovery_rows = nonblocking_discovery_rows
     original_status = coverage.discovery_status
 
