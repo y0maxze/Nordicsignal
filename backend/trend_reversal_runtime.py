@@ -29,7 +29,6 @@ def _ema(values, period):
 
 
 def _ema_series(values, period):
-    """Return EMA values aligned to input in O(n), seeded like _ema()."""
     values = [float(v) for v in values]
     out = [None] * len(values)
     if len(values) < period:
@@ -102,7 +101,7 @@ def calculate_reversal(history):
     closes = [float(x["close"]) for x in rows]
     volumes = [_num(x.get("volume")) for x in rows]
     if len(closes) < 35:
-        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-30-v2.3"}
+        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-30-v2.4"}
 
     score = 0.0
     reasons = []
@@ -152,21 +151,24 @@ def calculate_reversal(history):
 
     valid_volumes = [v for v in volumes[-21:-1] if v is not None and v > 0]
     latest_volume = volumes[-1] if volumes else None
-    volume_ratio = None
+    raw_volume_ratio = None
+    bullish_volume_ratio = None
     volume_confirmation = "NONE"
+    bullish_day = len(closes) >= 2 and closes[-1] > closes[-2]
     if latest_volume is not None and valid_volumes:
         avg_volume = sum(valid_volumes) / len(valid_volumes)
         if avg_volume > 0:
-            volume_ratio = latest_volume / avg_volume
-            bullish_day = closes[-1] > closes[-2]
-            if volume_ratio >= 2.0 and bullish_day:
-                score += 10
-                volume_confirmation = "STRONG"
-                reasons.append("Strong bullish volume expansion")
-            elif volume_ratio >= 1.5 and bullish_day:
-                score += 6
-                volume_confirmation = "CONFIRMED"
-                reasons.append("Bullish volume expansion")
+            raw_volume_ratio = latest_volume / avg_volume
+            if bullish_day:
+                bullish_volume_ratio = raw_volume_ratio
+                if bullish_volume_ratio >= 2.0:
+                    score += 10
+                    volume_confirmation = "STRONG"
+                    reasons.append("Strong bullish volume expansion")
+                elif bullish_volume_ratio >= 1.5:
+                    score += 6
+                    volume_confirmation = "CONFIRMED"
+                    reasons.append("Bullish volume expansion")
 
     trailing_high = max(closes[-120:])
     drawdown_pct = ((closes[-1] / trailing_high) - 1.0) * 100.0 if trailing_high else 0.0
@@ -199,13 +201,15 @@ def calculate_reversal(history):
             "ema21": round(ema21, 4) if ema21 is not None else None,
             "rsi14": round(rsi_now, 2) if rsi_now is not None else None,
             "macd_histogram": round(hist_now, 5) if hist_now is not None else None,
-            "volume_ratio": round(volume_ratio, 2) if volume_ratio is not None else None,
+            "raw_volume_ratio": round(raw_volume_ratio, 2) if raw_volume_ratio is not None else None,
+            "volume_ratio": round(bullish_volume_ratio, 2) if bullish_volume_ratio is not None else None,
             "volume_confirmation": volume_confirmation,
+            "bullish_day": bullish_day,
             "drawdown_pct": round(drawdown_pct, 2),
             "higher_low": structure["higher_low"],
             "higher_high": structure["higher_high"],
         },
-        "version": "2026-08-30-v2.3",
+        "version": "2026-08-30-v2.4",
     }
 
 
