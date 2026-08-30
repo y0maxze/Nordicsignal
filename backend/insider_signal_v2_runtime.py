@@ -44,16 +44,14 @@ def _actor_key(row):
     text = " ".join(str(value or "").split()).strip(" ,.-–—")
     if not text:
         return ""
-
-    # Remove generic Euronext/title prefixes that sometimes leak into actor fields.
-    text = re.sub(r"^(?:primary\s+insider\s+transactions?|mandatory\s+notification(?:\s+of\s+trade)?|prim[aæ]rinsider(?:transaksjoner?|handel))\s*[:\-–—]*\s*", "", text, flags=re.I)
-
-    # Remove repeated issuer prefix, while preserving a related company/person suffix.
+    text = re.sub(
+        r"^(?:primary\s+insider\s+transactions?|mandatory\s+notification(?:\s+of\s+trade)?|prim[aæ]rinsider(?:transaksjoner?|handel))\s*[:\-–—]*\s*",
+        "", text, flags=re.I,
+    )
     company = " ".join(str(row.get("company") or "").split()).strip(" ,.-–—")
     if company:
         pattern = re.compile(rf"^(?:{re.escape(company)}[\s:,.\-–—]*)+", re.I)
         text = pattern.sub("", text).strip(" ,.-–—") or text
-
     return _fold(text)
 
 
@@ -113,12 +111,20 @@ def _action(row):
     return raw
 
 
+def _transaction_key(row, action, day):
+    actor = _actor_key(row)
+    source_id = str(row.get("node_id") or row.get("url") or row.get("source_url") or "").strip()
+    shares = _num(row.get("shares"))
+    price = _num(row.get("price"))
+    return (actor, str(day or ""), action, shares, price, source_id)
+
+
 def analyze(result, window_days=14):
     out = dict(result or {})
     items = [dict(x) for x in (out.get("items") or [])]
-    buys = []
-    sells = []
-    excluded = []
+    buys, sells, excluded = [], [], []
+    seen_transactions = set()
+    duplicate_count = 0
     dates = [_date(x.get("trade_date") or x.get("date") or x.get("published_at")) for x in items]
     dates = [x for x in dates if x]
     anchor = max(dates) if dates else datetime.now(timezone.utc).date()
@@ -132,10 +138,14 @@ def analyze(result, window_days=14):
             row["insider_signal_excluded"] = "economic exposure may be unchanged / transfer-like transaction"
             excluded.append(row)
             continue
-        if action == "buy":
-            buys.append(row)
-        elif action == "sell":
-            sells.append(row)
+        if action not in {"buy", "sell"}:
+            continue
+        key = _transaction_key(row, action, day)
+        if key in seen_transactions:
+            duplicate_count += 1
+            continue
+        seen_transactions.add(key)
+        (buys if action == "buy" else sells).append(row)
 
     actors = {x for x in (_actor_key(row) for row in buys) if x}
     buy_value = sum(v for v in (_trade_value(row) for row in buys) if v is not None)
@@ -177,11 +187,12 @@ def analyze(result, window_days=14):
         "buy_value_nok": round(buy_value, 2),
         "sell_value_nok": round(sell_value, 2),
         "excluded_transfer_like_count": len(excluded),
+        "deduplicated_row_count": duplicate_count,
         "reasons": reasons,
         "score_effect": 0,
         "policy": "informational_only_pending_backtest",
     }
-    out["insider_signal_v2_version"] = "2026-08-30-v3"
+    out["insider_signal_v2_version"] = "2026-08-30-v3.1"
     return out
 
 
