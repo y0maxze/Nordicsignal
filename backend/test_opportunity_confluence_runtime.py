@@ -73,6 +73,27 @@ def test_implausible_insider_price_keeps_trade_but_rejects_value():
     assert safe[0]["value_quality"] == "rejected_market_price_outlier"
 
 
+def test_corrupt_explicit_value_falls_back_to_plausible_shares_times_price():
+    rows = [{
+        "person": "Example CEO",
+        "transaction_type": "buy",
+        "trade_date": "2026-08-20",
+        "shares": 37500,
+        "price": 26.65,
+        "transaction_value": 54_202_563_750.0,
+        "display_transaction_value": 54_202_563_750.0,
+    }]
+    history = [{"date": "2026-08-20", "close": 23.50}]
+    safe, rejected = _sanitize_value_rows(rows, history)
+    assert len(rejected) == 1
+    assert rejected[0]["reason"] == "value_inconsistent_with_shares_price"
+    assert safe[0]["price"] == 26.65
+    assert safe[0]["transaction_value"] is None
+    assert safe[0]["display_transaction_value"] is None
+    assert safe[0]["shares"] * safe[0]["price"] == 999375.0
+    assert safe[0]["value_quality"] == "rejected_value_inconsistent_with_shares_price"
+
+
 def test_plausible_insider_price_preserves_value():
     rows = [{
         "person": "Example CEO",
