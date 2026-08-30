@@ -17,7 +17,7 @@ from insider_signal_v2_runtime import analyze as analyze_insider
 from providers import YahooProvider, NordicRegulatoryProvider
 from trend_reversal_runtime import calculate_reversal
 
-VERSION = "2026-08-30-v1.2"
+VERSION = "2026-08-30-v1.3"
 _TARGET_CACHE_LOCK = threading.RLock()
 _TARGET_CACHE = {"at": 0.0, "days": None, "items": []}
 _TARGET_CACHE_TTL = 120
@@ -225,13 +225,101 @@ def _persist_targeted_rows(rows):
         pass
 
 
-def _live_insider_evidence(symbol):
-    """Build complete 14-day verified insider evidence for one ticker.
+def _history_close_map(history):
+    out = {}
+    for row in history or []:
+        if not isinstance(row, dict):
+            continue
+        day = str(row.get("date") or row.get("timestamp") or "")[:10]
+        try:
+            close = float(row.get("close"))
+        except (TypeError, ValueError):
+            continue
+        if len(day) == 10 and close > 0:
+            out[day] = close
+    return out
 
-    The normal market feed is fast but capped at 100 returned rows. We merge it with
-    ticker-targeted enrichment from the complete recent Euronext topic archive so a
-    busy disclosure period cannot silently remove older-but-still-relevant trades.
+
+def _reference_close(close_map, trade_day):
+    day = str(trade_day or "")[:10]
+    if not close_map or len(day) != 10:
+        return None
+    if day in close_map:
+        return close_map[day]
+    # Disclosures can reference weekend/holiday dates. Use the nearest prior market
+    # close when available; otherwise the nearest later close.
+    earlier = [d for d in close_map if d < day]
+    if earlier:
+        return close_map[max(earlier)]
+    later = [d for d in close_map if d > day]
+    return close_map[min(later)] if later else None
+
+
+def _sanitize_value_rows(rows, history):
+    """Return signal-safe copies while preserving raw rows for persistence/debugging.
+
+    Transaction value is rejected when disclosed or implied price is wildly detached
+    from the listed share's market price. The trade/actor still remains valid evidence;
+    only the monetary-value contribution is removed.
     """
+    close_map = _history_close_map(history)
+    safe = []
+    rejected = []
+    for raw in rows or []:
+        row = dict(raw)
+        reference = _reference_close(close_map, row.get("trade_date") or row.get("date") or row.get("published_at"))
+        try:
+            shares = float(row.get("shares")) if row.get("shares") is not None else None
+        except (TypeError, ValueError):
+            shares = None
+        try:
+            price = float(row.get("price")) if row.get("price") is not None else None
+        except (TypeError, ValueError):
+            price = None
+
+        candidate_value = None
+        for key in ("display_transaction_value", "transaction_value", "display_value", "value"):
+            try:
+                value = float(row.get(key)) if row.get(key) is not None else None
+            except (TypeError, ValueError):
+                value = None
+            if value is not None and value >= 0:
+                candidate_value = value
+                break
+
+        implied_price = candidate_value / shares if candidate_value is not None and shares and shares > 0 else None
+        comparable_price = price if price and price > 0 else implied_price
+        ratio = comparable_price / reference if comparable_price and reference and reference > 0 else None
+        implausible = ratio is not None and (ratio < 0.20 or ratio > 5.0)
+
+        if implausible:
+            row["raw_price"] = row.get("price")
+            row["raw_transaction_value"] = candidate_value
+            row["value_quality"] = "rejected_market_price_outlier"
+            row["value_reference_close"] = round(reference, 4)
+            row["value_price_ratio"] = round(ratio, 4)
+            for key in ("display_transaction_value", "transaction_value", "display_value", "value"):
+                row[key] = None
+            row["price"] = None
+            rejected.append({
+                "actor": row.get("person") or row.get("related_primary_insider") or row.get("entity") or row.get("insider"),
+                "trade_date": row.get("trade_date") or row.get("date"),
+                "shares": row.get("shares"),
+                "raw_price": row.get("raw_price"),
+                "raw_transaction_value": candidate_value,
+                "reference_close": round(reference, 4),
+                "price_ratio": round(ratio, 4),
+            })
+        elif comparable_price is not None and reference is not None:
+            row["value_quality"] = "market_price_plausible"
+            row["value_reference_close"] = round(reference, 4)
+            row["value_price_ratio"] = round(ratio, 4) if ratio is not None else None
+        safe.append(row)
+    return safe, rejected
+
+
+def _live_insider_evidence(symbol, history=None):
+    """Build complete 14-day verified insider evidence for one ticker."""
     market_error = None
     merged = []
     seen = set()
@@ -267,17 +355,22 @@ def _live_insider_evidence(symbol):
         market_error = market_error or str(exc)
 
     if merged:
+        # Persist raw verified observations. Sanitize only the copy used by scoring.
         _persist_targeted_rows(merged)
+        safe_rows, rejected_values = _sanitize_value_rows(merged, history or [])
         enriched = analyze_insider({
             "status": "live",
             "source": "Euronext Oslo Børs Newspoint",
-            "items": merged,
-            "verified_detail_count": len(merged),
+            "items": safe_rows,
+            "verified_detail_count": len(safe_rows),
         })
         signal = enriched.get("insider_signal_v2") or {}
         signal["evidence_source"] = "+".join(source_parts) or "euronext_verified"
-        signal["evidence_item_count"] = len(merged)
+        signal["evidence_item_count"] = len(safe_rows)
         signal["evidence_coverage"] = "verified_detail"
+        signal["rejected_value_row_count"] = len(rejected_values)
+        if rejected_values:
+            signal["rejected_value_rows"] = rejected_values[:10]
         if market_error:
             signal["partial_error"] = market_error
         return signal
@@ -285,12 +378,19 @@ def _live_insider_evidence(symbol):
     try:
         regulatory = NordicRegulatoryProvider()
         issuer_feed = regulatory.insider(symbol, _company_name(symbol)) or {}
-        enriched = analyze_insider(issuer_feed)
+        raw_items = [dict(x) for x in (issuer_feed.get("items") or [])]
+        safe_rows, rejected_values = _sanitize_value_rows(raw_items, history or [])
+        issuer_safe = dict(issuer_feed)
+        issuer_safe["items"] = safe_rows
+        enriched = analyze_insider(issuer_safe)
         signal = enriched.get("insider_signal_v2") or {}
-        item_count = len(issuer_feed.get("items") or [])
+        item_count = len(safe_rows)
         signal["evidence_source"] = "issuer_provider_fallback"
         signal["evidence_item_count"] = item_count
         signal["evidence_coverage"] = "verified_detail" if item_count else "no_recent_detail"
+        signal["rejected_value_row_count"] = len(rejected_values)
+        if rejected_values:
+            signal["rejected_value_rows"] = rejected_values[:10]
         if market_error:
             signal["market_feed_error"] = market_error
         return signal
@@ -301,6 +401,7 @@ def _live_insider_evidence(symbol):
             "evidence_source": "unavailable",
             "evidence_item_count": 0,
             "evidence_coverage": "unavailable",
+            "rejected_value_row_count": 0,
             "error": str(exc),
             "market_feed_error": market_error,
         }
@@ -313,7 +414,7 @@ def live_opportunity(ticker):
 
     history = YahooProvider().historical(symbol, "6m")
     reversal = calculate_reversal(history)
-    insider_signal = _live_insider_evidence(symbol)
+    insider_signal = _live_insider_evidence(symbol, history)
     opportunity = calculate_opportunity(reversal, insider_signal)
     return {
         "ticker": symbol,
