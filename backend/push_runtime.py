@@ -1,8 +1,9 @@
 """Web Push infrastructure for installed NordicSignal PWAs.
 
 Delivery is enabled only when VAPID keys are configured as server secrets. The
-browser subscription is persisted in Postgres and new signal/trend events can be
-sent even when the PWA is closed, provided the backend process is awake.
+browser subscription is persisted in Postgres and new signal/trend/opportunity
+events can be sent even when the PWA is closed, provided the backend process is
+awake.
 """
 from datetime import datetime, timezone
 import hashlib
@@ -30,6 +31,11 @@ DISPATCH_INTERVAL_SECONDS = 60
 _MAX_EVENTS_PER_CYCLE = 12
 _DISPATCH_STARTED = False
 _DISPATCH_LOCK = threading.Lock()
+
+# Early Opportunity push policy: notify only on meaningful state transitions already
+# persisted by opportunity_tracking_runtime. WATCH_CONFLUENCE is intentionally held
+# to a higher evidence bar so background scans do not create noisy mobile alerts.
+_OPPORTUNITY_PUSH_LABELS = {"EARLY_OPPORTUNITY", "EARLY_OPPORTUNITY_HIGH", "WATCH_CONFLUENCE"}
 
 
 def _now():
@@ -189,6 +195,72 @@ def _send(subscription, payload):
         return False, "delivery_error"
 
 
+def _float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _opportunity_push_event(row):
+    """Convert a persisted opportunity transition into a push event when material.
+
+    EARLY_OPPORTUNITY and HIGH are always material because the confluence engine
+    already requires reversal + bullish-volume confirmation for those labels.
+    WATCH_CONFLUENCE is sent only with strong extra evidence: score >= 60 plus a
+    strong/positive insider cluster, or score >= 65 with reversal >= 75. This keeps
+    the watch tier useful without turning every tentative reversal into a push.
+    """
+    d = dict(row)
+    label = str(d.get("label") or "").upper()
+    if label not in _OPPORTUNITY_PUSH_LABELS:
+        return None
+
+    score = _float(d.get("score"))
+    reversal = _float(d.get("reversal_score"))
+    volume = _float(d.get("volume_ratio"))
+    insider = str(d.get("insider_label") or "NONE").upper()
+    buyers = int(_float(d.get("independent_buyers")))
+    buy_value = _float(d.get("buy_value_nok"))
+
+    if label == "WATCH_CONFLUENCE":
+        strong_insider_watch = score >= 60 and insider in {"STRONG", "POSITIVE"}
+        strong_reversal_watch = score >= 65 and reversal >= 75
+        if not (strong_insider_watch or strong_reversal_watch):
+            return None
+
+    ticker = str(d.get("ticker") or "").upper().replace(".OL", "")
+    if not ticker:
+        return None
+
+    if label == "EARLY_OPPORTUNITY_HIGH":
+        title = f"{ticker} · Sterk Early Opportunity"
+    elif label == "EARLY_OPPORTUNITY":
+        title = f"{ticker} · Early Opportunity"
+    else:
+        title = f"{ticker} · Opportunity Watch"
+
+    evidence = [f"score {score:.0f}", f"reversal {reversal:.0f}"]
+    if volume > 0:
+        evidence.append(f"volum {volume:.1f}×")
+    if insider in {"STRONG", "POSITIVE"}:
+        insider_text = f"insider {insider.lower()}"
+        if buyers >= 3:
+            insider_text += f" · {buyers} kjøpere"
+        evidence.append(insider_text)
+    if buy_value >= 1_000_000:
+        evidence.append(f"kjøp {buy_value / 1_000_000:.1f}m kr")
+
+    return {
+        "event_key": f"opportunity:{d['id']}",
+        "ticker": ticker,
+        "title": title,
+        "body": " · ".join(evidence),
+        "url": f"/stock?ticker={ticker}",
+        "created_at": d.get("created_at") or d.get("observed_at") or _now(),
+    }
+
+
 def _event_rows(since):
     items = []
     conn = connect()
@@ -206,6 +278,19 @@ def _event_rows(since):
                 d = dict(x)
                 items.append({"event_key":f"score:{d['id']}","ticker":d["symbol"],"title":f"{d['symbol']} · Signalendring","body":d.get("event") or d.get("signal"),"url":f"/stock?ticker={d['symbol']}","created_at":d["created_at"]})
         except Exception:
+            pass
+        try:
+            rows = conn.execute(
+                "SELECT id,ticker,name,previous_label,label,score,reversal_score,volume_ratio,insider_label,independent_buyers,buy_value_nok,observed_at,created_at "
+                "FROM opportunity_events WHERE created_at>? ORDER BY id DESC LIMIT ?",
+                (since, _MAX_EVENTS_PER_CYCLE),
+            ).fetchall()
+            for x in rows:
+                event = _opportunity_push_event(x)
+                if event:
+                    items.append(event)
+        except Exception:
+            # Opportunity tracking is additive and may not exist in older/local DBs.
             pass
     finally:
         conn.close()
@@ -272,6 +357,8 @@ def push_status():
         "active_subscriptions":count,
         "dispatcher_interval_seconds":DISPATCH_INTERVAL_SECONDS,
         "backend_awake_required":True,
+        "opportunity_push":True,
+        "opportunity_policy":"state_transition_only; early/high always; watch requires strong extra evidence",
         "note":"Real Web Push works for installed iPhone PWAs when VAPID secrets are configured. A sleeping backend cannot dispatch until it wakes.",
         "generated_at":_now(),
     }
