@@ -17,10 +17,11 @@ from insider_signal_v2_runtime import analyze as analyze_insider
 from providers import YahooProvider, NordicRegulatoryProvider
 from trend_reversal_runtime import calculate_reversal
 
-VERSION = "2026-08-30-v1.3"
+VERSION = "2026-08-30-v1.4"
 _TARGET_CACHE_LOCK = threading.RLock()
 _TARGET_CACHE = {"at": 0.0, "days": None, "items": []}
 _TARGET_CACHE_TTL = 120
+_VALUE_KEYS = ("display_transaction_value", "transaction_value", "display_value", "value")
 
 
 def _num(value, default=0.0):
@@ -191,7 +192,6 @@ def _row_key(row):
 
 
 def _targeted_market_rows(symbol, days=14):
-    """Enrich only disclosures for one symbol across the complete recent topic archive."""
     rows = []
     seen = set()
     announcements = [x for x in _cached_announcements(days) if _announcement_matches(symbol, x)]
@@ -246,8 +246,6 @@ def _reference_close(close_map, trade_day):
         return None
     if day in close_map:
         return close_map[day]
-    # Disclosures can reference weekend/holiday dates. Use the nearest prior market
-    # close when available; otherwise the nearest later close.
     earlier = [d for d in close_map if d < day]
     if earlier:
         return close_map[max(earlier)]
@@ -255,19 +253,39 @@ def _reference_close(close_map, trade_day):
     return close_map[min(later)] if later else None
 
 
+def _first_value(row):
+    for key in _VALUE_KEYS:
+        try:
+            value = float(row.get(key)) if row.get(key) is not None else None
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and value >= 0:
+            return value
+    return None
+
+
+def _clear_explicit_values(row):
+    for key in _VALUE_KEYS:
+        row[key] = None
+
+
 def _sanitize_value_rows(rows, history):
     """Return signal-safe copies while preserving raw rows for persistence/debugging.
 
-    Transaction value is rejected when disclosed or implied price is wildly detached
-    from the listed share's market price. The trade/actor still remains valid evidence;
-    only the monetary-value contribution is removed.
+    Two independent checks protect value evidence:
+    1) price (reported or implied) must be broadly plausible versus market close;
+    2) explicit transaction value must be broadly consistent with shares * price.
+
+    A bad explicit value is discarded while a plausible shares/price pair remains usable.
+    A bad price is removed as well, so no monetary value can leak into the signal.
     """
     close_map = _history_close_map(history)
     safe = []
     rejected = []
     for raw in rows or []:
         row = dict(raw)
-        reference = _reference_close(close_map, row.get("trade_date") or row.get("date") or row.get("published_at"))
+        trade_day = row.get("trade_date") or row.get("date") or row.get("published_at")
+        reference = _reference_close(close_map, trade_day)
         try:
             shares = float(row.get("shares")) if row.get("shares") is not None else None
         except (TypeError, ValueError):
@@ -277,49 +295,69 @@ def _sanitize_value_rows(rows, history):
         except (TypeError, ValueError):
             price = None
 
-        candidate_value = None
-        for key in ("display_transaction_value", "transaction_value", "display_value", "value"):
-            try:
-                value = float(row.get(key)) if row.get(key) is not None else None
-            except (TypeError, ValueError):
-                value = None
-            if value is not None and value >= 0:
-                candidate_value = value
-                break
+        candidate_value = _first_value(row)
+        expected_value = shares * price if shares and shares > 0 and price and price > 0 else None
+        value_consistency_ratio = (
+            candidate_value / expected_value
+            if candidate_value is not None and expected_value and expected_value > 0
+            else None
+        )
+        inconsistent_value = (
+            value_consistency_ratio is not None
+            and (value_consistency_ratio < 0.50 or value_consistency_ratio > 2.0)
+        )
 
         implied_price = candidate_value / shares if candidate_value is not None and shares and shares > 0 else None
         comparable_price = price if price and price > 0 else implied_price
-        ratio = comparable_price / reference if comparable_price and reference and reference > 0 else None
-        implausible = ratio is not None and (ratio < 0.20 or ratio > 5.0)
+        market_ratio = comparable_price / reference if comparable_price and reference and reference > 0 else None
+        implausible_price = market_ratio is not None and (market_ratio < 0.20 or market_ratio > 5.0)
 
-        if implausible:
+        if implausible_price:
             row["raw_price"] = row.get("price")
             row["raw_transaction_value"] = candidate_value
             row["value_quality"] = "rejected_market_price_outlier"
             row["value_reference_close"] = round(reference, 4)
-            row["value_price_ratio"] = round(ratio, 4)
-            for key in ("display_transaction_value", "transaction_value", "display_value", "value"):
-                row[key] = None
+            row["value_price_ratio"] = round(market_ratio, 4)
+            _clear_explicit_values(row)
             row["price"] = None
             rejected.append({
+                "reason": "market_price_outlier",
                 "actor": row.get("person") or row.get("related_primary_insider") or row.get("entity") or row.get("insider"),
-                "trade_date": row.get("trade_date") or row.get("date"),
+                "trade_date": trade_day,
                 "shares": row.get("shares"),
                 "raw_price": row.get("raw_price"),
                 "raw_transaction_value": candidate_value,
                 "reference_close": round(reference, 4),
-                "price_ratio": round(ratio, 4),
+                "price_ratio": round(market_ratio, 4),
+            })
+        elif inconsistent_value:
+            # Preserve a plausible reported price, but discard the corrupt aggregate
+            # value field. Insider Signal will then safely fall back to shares * price.
+            row["raw_transaction_value"] = candidate_value
+            row["value_quality"] = "rejected_value_inconsistent_with_shares_price"
+            row["value_consistency_ratio"] = round(value_consistency_ratio, 4)
+            if reference is not None:
+                row["value_reference_close"] = round(reference, 4)
+            _clear_explicit_values(row)
+            rejected.append({
+                "reason": "value_inconsistent_with_shares_price",
+                "actor": row.get("person") or row.get("related_primary_insider") or row.get("entity") or row.get("insider"),
+                "trade_date": trade_day,
+                "shares": row.get("shares"),
+                "price": row.get("price"),
+                "raw_transaction_value": candidate_value,
+                "expected_shares_times_price": round(expected_value, 2),
+                "value_consistency_ratio": round(value_consistency_ratio, 4),
             })
         elif comparable_price is not None and reference is not None:
             row["value_quality"] = "market_price_plausible"
             row["value_reference_close"] = round(reference, 4)
-            row["value_price_ratio"] = round(ratio, 4) if ratio is not None else None
+            row["value_price_ratio"] = round(market_ratio, 4) if market_ratio is not None else None
         safe.append(row)
     return safe, rejected
 
 
 def _live_insider_evidence(symbol, history=None):
-    """Build complete 14-day verified insider evidence for one ticker."""
     market_error = None
     merged = []
     seen = set()
@@ -355,7 +393,6 @@ def _live_insider_evidence(symbol, history=None):
         market_error = market_error or str(exc)
 
     if merged:
-        # Persist raw verified observations. Sanitize only the copy used by scoring.
         _persist_targeted_rows(merged)
         safe_rows, rejected_values = _sanitize_value_rows(merged, history or [])
         enriched = analyze_insider({
