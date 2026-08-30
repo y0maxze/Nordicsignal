@@ -50,7 +50,7 @@ const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#070707"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="NordicSignal">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script><script src="/stock_opportunity_ui.js"></script>';
-const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
+const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
 const MOBILE_SHELL = '<script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 const SECURITY_HEADERS = {
@@ -127,8 +127,6 @@ async function proxyApi(request, url, env) {
   upstream.search = url.search;
   try {
     const headers = new Headers(request.headers);
-    // In private mode Render accepts API traffic only from this Worker. Send the
-    // internal secret on every proxied API call; the browser never sees its value.
     if (env && env.NORDICSIGNAL_WRITE_TOKEN) {
       headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
     }

@@ -1,13 +1,15 @@
-"""Operational health check for the Opportunity shadow collection pipeline.
+"""Operational health checks for the Opportunity shadow collection pipeline.
 
-Research readiness can legitimately stay COLLECTING_DATA for weeks. This check asks a
-different question: is today's shadow collection complete and internally healthy?
-It is read-only and has no signal, score or calibration effect.
+Research readiness can legitimately stay COLLECTING_DATA for weeks. These checks ask
+a different question: is today's shadow collection complete and did each expected
+ticker actually run? They are read-only and have no signal, score or calibration
+effect.
 """
 from __future__ import annotations
 
 import opportunity_learning_health_runtime as health
 import opportunity_shadow_dataset_runtime as shadow
+import opportunity_shadow_scan_audit_runtime as scan_audit
 
 _BASE_HEALTH = health.learning_health
 
@@ -64,6 +66,30 @@ def shadow_collection_check():
     }
 
 
+def shadow_scan_audit_check():
+    report = scan_audit.scan_audit_status()
+    latest = dict(report.get("latest_run") or {})
+    state = str(report.get("operational_status") or "FAIL")
+    if state == "COLLECTING_DATA":
+        state = "NOT_APPLICABLE"
+    return {
+        "status": state,
+        "run_status": latest.get("run_status"),
+        "started_at": latest.get("started_at"),
+        "completed_at": latest.get("completed_at"),
+        "expected_tickers": int(latest.get("expected_tickers") or 0),
+        "result_rows": int(latest.get("result_rows") or 0),
+        "snapshot_present": int(latest.get("snapshot_present") or 0),
+        "snapshot_coverage_pct": float(latest.get("snapshot_coverage_pct") or 0.0),
+        "not_scanned_tickers": list(report.get("missing_tickers") or []),
+        "failed_tickers": list(report.get("failed_tickers") or []),
+        "snapshot_missing_tickers": list(report.get("snapshot_missing_tickers") or []),
+        "outcome_counts": dict(report.get("outcome_counts") or {}),
+        "failures": list(report.get("failures") or [])[:10],
+        "rule": "every active ticker should produce one audited result; not-scanned is FAIL, per-ticker scan/result/snapshot failures are WARN",
+    }
+
+
 def learning_health():
     report = _BASE_HEALTH()
     checks = report.setdefault("checks", {})
@@ -73,6 +99,11 @@ def learning_health():
     except Exception as exc:
         checks["shadow_collection"] = {"status": "FAIL", "error": str(exc)}
         errors.append("shadow_collection")
+    try:
+        checks["shadow_scan_audit"] = shadow_scan_audit_check()
+    except Exception as exc:
+        checks["shadow_scan_audit"] = {"status": "FAIL", "error": str(exc)}
+        errors.append("shadow_scan_audit")
     report["learning_pipeline_status"] = health._overall_status(checks)
     return report
 
