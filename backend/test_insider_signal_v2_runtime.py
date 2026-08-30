@@ -63,3 +63,31 @@ def test_xplra_like_real_cluster_counts_six_buyers_and_excludes_internal_transfe
     assert signal["buy_count"] == 7
     assert signal["excluded_transfer_like_count"] == 1
     assert 1_600_000 <= signal["buy_value_nok"] <= 1_700_000
+
+
+def test_duplicate_euronext_actor_variants_count_once():
+    items = [
+        {
+            "direction": "buy",
+            "trade_date": "2026-08-25",
+            "actor": "Primary Insider Transaction Sjur Malm",
+            "company": "Lerøy Seafood Group ASA",
+            "shares": 1000,
+            "price": 50.0,
+            "node_id": "same-release",
+        },
+        {
+            "direction": "buy",
+            "trade_date": "2026-08-25",
+            "person": "Sjur Malm",
+            "company": "Lerøy Seafood Group ASA",
+            "shares": 1000,
+            "price": 50.0,
+            "node_id": "same-release",
+        },
+    ]
+    signal = analyze({"items": items})["insider_signal_v2"]
+    assert signal["independent_buyers"] == 1
+    assert signal["buy_count"] == 1
+    assert signal["buy_value_nok"] == 50_000
+    assert signal["deduplicated_row_count"] == 1
