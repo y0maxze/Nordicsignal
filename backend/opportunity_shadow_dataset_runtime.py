@@ -1,14 +1,9 @@
 """Daily first-observed shadow dataset for future Opportunity calibration research.
 
-The existing event log is intentionally selective: it records only material state
-transitions. That makes it unsuitable for counterfactual tests of looser thresholds.
-This runtime therefore stores one compact, immutable feature snapshot per ticker,
-market date and signal-model version for every successful live scan, including
-NO_OPPORTUNITY and REVERSAL_CANDIDATE observations.
-
-The snapshot feature vector never changes. Deterministic OSEBX context may be
-backfilled if the benchmark provider was temporarily unavailable. Forward outcomes
-are settled later and never affect live scores, labels, events or pushes.
+The event log is selective, so it cannot fairly test looser future thresholds. This
+runtime stores one immutable feature snapshot per signal-model/ticker/market-day for
+every successful scan, including NO_OPPORTUNITY and REVERSAL_CANDIDATE states.
+Deterministic OSEBX context may backfill later; frozen signal features never change.
 """
 from __future__ import annotations
 
@@ -23,85 +18,47 @@ import opportunity_version_identity_runtime as identity_runtime
 from providers import YahooProvider
 
 HORIZONS = (5, 10, 20, 60)
-
 _BASE_LIVE = opportunity.live_opportunity
 _BASE_SETTLE = tracking.settle_forward_returns
 
 
-def _now():
-    return datetime.now(timezone.utc).isoformat()
-
+def _now(): return datetime.now(timezone.utc).isoformat()
 
 def _num(value):
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-
+    try: return float(value) if value is not None else None
+    except (TypeError, ValueError): return None
 
 def _market_date(result):
     value = tracking._entry_date_from_result(result or {})
-    if value:
-        return value
+    if value: return value
     observed = str((result or {}).get("generated_at") or "")[:10]
     return observed if len(observed) == 10 else None
 
-
 def _context_for_result(result, benchmark_symbol=None, benchmark_rows=None):
     try:
-        if benchmark_rows is None:
-            benchmark_symbol, benchmark_rows = market._benchmark_rows()
-        event = {
-            "payload": json.dumps(result or {}, ensure_ascii=False, separators=(",", ":"), default=str),
-            "observed_at": str((result or {}).get("generated_at") or _now()),
-        }
-        context = market._classify_regime(event, benchmark_rows)
-        return benchmark_symbol, context
-    except Exception:
-        return benchmark_symbol, None
+        if benchmark_rows is None: benchmark_symbol, benchmark_rows = market._benchmark_rows()
+        event = {"payload": json.dumps(result or {}, ensure_ascii=False, separators=(",", ":"), default=str), "observed_at": str((result or {}).get("generated_at") or _now())}
+        return benchmark_symbol, market._classify_regime(event, benchmark_rows)
+    except Exception: return benchmark_symbol, None
 
-
-def _feature_snapshot(result, identity=None, benchmark_symbol=None, context=None):
-    result = result or {}
-    identity = identity or identity_runtime._current_identity()
-    opp = result.get("opportunity") or {}
+def _feature_snapshot(result, identity, benchmark_symbol=None, context=None):
+    result, context = result or {}, context or {}
+    opp, reversal = result.get("opportunity") or {}, result.get("reversal") or {}
     components = opp.get("components") or {}
-    reversal = result.get("reversal") or {}
     ticker = str(result.get("ticker") or "").upper().replace(".OL", "")
-    observed_at = str(result.get("generated_at") or _now())
-    market_date = _market_date(result)
-    context = context or {}
     return {
-        "ticker": ticker,
-        "name": tracking._stock_name(ticker) if ticker else ticker,
-        "market_date": market_date,
-        "observed_at": observed_at,
-        "signal_model_id": str(identity.get("signal_model_id") or "unknown"),
-        "signal_version": str(identity.get("signal_version") or "unknown"),
-        "captured_learning_policy_id": str(identity.get("learning_policy_id") or "unknown"),
-        "entry_price": _num(tracking._entry_price(result)),
-        "opportunity_label": str(opp.get("label") or "NO_OPPORTUNITY"),
-        "opportunity_score": _num(opp.get("score")),
-        "opportunity_confidence": str(opp.get("confidence") or "low"),
-        "reversal_score": _num(components.get("reversal_score") if components.get("reversal_score") is not None else reversal.get("score")),
-        "reversal_regime": str(components.get("reversal_regime") or reversal.get("regime") or ""),
-        "volume_ratio": _num(components.get("volume_ratio")),
-        "volume_state": str(components.get("volume_state") or "NONE"),
-        "insider_label": str(components.get("insider_label") or "NONE"),
-        "insider_points": _num(components.get("insider_points")),
-        "independent_buyers": int(_num(components.get("independent_buyers")) or 0),
-        "buy_value_nok": _num(components.get("buy_value_nok")) or 0.0,
-        "evidence_count": int(_num(components.get("evidence_count")) or 0),
-        "benchmark_id": market.BENCHMARK_ID if context else None,
-        "benchmark_symbol": benchmark_symbol if context else None,
-        "benchmark_entry_date": context.get("benchmark_entry_date"),
-        "benchmark_entry_close": _num(context.get("benchmark_entry_close")),
-        "regime_asof_date": context.get("regime_asof_date"),
-        "market_regime": context.get("regime"),
-        "benchmark_ret20_pct": _num(context.get("benchmark_ret20_pct")),
-        "benchmark_ma50_gap_pct": _num(context.get("benchmark_ma50_gap_pct")),
+        "ticker": ticker, "name": tracking._stock_name(ticker) if ticker else ticker,
+        "market_date": _market_date(result), "observed_at": str(result.get("generated_at") or _now()),
+        "signal_model_id": str(identity.get("signal_model_id") or "unknown"), "signal_version": str(identity.get("signal_version") or "unknown"),
+        "captured_learning_policy_id": str(identity.get("learning_policy_id") or "unknown"), "entry_price": _num(tracking._entry_price(result)),
+        "opportunity_label": str(opp.get("label") or "NO_OPPORTUNITY"), "opportunity_score": _num(opp.get("score")), "opportunity_confidence": str(opp.get("confidence") or "low"),
+        "reversal_score": _num(components.get("reversal_score") if components.get("reversal_score") is not None else reversal.get("score")), "reversal_regime": str(components.get("reversal_regime") or reversal.get("regime") or ""),
+        "volume_ratio": _num(components.get("volume_ratio")), "volume_state": str(components.get("volume_state") or "NONE"), "insider_label": str(components.get("insider_label") or "NONE"),
+        "insider_points": _num(components.get("insider_points")), "independent_buyers": int(_num(components.get("independent_buyers")) or 0), "buy_value_nok": _num(components.get("buy_value_nok")) or 0.0, "evidence_count": int(_num(components.get("evidence_count")) or 0),
+        "benchmark_id": market.BENCHMARK_ID if context else None, "benchmark_symbol": benchmark_symbol if context else None,
+        "benchmark_entry_date": context.get("benchmark_entry_date"), "benchmark_entry_close": _num(context.get("benchmark_entry_close")), "regime_asof_date": context.get("regime_asof_date"), "market_regime": context.get("regime"),
+        "benchmark_ret20_pct": _num(context.get("benchmark_ret20_pct")), "benchmark_ma50_gap_pct": _num(context.get("benchmark_ma50_gap_pct")),
     }
-
 
 def _ensure_schema():
     identity = "BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY" if tracking.USING_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"
@@ -109,292 +66,134 @@ def _ensure_schema():
     try:
         conn.executescript(f"""
         CREATE TABLE IF NOT EXISTS opportunity_shadow_snapshots (
-          id {identity},
-          ticker TEXT NOT NULL,
-          name TEXT NOT NULL,
-          market_date TEXT NOT NULL,
-          observed_at TEXT NOT NULL,
-          signal_model_id TEXT NOT NULL,
-          signal_version TEXT NOT NULL,
-          captured_learning_policy_id TEXT NOT NULL,
-          entry_price DOUBLE PRECISION,
-          opportunity_label TEXT NOT NULL,
-          opportunity_score DOUBLE PRECISION,
-          opportunity_confidence TEXT,
-          reversal_score DOUBLE PRECISION,
-          reversal_regime TEXT,
-          volume_ratio DOUBLE PRECISION,
-          volume_state TEXT,
-          insider_label TEXT,
-          insider_points DOUBLE PRECISION,
-          independent_buyers INTEGER,
-          buy_value_nok DOUBLE PRECISION,
-          evidence_count INTEGER,
-          benchmark_id TEXT,
-          benchmark_symbol TEXT,
-          benchmark_entry_date TEXT,
-          benchmark_entry_close DOUBLE PRECISION,
-          regime_asof_date TEXT,
-          market_regime TEXT,
-          benchmark_ret20_pct DOUBLE PRECISION,
-          benchmark_ma50_gap_pct DOUBLE PRECISION,
-          created_at TEXT NOT NULL,
-          UNIQUE(signal_model_id,ticker,market_date)
-        );
+          id {identity}, ticker TEXT NOT NULL, name TEXT NOT NULL, market_date TEXT NOT NULL, observed_at TEXT NOT NULL,
+          signal_model_id TEXT NOT NULL, signal_version TEXT NOT NULL, captured_learning_policy_id TEXT NOT NULL,
+          entry_price DOUBLE PRECISION, opportunity_label TEXT NOT NULL, opportunity_score DOUBLE PRECISION,
+          opportunity_confidence TEXT, reversal_score DOUBLE PRECISION, reversal_regime TEXT, volume_ratio DOUBLE PRECISION,
+          volume_state TEXT, insider_label TEXT, insider_points DOUBLE PRECISION, independent_buyers INTEGER,
+          buy_value_nok DOUBLE PRECISION, evidence_count INTEGER, benchmark_id TEXT, benchmark_symbol TEXT,
+          benchmark_entry_date TEXT, benchmark_entry_close DOUBLE PRECISION, regime_asof_date TEXT, market_regime TEXT,
+          benchmark_ret20_pct DOUBLE PRECISION, benchmark_ma50_gap_pct DOUBLE PRECISION, created_at TEXT NOT NULL,
+          UNIQUE(signal_model_id,ticker,market_date));
         CREATE TABLE IF NOT EXISTS opportunity_shadow_returns (
-          snapshot_id BIGINT NOT NULL,
-          horizon_days INTEGER NOT NULL,
-          target_date TEXT NOT NULL,
-          target_price DOUBLE PRECISION NOT NULL,
-          return_pct DOUBLE PRECISION NOT NULL,
-          benchmark_target_date TEXT,
-          benchmark_return_pct DOUBLE PRECISION,
-          excess_return_pct DOUBLE PRECISION,
-          settled_at TEXT NOT NULL,
-          PRIMARY KEY(snapshot_id,horizon_days)
-        );
+          snapshot_id BIGINT NOT NULL, horizon_days INTEGER NOT NULL, target_date TEXT NOT NULL,
+          target_price DOUBLE PRECISION NOT NULL, return_pct DOUBLE PRECISION NOT NULL, benchmark_target_date TEXT,
+          benchmark_return_pct DOUBLE PRECISION, excess_return_pct DOUBLE PRECISION, settled_at TEXT NOT NULL,
+          PRIMARY KEY(snapshot_id,horizon_days));
         """)
         conn.commit()
-    finally:
-        conn.close()
-
+    finally: conn.close()
 
 def capture_snapshot(result):
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        return {"captured": False, "reason": "invalid_result"}
-    ticker = str(result.get("ticker") or "").upper().replace(".OL", "")
-    market_date = _market_date(result)
-    if not ticker or not market_date:
-        return {"captured": False, "reason": "missing_ticker_or_market_date"}
-
-    identity = identity_runtime._current_identity()
+    if not isinstance(result, dict) or result.get("status") != "ok": return {"captured": False, "reason": "invalid_result"}
+    ticker, market_date = str(result.get("ticker") or "").upper().replace(".OL", ""), _market_date(result)
+    if not ticker or not market_date: return {"captured": False, "reason": "missing_ticker_or_market_date"}
+    identity, model_id = identity_runtime._current_identity(), None
+    model_id = str(identity.get("signal_model_id") or "unknown")
+    conn = tracking.connect()
+    try: existing = conn.execute("SELECT id FROM opportunity_shadow_snapshots WHERE signal_model_id=? AND ticker=? AND market_date=?", (model_id, ticker, market_date)).fetchone()
+    finally: conn.close()
+    if existing: return {"captured": False, "reason": "already_captured", "snapshot_id": existing["id"], "ticker": ticker, "market_date": market_date}
     benchmark_symbol, context = _context_for_result(result)
     item = _feature_snapshot(result, identity, benchmark_symbol, context)
-    values = (
-        item["ticker"], item["name"], item["market_date"], item["observed_at"], item["signal_model_id"],
-        item["signal_version"], item["captured_learning_policy_id"], item["entry_price"], item["opportunity_label"],
-        item["opportunity_score"], item["opportunity_confidence"], item["reversal_score"], item["reversal_regime"],
-        item["volume_ratio"], item["volume_state"], item["insider_label"], item["insider_points"],
-        item["independent_buyers"], item["buy_value_nok"], item["evidence_count"], item["benchmark_id"],
-        item["benchmark_symbol"], item["benchmark_entry_date"], item["benchmark_entry_close"], item["regime_asof_date"],
-        item["market_regime"], item["benchmark_ret20_pct"], item["benchmark_ma50_gap_pct"], _now(),
-    )
+    values = tuple(item[key] for key in (
+        "ticker","name","market_date","observed_at","signal_model_id","signal_version","captured_learning_policy_id","entry_price","opportunity_label","opportunity_score","opportunity_confidence","reversal_score","reversal_regime","volume_ratio","volume_state","insider_label","insider_points","independent_buyers","buy_value_nok","evidence_count","benchmark_id","benchmark_symbol","benchmark_entry_date","benchmark_entry_close","regime_asof_date","market_regime","benchmark_ret20_pct","benchmark_ma50_gap_pct")) + (_now(),)
     conn = tracking.connect()
     try:
-        cur = conn.execute(
-            "INSERT INTO opportunity_shadow_snapshots(ticker,name,market_date,observed_at,signal_model_id,signal_version,captured_learning_policy_id,entry_price,opportunity_label,opportunity_score,opportunity_confidence,reversal_score,reversal_regime,volume_ratio,volume_state,insider_label,insider_points,independent_buyers,buy_value_nok,evidence_count,benchmark_id,benchmark_symbol,benchmark_entry_date,benchmark_entry_close,regime_asof_date,market_regime,benchmark_ret20_pct,benchmark_ma50_gap_pct,created_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(signal_model_id,ticker,market_date) DO NOTHING",
-            values,
-        )
+        cur = conn.execute("INSERT INTO opportunity_shadow_snapshots(ticker,name,market_date,observed_at,signal_model_id,signal_version,captured_learning_policy_id,entry_price,opportunity_label,opportunity_score,opportunity_confidence,reversal_score,reversal_regime,volume_ratio,volume_state,insider_label,insider_points,independent_buyers,buy_value_nok,evidence_count,benchmark_id,benchmark_symbol,benchmark_entry_date,benchmark_entry_close,regime_asof_date,market_regime,benchmark_ret20_pct,benchmark_ma50_gap_pct,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(signal_model_id,ticker,market_date) DO NOTHING", values)
         conn.commit()
-        row = conn.execute(
-            "SELECT id FROM opportunity_shadow_snapshots WHERE signal_model_id=? AND ticker=? AND market_date=?",
-            (item["signal_model_id"], ticker, market_date),
-        ).fetchone()
+        row = conn.execute("SELECT id FROM opportunity_shadow_snapshots WHERE signal_model_id=? AND ticker=? AND market_date=?", (model_id, ticker, market_date)).fetchone()
         return {"captured": bool(getattr(cur, "rowcount", 0)), "snapshot_id": row["id"] if row else None, "ticker": ticker, "market_date": market_date}
-    finally:
-        conn.close()
+    finally: conn.close()
 
-
-def _snapshot_context(snapshot, benchmark_symbol, benchmark_rows):
-    if snapshot.get("benchmark_entry_close") is not None:
-        return snapshot
-    fake = {
-        "ticker": snapshot.get("ticker"),
-        "generated_at": snapshot.get("observed_at"),
-        "reversal": {"metrics": {"close_date": snapshot.get("market_date")}},
-    }
+def _backfill_context(snapshot, benchmark_symbol, benchmark_rows, conn):
+    if snapshot.get("benchmark_entry_close") is not None: return snapshot
+    fake = {"ticker": snapshot.get("ticker"), "generated_at": snapshot.get("observed_at"), "reversal": {"metrics": {"close_date": snapshot.get("market_date")}}}
     _, context = _context_for_result(fake, benchmark_symbol, benchmark_rows)
-    if not context:
-        return snapshot
-    conn = tracking.connect()
-    try:
-        conn.execute(
-            "UPDATE opportunity_shadow_snapshots SET benchmark_id=?,benchmark_symbol=?,benchmark_entry_date=?,benchmark_entry_close=?,regime_asof_date=?,market_regime=?,benchmark_ret20_pct=?,benchmark_ma50_gap_pct=? WHERE id=? AND benchmark_entry_close IS NULL",
-            (market.BENCHMARK_ID, benchmark_symbol, context.get("benchmark_entry_date"), context.get("benchmark_entry_close"), context.get("regime_asof_date"), context.get("regime"), context.get("benchmark_ret20_pct"), context.get("benchmark_ma50_gap_pct"), snapshot["id"]),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    updated = dict(snapshot)
-    updated.update({
-        "benchmark_id": market.BENCHMARK_ID, "benchmark_symbol": benchmark_symbol,
-        "benchmark_entry_date": context.get("benchmark_entry_date"), "benchmark_entry_close": context.get("benchmark_entry_close"),
-        "regime_asof_date": context.get("regime_asof_date"), "market_regime": context.get("regime"),
-        "benchmark_ret20_pct": context.get("benchmark_ret20_pct"), "benchmark_ma50_gap_pct": context.get("benchmark_ma50_gap_pct"),
-    })
-    return updated
+    if not context: return snapshot
+    conn.execute("UPDATE opportunity_shadow_snapshots SET benchmark_id=?,benchmark_symbol=?,benchmark_entry_date=?,benchmark_entry_close=?,regime_asof_date=?,market_regime=?,benchmark_ret20_pct=?,benchmark_ma50_gap_pct=? WHERE id=? AND benchmark_entry_close IS NULL", (market.BENCHMARK_ID, benchmark_symbol, context.get("benchmark_entry_date"), context.get("benchmark_entry_close"), context.get("regime_asof_date"), context.get("regime"), context.get("benchmark_ret20_pct"), context.get("benchmark_ma50_gap_pct"), snapshot["id"]))
+    updated = dict(snapshot); updated.update({"benchmark_id": market.BENCHMARK_ID,"benchmark_symbol": benchmark_symbol,"benchmark_entry_date": context.get("benchmark_entry_date"),"benchmark_entry_close": context.get("benchmark_entry_close"),"regime_asof_date": context.get("regime_asof_date"),"market_regime": context.get("regime"),"benchmark_ret20_pct": context.get("benchmark_ret20_pct"),"benchmark_ma50_gap_pct": context.get("benchmark_ma50_gap_pct")}); return updated
 
-
-def _forward_measurements(snapshot, stock_rows, benchmark_rows=None):
-    market_date = str(snapshot.get("market_date") or "")
-    start_idx = next((index for index, row in enumerate(stock_rows or []) if str(row.get("date") or "") >= market_date), None)
-    if start_idx is None:
-        return []
+def _forward_measurements(snapshot, stock_rows, benchmark_rows=None, horizons=None):
+    horizons, market_date = tuple(horizons or HORIZONS), str(snapshot.get("market_date") or "")
+    start_idx = next((i for i,row in enumerate(stock_rows or []) if str(row.get("date") or "") >= market_date), None)
+    if start_idx is None: return []
     entry = _num(snapshot.get("entry_price")) or _num(stock_rows[start_idx].get("close"))
-    if not entry or entry <= 0:
-        return []
-    output = []
-    for horizon in HORIZONS:
-        if start_idx + horizon >= len(stock_rows):
-            continue
-        target = stock_rows[start_idx + horizon]
-        target_price = _num(target.get("close"))
-        if not target_price or target_price <= 0:
-            continue
-        raw_return = (target_price / entry - 1.0) * 100.0
-        benchmark_target_date = None
-        benchmark_return = None
-        excess = None
+    if not entry or entry <= 0: return []
+    output=[]
+    for horizon in horizons:
+        horizon=int(horizon)
+        if start_idx+horizon >= len(stock_rows): continue
+        target, benchmark_target_date, benchmark_return, excess = stock_rows[start_idx+horizon], None, None, None
+        target_price=_num(target.get("close"))
+        if not target_price or target_price <= 0: continue
+        raw_return=(target_price/entry-1.0)*100.0
         if benchmark_rows and snapshot.get("benchmark_entry_close") is not None:
-            market_result = market._market_return_for_target(snapshot.get("benchmark_entry_close"), target.get("date"), benchmark_rows)
+            market_result=market._market_return_for_target(snapshot.get("benchmark_entry_close"), target.get("date"), benchmark_rows)
             if market_result:
-                benchmark_target, benchmark_return = market_result
-                benchmark_target_date = benchmark_target.get("date")
-                excess = raw_return - benchmark_return
-        output.append({
-            "horizon_days": horizon, "target_date": target.get("date"), "target_price": target_price,
-            "return_pct": raw_return, "benchmark_target_date": benchmark_target_date,
-            "benchmark_return_pct": benchmark_return, "excess_return_pct": excess,
-        })
+                benchmark_target,benchmark_return=market_result; benchmark_target_date=benchmark_target.get("date"); excess=raw_return-benchmark_return
+        output.append({"horizon_days":horizon,"target_date":target.get("date"),"target_price":target_price,"return_pct":raw_return,"benchmark_target_date":benchmark_target_date,"benchmark_return_pct":benchmark_return,"excess_return_pct":excess})
     return output
 
-
 def settle_shadow_returns(ticker, stock_rows=None):
-    ticker = str(ticker or "").upper().replace(".OL", "")
-    if not ticker:
-        return 0
-    if stock_rows is None:
-        stock_rows = tracking._history(YahooProvider(), ticker)
-    if not stock_rows:
-        return 0
+    ticker=str(ticker or "").upper().replace(".OL", "")
+    if not ticker: return 0
+    if stock_rows is None: stock_rows=tracking._history(YahooProvider(), ticker)
+    if not stock_rows: return 0
+    try: benchmark_symbol,benchmark_rows=market._benchmark_rows()
+    except Exception: benchmark_symbol,benchmark_rows=None,[]
+    conn=tracking.connect()
     try:
-        benchmark_symbol, benchmark_rows = market._benchmark_rows()
-    except Exception:
-        benchmark_symbol, benchmark_rows = None, []
-
-    conn = tracking.connect()
-    try:
-        snapshots = [dict(row) for row in conn.execute(
-            "SELECT * FROM opportunity_shadow_snapshots WHERE ticker=? ORDER BY market_date,id", (ticker,)
-        ).fetchall()]
-    finally:
-        conn.close()
-
-    settled = 0
-    for snapshot in snapshots:
-        if benchmark_rows:
-            snapshot = _snapshot_context(snapshot, benchmark_symbol, benchmark_rows)
-        for item in _forward_measurements(snapshot, stock_rows, benchmark_rows):
-            conn = tracking.connect()
-            try:
-                existing = conn.execute(
-                    "SELECT snapshot_id,excess_return_pct FROM opportunity_shadow_returns WHERE snapshot_id=? AND horizon_days=?",
-                    (snapshot["id"], item["horizon_days"]),
-                ).fetchone()
-                if not existing:
-                    conn.execute(
-                        "INSERT INTO opportunity_shadow_returns(snapshot_id,horizon_days,target_date,target_price,return_pct,benchmark_target_date,benchmark_return_pct,excess_return_pct,settled_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                        (snapshot["id"], item["horizon_days"], item["target_date"], item["target_price"], item["return_pct"], item["benchmark_target_date"], item["benchmark_return_pct"], item["excess_return_pct"], _now()),
-                    )
-                    settled += 1
-                elif existing["excess_return_pct"] is None and item["excess_return_pct"] is not None:
-                    conn.execute(
-                        "UPDATE opportunity_shadow_returns SET benchmark_target_date=?,benchmark_return_pct=?,excess_return_pct=?,settled_at=? WHERE snapshot_id=? AND horizon_days=?",
-                        (item["benchmark_target_date"], item["benchmark_return_pct"], item["excess_return_pct"], _now(), snapshot["id"], item["horizon_days"]),
-                    )
-                conn.commit()
-            finally:
-                conn.close()
-    return settled
-
+        snapshots=[dict(row) for row in conn.execute("SELECT * FROM opportunity_shadow_snapshots WHERE ticker=? ORDER BY market_date,id",(ticker,)).fetchall()]
+        existing_rows=conn.execute("SELECT r.snapshot_id,r.horizon_days,r.excess_return_pct FROM opportunity_shadow_returns r JOIN opportunity_shadow_snapshots s ON s.id=r.snapshot_id WHERE s.ticker=?",(ticker,)).fetchall()
+        existing={(int(row["snapshot_id"]),int(row["horizon_days"])):row["excess_return_pct"] for row in existing_rows}; settled=0
+        for snapshot in snapshots:
+            sid=int(snapshot["id"]); pending=[h for h in HORIZONS if (sid,h) not in existing or existing[(sid,h)] is None]
+            if not pending: continue
+            if benchmark_rows: snapshot=_backfill_context(snapshot,benchmark_symbol,benchmark_rows,conn)
+            for item in _forward_measurements(snapshot,stock_rows,benchmark_rows,pending):
+                key=(sid,item["horizon_days"])
+                if key not in existing:
+                    conn.execute("INSERT INTO opportunity_shadow_returns(snapshot_id,horizon_days,target_date,target_price,return_pct,benchmark_target_date,benchmark_return_pct,excess_return_pct,settled_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,item["horizon_days"],item["target_date"],item["target_price"],item["return_pct"],item["benchmark_target_date"],item["benchmark_return_pct"],item["excess_return_pct"],_now())); existing[key]=item["excess_return_pct"]; settled+=1
+                elif existing[key] is None and item["excess_return_pct"] is not None:
+                    conn.execute("UPDATE opportunity_shadow_returns SET benchmark_target_date=?,benchmark_return_pct=?,excess_return_pct=?,settled_at=? WHERE snapshot_id=? AND horizon_days=?",(item["benchmark_target_date"],item["benchmark_return_pct"],item["excess_return_pct"],_now(),sid,item["horizon_days"])); existing[key]=item["excess_return_pct"]
+        conn.commit(); return settled
+    finally: conn.close()
 
 def shadow_status():
-    identity = identity_runtime._current_identity()
-    model_id = identity.get("signal_model_id")
-    conn = tracking.connect()
+    model_id=identity_runtime._current_identity().get("signal_model_id"); conn=tracking.connect()
     try:
-        total = conn.execute("SELECT COUNT(*) AS n FROM opportunity_shadow_snapshots").fetchone()
-        active = conn.execute(
-            "SELECT COUNT(*) AS n,COUNT(DISTINCT ticker) AS tickers,MIN(market_date) AS first_date,MAX(market_date) AS last_date FROM opportunity_shadow_snapshots WHERE signal_model_id=?",
-            (model_id,),
-        ).fetchone()
-        labels = conn.execute(
-            "SELECT opportunity_label,COUNT(*) AS n FROM opportunity_shadow_snapshots WHERE signal_model_id=? GROUP BY opportunity_label ORDER BY opportunity_label",
-            (model_id,),
-        ).fetchall()
-        returns = conn.execute(
-            "SELECT r.horizon_days,COUNT(*) AS n,SUM(CASE WHEN r.excess_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS alpha_n FROM opportunity_shadow_returns r JOIN opportunity_shadow_snapshots s ON s.id=r.snapshot_id WHERE s.signal_model_id=? GROUP BY r.horizon_days ORDER BY r.horizon_days",
-            (model_id,),
-        ).fetchall()
-        context = conn.execute(
-            "SELECT COUNT(*) AS n,SUM(CASE WHEN market_regime IS NOT NULL THEN 1 ELSE 0 END) AS classified FROM opportunity_shadow_snapshots WHERE signal_model_id=?",
-            (model_id,),
-        ).fetchone()
-    finally:
-        conn.close()
-    active = dict(active) if active else {}
-    context = dict(context) if context else {}
-    return {
-        "status": "ok",
-        "dataset": "daily_first_observed_all_successful_scans",
-        "selection_policy": "one_snapshot_per_signal_model_ticker_market_date",
-        "feature_snapshot_immutable": True,
-        "automatic_threshold_changes": False,
-        "active_signal_model_id": model_id,
-        "all_model_snapshots": int(total["n"] if total else 0),
-        "active_model_snapshots": int(active.get("n") or 0),
-        "active_model_tickers": int(active.get("tickers") or 0),
-        "first_market_date": active.get("first_date"),
-        "last_market_date": active.get("last_date"),
-        "label_counts": {str(row["opportunity_label"]): int(row["n"] or 0) for row in labels},
-        "market_context": {"classified": int(context.get("classified") or 0), "total": int(context.get("n") or 0)},
-        "forward_returns": {str(row["horizon_days"]): {"n": int(row["n"] or 0), "alpha_n": int(row["alpha_n"] or 0)} for row in returns},
-        "meaning": "Research dataset for future counterfactual threshold tests; it does not drive live signals.",
-        "generated_at": _now(),
-    }
-
+        total=conn.execute("SELECT COUNT(*) AS n FROM opportunity_shadow_snapshots").fetchone()
+        active=conn.execute("SELECT COUNT(*) AS n,COUNT(DISTINCT ticker) AS tickers,MIN(market_date) AS first_date,MAX(market_date) AS last_date FROM opportunity_shadow_snapshots WHERE signal_model_id=?",(model_id,)).fetchone()
+        labels=conn.execute("SELECT opportunity_label,COUNT(*) AS n FROM opportunity_shadow_snapshots WHERE signal_model_id=? GROUP BY opportunity_label ORDER BY opportunity_label",(model_id,)).fetchall()
+        returns=conn.execute("SELECT r.horizon_days,COUNT(*) AS n,SUM(CASE WHEN r.excess_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS alpha_n FROM opportunity_shadow_returns r JOIN opportunity_shadow_snapshots s ON s.id=r.snapshot_id WHERE s.signal_model_id=? GROUP BY r.horizon_days ORDER BY r.horizon_days",(model_id,)).fetchall()
+        context=conn.execute("SELECT COUNT(*) AS n,SUM(CASE WHEN market_regime IS NOT NULL THEN 1 ELSE 0 END) AS classified FROM opportunity_shadow_snapshots WHERE signal_model_id=?",(model_id,)).fetchone()
+    finally: conn.close()
+    active,context=(dict(active) if active else {}),(dict(context) if context else {})
+    return {"status":"ok","dataset":"daily_first_observed_all_successful_scans","selection_policy":"one_snapshot_per_signal_model_ticker_market_date","feature_snapshot_immutable":True,"automatic_threshold_changes":False,"active_signal_model_id":model_id,"all_model_snapshots":int(total["n"] if total else 0),"active_model_snapshots":int(active.get("n") or 0),"active_model_tickers":int(active.get("tickers") or 0),"first_market_date":active.get("first_date"),"last_market_date":active.get("last_date"),"label_counts":{str(row["opportunity_label"]):int(row["n"] or 0) for row in labels},"market_context":{"classified":int(context.get("classified") or 0),"total":int(context.get("n") or 0)},"forward_returns":{str(row["horizon_days"]):{"n":int(row["n"] or 0),"alpha_n":int(row["alpha_n"] or 0)} for row in returns},"meaning":"Research dataset for future unbiased counterfactual threshold tests; it does not drive live signals.","generated_at":_now()}
 
 def _live_with_shadow(ticker):
-    result = _BASE_LIVE(ticker)
-    try:
-        capture_snapshot(result)
-    except Exception:
-        pass
+    result=_BASE_LIVE(ticker)
+    try: capture_snapshot(result)
+    except Exception: pass
     return result
-
 
 def _settle_with_shadow(ticker, rows=None):
     if rows is None:
-        try:
-            rows = tracking._history(YahooProvider(), str(ticker or "").upper().replace(".OL", ""))
-        except Exception:
-            rows = []
-    count = _BASE_SETTLE(ticker, rows)
-    try:
-        settle_shadow_returns(ticker, rows)
-    except Exception:
-        pass
+        try: rows=tracking._history(YahooProvider(),str(ticker or "").upper().replace(".OL", ""))
+        except Exception: rows=[]
+    count=_BASE_SETTLE(ticker,rows)
+    try: settle_shadow_returns(ticker,rows)
+    except Exception: pass
     return count
 
-
 def install():
-    if getattr(extra_api, "_opportunity_shadow_dataset_runtime", False):
-        return
-    _ensure_schema()
-    opportunity.live_opportunity = _live_with_shadow
-    tracking.settle_forward_returns = _settle_with_shadow
-    original_install = extra_api.install
-
+    if getattr(extra_api,"_opportunity_shadow_dataset_runtime",False): return
+    _ensure_schema(); opportunity.live_opportunity=_live_with_shadow; tracking.settle_forward_returns=_settle_with_shadow; original_install=extra_api.install
     def patched_install(app):
         original_install(app)
-
         @app.get("/api/opportunity-shadow/status")
-        def opportunity_shadow_status_route():
-            return shadow_status()
-
-    extra_api.install = patched_install
-    extra_api._opportunity_shadow_dataset_runtime = True
-
+        def opportunity_shadow_status_route(): return shadow_status()
+    extra_api.install=patched_install; extra_api._opportunity_shadow_dataset_runtime=True
 
 install()
