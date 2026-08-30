@@ -2,6 +2,7 @@
   const esc=value=>String(value??'').replace(/[&<>\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[char]));
   const fmt=value=>Number(value||0).toLocaleString('no-NO');
   const fmt1=value=>value==null?'—':Number(value).toLocaleString('no-NO',{maximumFractionDigits:1});
+  const fmtPct=value=>value==null?'—':`${Number(value)>=0?'+':''}${Number(value).toLocaleString('no-NO',{maximumFractionDigits:1})}%`;
   const pillClass=status=>status==='PASS'||status==='HEALTHY'?'ready':status==='NOT_APPLICABLE'?'muted':'';
 
   function renderVersion(data){
@@ -30,6 +31,43 @@
       </div>
       <div class="notice">Aktiv modell-ID: <strong>${esc(active.signal_model_id||'—')}</strong>. Totalt på tvers av alle modellversjoner: ${fmt(all.events)} events. Hvis signalreglene endres, får den nye motoren automatisk en ny fingerprint og et separat forward-sample.</div>`;
     root.prepend(panel);
+  }
+
+  function confidenceCard(horizon,item){
+    const raw=item?.raw_return||{};
+    const alpha=item?.market_adjusted_alpha||{};
+    const rawWilson=raw.positive_rate_wilson_95||{};
+    const rawMedian=raw.median_ci_95||{};
+    const alphaWilson=alpha.positive_rate_wilson_95||{};
+    const alphaMedian=alpha.median_ci_95||{};
+    const status=String(item?.status||'COLLECTING_DATA');
+    return `<div class="qualityCheck">
+      <span class="pill ${pillClass(status)}">${esc(status.replaceAll('_',' '))}</span>
+      <b>${esc(horizon)}d · n=${fmt(raw.n)}</b>
+      <small>Rå: positivrate nedre 95 % ${fmtPct(rawWilson.lower_pct)} · median nedre 95 % ${fmtPct(rawMedian.lower)}.<br>OSEBX-alpha: positivrate nedre 95 % ${fmtPct(alphaWilson.lower_pct)} · median nedre 95 % ${fmtPct(alphaMedian.lower)}.</small>
+    </div>`;
+  }
+
+  function renderStatistical(data){
+    const gate=data&&data.statistical_confidence_gate;
+    const root=document.getElementById('content');
+    if(!gate||!root||document.getElementById('statisticalConfidencePanel'))return;
+    const status=String(gate.status||'COLLECTING_DATA');
+    const horizons=gate.horizons||{};
+    const required=gate.required_horizons||[5,10,20];
+    const panel=document.createElement('section');
+    panel.className='section';
+    panel.id='statisticalConfidencePanel';
+    panel.innerHTML=`
+      <div class="sectionHead">
+        <div><h2>Statistisk sikkerhet</h2><div class="sub">95 % usikkerhetsgate for aktiv modell. Både råavkastning og OSEBX-alpha må vise robust positiv retning.</div></div>
+        <span class="pill ${pillClass(status)}">${esc(status)}</span>
+      </div>
+      <div class="qualityGrid">${required.map(h=>confidenceCard(h,horizons[String(h)]||{})).join('')}</div>
+      <div class="notice">Krav: minst <strong>${fmt(gate.minimum_passing_horizons||2)} av ${fmt(required.length)}</strong> horisonter må passere. Wilson 95 %-grensens positive rate må være over 50 %, og nedre 95 %-grense for median må være over 0 %, for både aksjen og markedsjustert alpha. <strong>Ingen terskler endres automatisk.</strong></div>`;
+    const health=document.getElementById('learningHealthPanel');
+    const version=document.getElementById('modelVersionPanel');
+    if(health)health.insertAdjacentElement('afterend',panel);else if(version)version.insertAdjacentElement('afterend',panel);else root.prepend(panel);
   }
 
   function checkCard(title,check,detail){
@@ -72,7 +110,7 @@
       fetch('/api/opportunity-performance?limit=100',{cache:'no-store'}).then(r=>r.ok?r.json():null),
       fetch('/api/opportunity-learning-health',{cache:'no-store'}).then(r=>r.ok?r.json():null),
     ]);
-    if(performance.status==='fulfilled'&&performance.value)renderVersion(performance.value);
+    if(performance.status==='fulfilled'&&performance.value){renderVersion(performance.value);renderStatistical(performance.value)}
     if(health.status==='fulfilled'&&health.value)renderHealth(health.value);
   }
   load();
