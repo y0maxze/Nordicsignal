@@ -1,14 +1,11 @@
-"""Automatic Early Opportunity scanning while the NordicSignal backend is awake.
+"""Automatic Early Opportunity scanning while NordicSignal is available.
 
-The core opportunity tracker already owns persistence, transition detection and
-forward-return tracking. This runtime only schedules that existing scan loop on a
-fixed cadence so push alerts do not depend on a user opening Latest Signals first.
-
-Render Free instances can sleep when idle; this module deliberately does not try to
-circumvent hosting sleep. It resumes automatically whenever the backend process is
-running again.
+The in-process loop remains a best-effort fallback. A protected POST endpoint lets
+Cloudflare Cron wake the Render service and trigger the same guarded scan path every
+10 minutes, so detection no longer depends on an always-awake Python process.
 """
 
+from datetime import datetime, timezone
 import logging
 import threading
 import time
@@ -22,6 +19,10 @@ AUTO_SCAN_INTERVAL_SECONDS = 10 * 60
 INITIAL_SCAN_DELAY_SECONDS = 75
 _LOOP_STARTED = False
 _LOOP_LOCK = threading.Lock()
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _loop():
@@ -41,7 +42,6 @@ def _start():
         if _LOOP_STARTED:
             return
         _LOOP_STARTED = True
-        # The tracker uses this same interval as its anti-overlap/cooldown guard.
         tracking.SCAN_INTERVAL_SECONDS = AUTO_SCAN_INTERVAL_SECONDS
         threading.Thread(
             target=_loop,
@@ -50,10 +50,42 @@ def _start():
         ).start()
 
 
+def scheduler_status():
+    return {
+        "status": "ok",
+        "external_scheduler_ready": True,
+        "scan_interval_seconds": AUTO_SCAN_INTERVAL_SECONDS,
+        "in_process_fallback": True,
+        "generated_at": _now(),
+    }
+
+
 def install():
     if getattr(extra_api, "_opportunity_autoscan_runtime", False):
         return
+
     _start()
+    original_install = extra_api.install
+
+    def patched_install(app):
+        original_install(app)
+
+        @app.get("/api/opportunity-scan/status")
+        def opportunity_scan_status_route():
+            return scheduler_status()
+
+        @app.post("/api/opportunity-scan/run")
+        def opportunity_scan_run_route():
+            # security_runtime protects API writes with NORDICSIGNAL_WRITE_TOKEN.
+            state = tracking._maybe_schedule_scan()
+            return {
+                "status": "ok",
+                "scan": state,
+                "scan_interval_seconds": AUTO_SCAN_INTERVAL_SECONDS,
+                "triggered_at": _now(),
+            }
+
+    extra_api.install = patched_install
     extra_api._opportunity_autoscan_runtime = True
 
 
