@@ -48,8 +48,7 @@ def _rsi(values, period=14):
     if len(values) <= period:
         return None
     sample = values[-(period + 1):]
-    gains = []
-    losses = []
+    gains, losses = [], []
     for prev, cur in zip(sample[:-1], sample[1:]):
         delta = cur - prev
         gains.append(max(delta, 0.0))
@@ -103,11 +102,10 @@ def calculate_reversal(history):
     closes = [float(x["close"]) for x in rows]
     volumes = [_num(x.get("volume")) for x in rows]
     if len(closes) < 35:
-        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-30-v2.2"}
+        return {"score": None, "regime": "INSUFFICIENT_DATA", "confidence": "low", "reasons": [], "metrics": {}, "version": "2026-08-30-v2.3"}
 
     score = 0.0
     reasons = []
-
     ema8 = _ema(closes, 8)
     ema21 = _ema(closes, 21)
     ema8_prev = _ema(closes[:-1], 8)
@@ -188,6 +186,7 @@ def calculate_reversal(history):
     else:
         regime = "FALLING_OR_WEAK"
 
+    close_date = str(rows[-1].get("date") or rows[-1].get("timestamp") or "")[:10] or None
     return {
         "score": round(score, 1),
         "regime": regime,
@@ -195,6 +194,7 @@ def calculate_reversal(history):
         "reasons": reasons,
         "metrics": {
             "close": round(closes[-1], 4),
+            "close_date": close_date,
             "ema8": round(ema8, 4) if ema8 is not None else None,
             "ema21": round(ema21, 4) if ema21 is not None else None,
             "rsi14": round(rsi_now, 2) if rsi_now is not None else None,
@@ -205,7 +205,7 @@ def calculate_reversal(history):
             "higher_low": structure["higher_low"],
             "higher_high": structure["higher_high"],
         },
-        "version": "2026-08-30-v2.2",
+        "version": "2026-08-30-v2.3",
     }
 
 
