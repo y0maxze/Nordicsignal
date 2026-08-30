@@ -30,6 +30,44 @@ def _fold(value):
     return " ".join("".join(ch for ch in text if not unicodedata.combining(ch)).lower().split())
 
 
+def _clean_actor_text(value, company=""):
+    text = " ".join(str(value or "").split()).strip(" ,.-–—")
+    if not text:
+        return ""
+    # Euronext rendered text sometimes leaks page chrome into the actor field.
+    text = re.sub(r"^.*?\bSubscribe\s+Issuer\b\s*", "", text, flags=re.I)
+    company = " ".join(str(company or "").split()).strip(" ,.-–—")
+    if company:
+        text = re.sub(rf"^(?:{re.escape(company)}[\s:,.\-–—]*)+", "", text, flags=re.I).strip(" ,.-–—") or text
+    text = re.sub(
+        r"^(?:primary\s+insider\s+transactions?|mandatory\s+notification(?:\s+of\s+trade)?|prim[aæ]rinsider(?:transaksjoner?|handel))\s*[:\-–—]*\s*",
+        "", text, flags=re.I,
+    )
+    return text.strip(" ,.-–—")
+
+
+def _summary_actor(row):
+    text = " ".join(str(row.get("summary") or row.get("description") or "").split())
+    if not text:
+        return ""
+    text = re.sub(r"^.*?\bSubscribe\s+Issuer\b\s*", "", text, flags=re.I)
+    company = " ".join(str(row.get("company") or "").split()).strip()
+    if company:
+        text = re.sub(rf"^(?:{re.escape(company)}[\s:,.\-–—]*)+", "", text, flags=re.I)
+    role_words = (
+        r"CEO|CFO|COO|CLO|CTO|EVP|chief\s+[^,]{2,40}|president|member\s+of\s+the\s+board|"
+        r"board\s+member|chair(?:man|woman|person)?|business\s+unit\s+director|director|general\s+counsel"
+    )
+    matches = list(re.finditer(
+        rf"([A-ZÆØÅ][A-Za-zÀ-ÿ'’.-]+(?:\s+[A-ZÆØÅ][A-Za-zÀ-ÿ'’.-]+){{1,5}})\s*,\s*(?=(?:{role_words})\b)",
+        text,
+        re.I,
+    ))
+    if not matches:
+        return ""
+    return _clean_actor_text(matches[-1].group(1), company)
+
+
 def _actor_key(row):
     """Return a stable economic-actor key, not announcement-title noise."""
     value = (
@@ -41,17 +79,14 @@ def _actor_key(row):
         or row.get("insider_name")
         or row.get("name")
     )
-    text = " ".join(str(value or "").split()).strip(" ,.-–—")
-    if not text:
-        return ""
-    text = re.sub(
-        r"^(?:primary\s+insider\s+transactions?|mandatory\s+notification(?:\s+of\s+trade)?|prim[aæ]rinsider(?:transaksjoner?|handel))\s*[:\-–—]*\s*",
-        "", text, flags=re.I,
-    )
-    company = " ".join(str(row.get("company") or "").split()).strip(" ,.-–—")
-    if company:
-        pattern = re.compile(rf"^(?:{re.escape(company)}[\s:,.\-–—]*)+", re.I)
-        text = pattern.sub("", text).strip(" ,.-–—") or text
+    text = _clean_actor_text(value, row.get("company"))
+    generic = _fold(text) in {
+        "and primary insider", "primary insider", "insider", "the primary insider",
+        "issuer", "company", "unknown",
+    }
+    inferred = _summary_actor(row)
+    if inferred and (not text or generic or len(text.split()) < 2):
+        text = inferred
     return _fold(text)
 
 
@@ -89,7 +124,12 @@ def _is_transfer(row):
         "unchanged", "transfer", "transferred", "overføring", "redelivery", "borrowed shares",
         "same beneficial owner", "no change in economic exposure",
     )
-    return explicit or any(p in text for p in phrases)
+    beneficial_reorg = (
+        ("owned 100% by" in text or "100% owned by" in text or "wholly owned by" in text or "wholly-owned by" in text)
+        and " from " in f" {text} "
+        and (" personally" in text or " personal" in text)
+    )
+    return explicit or beneficial_reorg or any(p in text for p in phrases)
 
 
 def _action(row):
@@ -111,17 +151,85 @@ def _action(row):
     return raw
 
 
+def _int_token(value):
+    digits = re.sub(r"[^0-9]", "", str(value or ""))
+    return int(digits) if digits else None
+
+
+def _second_leg(row):
+    """Extract an additional same-actor buy/sell leg from one disclosure sentence."""
+    summary = " ".join(str(row.get("summary") or "").split())
+    if not summary or _action(row) not in {"buy", "sell"}:
+        return None
+    match = re.search(
+        r"\band\s+(\d{1,3}(?:[ ,\u00a0]\d{3})+|\d{1,12})\s+shares\b.{0,100}?"
+        r"(?:at\s+)?(?:a\s+)?price\s+(?:of\s+)?(?:NOK\s*)?([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:NOK)?\b",
+        summary,
+        re.I,
+    )
+    if not match:
+        return None
+    shares = _int_token(match.group(1))
+    price = _num(match.group(2).replace(",", "."))
+    if not shares or price is None or price <= 0:
+        return None
+    if shares == _num(row.get("shares")) and abs(price - (_num(row.get("price")) or 0)) < 1e-9:
+        return None
+    leg = dict(row)
+    leg["shares"] = shares
+    leg["price"] = price
+    leg["transaction_value"] = shares * price
+    leg["display_transaction_value"] = shares * price
+    leg["display_value"] = shares * price
+    leg["multi_leg_expanded"] = True
+    return leg
+
+
+def prepare_items(items):
+    """Return signal-ready copies with inferred actors, transfer flags and extra legs."""
+    prepared = []
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        row = dict(raw)
+        inferred = _summary_actor(row)
+        current = _clean_actor_text(
+            row.get("person") or row.get("related_primary_insider") or row.get("entity") or row.get("insider") or row.get("actor"),
+            row.get("company"),
+        )
+        if inferred and (not current or _fold(current) in {"and primary insider", "primary insider", "insider", "unknown"}):
+            row["person"] = inferred
+        elif current and row.get("person"):
+            row["person"] = current
+        if _is_transfer(row):
+            row["internal_transfer"] = True
+        prepared.append(row)
+        extra = _second_leg(row)
+        if extra:
+            if inferred:
+                extra["person"] = inferred
+            prepared.append(extra)
+    return prepared
+
+
 def _transaction_key(row, action, day):
     actor = _actor_key(row)
-    source_id = str(row.get("node_id") or row.get("url") or row.get("source_url") or "").strip()
     shares = _num(row.get("shares"))
     price = _num(row.get("price"))
-    return (actor, str(day or ""), action, shares, price, source_id)
+    publication_day = _date(row.get("published_at"))
+    dedupe_day = publication_day or day
+    # Across correction/bilingual releases, the same economic transaction often has
+    # a different node id but identical actor/day/action/shares/price. Prefer that
+    # economic identity; use source id only when the core identity is incomplete.
+    if actor and shares is not None and price is not None:
+        return (actor, str(dedupe_day or ""), action, shares, price)
+    source_id = str(row.get("node_id") or row.get("url") or row.get("source_url") or "").strip()
+    return (actor, str(dedupe_day or ""), action, shares, price, source_id)
 
 
 def analyze(result, window_days=14):
     out = dict(result or {})
-    items = [dict(x) for x in (out.get("items") or [])]
+    items = prepare_items(out.get("items") or [])
     buys, sells, excluded = [], [], []
     seen_transactions = set()
     duplicate_count = 0
@@ -188,11 +296,12 @@ def analyze(result, window_days=14):
         "sell_value_nok": round(sell_value, 2),
         "excluded_transfer_like_count": len(excluded),
         "deduplicated_row_count": duplicate_count,
+        "prepared_item_count": len(items),
         "reasons": reasons,
         "score_effect": 0,
         "policy": "informational_only_pending_backtest",
     }
-    out["insider_signal_v2_version"] = "2026-08-30-v3.1"
+    out["insider_signal_v2_version"] = "2026-08-30-v4"
     return out
 
 
