@@ -1,6 +1,7 @@
 import sqlite3
 
 import opportunity_tracking_runtime as tracking
+import opportunity_performance_v2_runtime  # noqa: F401 - installs measurement v2
 
 
 def _connect_factory(path):
@@ -68,7 +69,7 @@ def test_forward_returns_anchor_to_market_close_date_not_scan_date(tmp_path, mon
     ]
     # 2026-01-02 is index 1 and has close 123.45, matching the stored entry price.
     settled = tracking.settle_forward_returns("TEST", rows=rows)
-    assert settled == 4
+    assert settled == 5
 
     conn = tracking.connect()
     try:
@@ -77,8 +78,9 @@ def test_forward_returns_anchor_to_market_close_date_not_scan_date(tmp_path, mon
         ).fetchall()
     finally:
         conn.close()
-    assert [row["horizon_days"] for row in values] == [5, 10, 20, 60]
-    assert values[0]["target_date"] == rows[6]["date"]
+    assert [row["horizon_days"] for row in values] == [1, 5, 10, 20, 60]
+    assert values[0]["target_date"] == rows[2]["date"]
+    assert values[1]["target_date"] == rows[6]["date"]
     assert all(row["return_pct"] > 0 for row in values)
 
 
