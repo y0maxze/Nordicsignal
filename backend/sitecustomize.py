@@ -8,6 +8,7 @@ log = logging.getLogger("nordicsignal.runtime")
 RUNTIME_MODULES = (
     "provider_resilience_runtime",
     "insider_runtime",
+    "insider_parser_guard_runtime",
     "insider_enrichment_runtime",
     "regulatory_limits_runtime",
     "insider_fresh_fallback_runtime",
