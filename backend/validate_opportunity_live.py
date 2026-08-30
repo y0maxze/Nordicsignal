@@ -6,7 +6,32 @@ NordicSignal universe. It never modifies production scoring.
 import json
 
 from main import TICKERS
-from opportunity_confluence_runtime import live_opportunity
+from opportunity_confluence_runtime import live_opportunity, _targeted_market_rows
+
+
+def _compact_raw_rows(ticker):
+    rows = []
+    try:
+        raw = _targeted_market_rows(ticker, 14)
+    except Exception as exc:
+        return [{"error": str(exc)}]
+    for x in raw[:20]:
+        rows.append({
+            "node_id": x.get("node_id"),
+            "trade_date": x.get("trade_date") or x.get("date"),
+            "published_at": x.get("published_at"),
+            "direction": x.get("direction") or x.get("transaction_type"),
+            "person": x.get("person"),
+            "entity": x.get("entity"),
+            "related_primary_insider": x.get("related_primary_insider"),
+            "role": x.get("role"),
+            "shares": x.get("shares"),
+            "price": x.get("price"),
+            "transaction_value": x.get("transaction_value"),
+            "title": x.get("title"),
+            "summary": str(x.get("summary") or "")[:360],
+        })
+    return rows
 
 
 def main():
@@ -16,6 +41,7 @@ def main():
     insider_covered = 0
     insider_missing = 0
     insider_unavailable = 0
+    diagnostics = {}
 
     for ticker in TICKERS:
         try:
@@ -27,6 +53,8 @@ def main():
             coverage = str(insider.get("evidence_coverage") or ("verified_detail" if item_count else "no_recent_detail"))
             if coverage == "verified_detail":
                 insider_covered += 1
+                diagnostics[ticker] = _compact_raw_rows(ticker)
+                print(json.dumps({"insider_raw_debug": ticker, "rows": diagnostics[ticker]}, ensure_ascii=False))
             elif coverage == "unavailable":
                 insider_unavailable += 1
             else:
@@ -51,6 +79,8 @@ def main():
                 "insider_coverage": coverage,
                 "insider_evidence_source": insider.get("evidence_source"),
                 "insider_evidence_items": item_count,
+                "rejected_value_row_count": insider.get("rejected_value_row_count"),
+                "deduplicated_row_count": insider.get("deduplicated_row_count"),
             }
             results.append(row)
             print(json.dumps(row, ensure_ascii=False))
@@ -73,7 +103,7 @@ def main():
     print(json.dumps({"summary": summary}, ensure_ascii=False))
 
     with open("opportunity_live_validation.json", "w", encoding="utf-8") as f:
-        json.dump({"summary": summary, "results": results}, f, ensure_ascii=False, indent=2)
+        json.dump({"summary": summary, "results": results, "diagnostics": diagnostics}, f, ensure_ascii=False, indent=2)
 
     minimum = max(3, int(len(TICKERS) * 0.85))
     max_failures = max(2, int(len(TICKERS) * 0.15))
