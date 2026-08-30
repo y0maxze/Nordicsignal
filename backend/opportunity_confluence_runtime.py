@@ -10,11 +10,12 @@ from datetime import datetime, timezone
 
 import extra_api
 import insider_runtime
+import insider_market_v2_runtime
 from insider_signal_v2_runtime import analyze as analyze_insider
 from providers import YahooProvider, NordicRegulatoryProvider
 from trend_reversal_runtime import calculate_reversal
 
-VERSION = "2026-08-30-v1"
+VERSION = "2026-08-30-v1.1"
 
 
 def _num(value, default=0.0):
@@ -142,21 +143,64 @@ def _company_name(ticker):
     return entry[0] if entry else ticker
 
 
+def _live_insider_evidence(symbol):
+    """Prefer the market-wide official feed, then fall back to issuer provider.
+
+    Some Euronext issuer pages return a live status with zero parsed detail rows while
+    the market-wide topic feed still contains the official disclosure. Using the market
+    feed first prevents a known false NONE for recent clusters such as XPLRA.
+    """
+    market_error = None
+    try:
+        market_feed = insider_market_v2_runtime.market_insider_feed(limit=100, days=14, refresh=False) or {}
+        rows = [
+            dict(x) for x in (market_feed.get("items") or [])
+            if str(x.get("ticker") or "").upper().replace(".OL", "") == symbol
+            and not x.get("details_pending")
+        ]
+        if rows:
+            enriched = analyze_insider({
+                "status": "live",
+                "source": market_feed.get("source"),
+                "items": rows,
+                "verified_detail_count": len(rows),
+            })
+            signal = enriched.get("insider_signal_v2") or {}
+            signal["evidence_source"] = "euronext_market_feed"
+            signal["evidence_item_count"] = len(rows)
+            return signal
+    except Exception as exc:
+        market_error = str(exc)
+
+    try:
+        regulatory = NordicRegulatoryProvider()
+        issuer_feed = regulatory.insider(symbol, _company_name(symbol)) or {}
+        enriched = analyze_insider(issuer_feed)
+        signal = enriched.get("insider_signal_v2") or {}
+        signal["evidence_source"] = "issuer_provider_fallback"
+        signal["evidence_item_count"] = len(issuer_feed.get("items") or [])
+        if market_error:
+            signal["market_feed_error"] = market_error
+        return signal
+    except Exception as exc:
+        return {
+            "label": "NONE",
+            "points": 0,
+            "evidence_source": "unavailable",
+            "error": str(exc),
+            "market_feed_error": market_error,
+        }
+
+
 def live_opportunity(ticker):
     symbol = str(ticker or "").strip().upper().replace(".OL", "")
     if not symbol or len(symbol) > 16 or not all(ch.isalnum() or ch in ".-" for ch in symbol):
         return {"ticker": symbol, "status": "invalid_ticker"}
 
     price_provider = YahooProvider()
-    regulatory = NordicRegulatoryProvider()
     history = price_provider.historical(symbol, "6m")
     reversal = calculate_reversal(history)
-    try:
-        insider_feed = regulatory.insider(symbol, _company_name(symbol)) or {}
-        insider_enriched = analyze_insider(insider_feed)
-        insider_signal = insider_enriched.get("insider_signal_v2") or {}
-    except Exception as exc:
-        insider_signal = {"label": "NONE", "points": 0, "error": str(exc)}
+    insider_signal = _live_insider_evidence(symbol)
 
     opportunity = calculate_opportunity(reversal, insider_signal)
     return {
