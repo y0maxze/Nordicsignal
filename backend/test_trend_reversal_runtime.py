@@ -23,6 +23,20 @@ def test_strong_recovery_scores_as_reversal_or_uptrend():
     assert result["score"] >= 55
     assert result["regime"] in ("EARLY_REVERSAL", "CONFIRMED_UPTREND")
     assert result["metrics"]["volume_ratio"] >= 2.0
+    assert result["metrics"]["raw_volume_ratio"] >= 2.0
+    assert result["metrics"]["volume_confirmation"] == "STRONG"
+    assert result["metrics"]["bullish_day"] is True
+
+
+def test_high_volume_red_day_is_not_bullish_confirmation():
+    closes = [50 + i * 0.2 for i in range(59)] + [59.0]
+    volumes = [100_000] * 59 + [250_000]
+    result = calculate_reversal(_rows(closes, volumes))
+    assert result["metrics"]["raw_volume_ratio"] >= 2.0
+    assert result["metrics"]["volume_ratio"] is None
+    assert result["metrics"]["volume_confirmation"] == "NONE"
+    assert result["metrics"]["bullish_day"] is False
+    assert "Strong bullish volume expansion" not in result["reasons"]
 
 
 def test_weak_falling_series_does_not_get_false_positive():
