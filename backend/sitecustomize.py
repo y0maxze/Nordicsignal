@@ -8,11 +8,13 @@ log = logging.getLogger("nordicsignal.runtime")
 RUNTIME_MODULES = (
     "provider_resilience_runtime",
     "insider_runtime",
+    "insider_parser_guard_runtime",
     "insider_enrichment_runtime",
     "regulatory_limits_runtime",
     "insider_fresh_fallback_runtime",
     "insider_position_runtime",
     "insider_value_runtime",
+    "insider_signal_v2_runtime",
     "stock_intelligence_runtime",
     "short_alert_runtime",
     "paper_history_runtime",
@@ -22,6 +24,7 @@ RUNTIME_MODULES = (
     "general_news_runtime",
     "insider_market_runtime",
     "insider_market_v2_runtime",
+    "insider_history_runtime",
     "insider_detail_normalization_runtime",
     "insider_company_cleanup_runtime",
     "insider_detail_persistent_cache_runtime",
@@ -41,6 +44,9 @@ RUNTIME_MODULES = (
     "instrument_signal_runtime",
     "signal_events_runtime",
     "signal_evidence_runtime",
+    "trend_reversal_runtime",
+    "opportunity_confluence_runtime",
+    "opportunity_tracking_runtime",
     "fund_news_runtime",
     "investment_readiness_runtime",
     "generic_paper_runtime",
@@ -62,8 +68,6 @@ def _install(module_name):
         if callable(install):
             install()
     except Exception:
-        # Optional integrations must not stop the core FastAPI service, but the
-        # failure must be visible in Render logs so production gaps are debuggable.
         log.exception("Optional runtime module failed: %s", module_name)
 
 

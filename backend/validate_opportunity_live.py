@@ -1,0 +1,117 @@
+"""Universe-wide live validation for Early Opportunity Engine.
+
+Fetches current public Yahoo/Euronext-backed evidence for every stock in the
+NordicSignal universe. It never modifies production scoring.
+"""
+import json
+
+from main import TICKERS
+from opportunity_confluence_runtime import live_opportunity, _targeted_market_rows
+
+
+def _compact_raw_rows(ticker):
+    rows = []
+    try:
+        raw = _targeted_market_rows(ticker, 14)
+    except Exception as exc:
+        return [{"error": str(exc)}]
+    for x in raw[:20]:
+        rows.append({
+            "node_id": x.get("node_id"),
+            "trade_date": x.get("trade_date") or x.get("date"),
+            "published_at": x.get("published_at"),
+            "direction": x.get("direction") or x.get("transaction_type"),
+            "person": x.get("person"),
+            "entity": x.get("entity"),
+            "related_primary_insider": x.get("related_primary_insider"),
+            "role": x.get("role"),
+            "shares": x.get("shares"),
+            "price": x.get("price"),
+            "transaction_value": x.get("transaction_value"),
+            "title": x.get("title"),
+            "summary": str(x.get("summary") or "")[:360],
+        })
+    return rows
+
+
+def main():
+    results = []
+    failures = []
+    labels = {}
+    insider_covered = 0
+    insider_missing = 0
+    insider_unavailable = 0
+    diagnostics = {}
+
+    for ticker in TICKERS:
+        try:
+            item = live_opportunity(ticker)
+            opp = item.get("opportunity") or {}
+            components = opp.get("components") or {}
+            insider = item.get("insider_signal_v2") or {}
+            item_count = int(insider.get("evidence_item_count") or 0)
+            coverage = str(insider.get("evidence_coverage") or ("verified_detail" if item_count else "no_recent_detail"))
+            if coverage == "verified_detail":
+                insider_covered += 1
+                diagnostics[ticker] = _compact_raw_rows(ticker)
+                print(json.dumps({"insider_raw_debug": ticker, "rows": diagnostics[ticker]}, ensure_ascii=False))
+            elif coverage == "unavailable":
+                insider_unavailable += 1
+            else:
+                insider_missing += 1
+
+            label = str(opp.get("label") or "UNKNOWN")
+            labels[label] = labels.get(label, 0) + 1
+            row = {
+                "ticker": ticker,
+                "status": item.get("status"),
+                "label": label,
+                "score": opp.get("score"),
+                "confidence": opp.get("confidence"),
+                "reversal_score": components.get("reversal_score"),
+                "reversal_regime": components.get("reversal_regime"),
+                "volume_ratio": components.get("volume_ratio"),
+                "volume_state": components.get("volume_state"),
+                "insider_label": components.get("insider_label"),
+                "independent_buyers": components.get("independent_buyers"),
+                "buy_value_nok": components.get("buy_value_nok"),
+                "reasons": opp.get("reasons") or [],
+                "insider_coverage": coverage,
+                "insider_evidence_source": insider.get("evidence_source"),
+                "insider_evidence_items": item_count,
+                "rejected_value_row_count": insider.get("rejected_value_row_count"),
+                "deduplicated_row_count": insider.get("deduplicated_row_count"),
+            }
+            results.append(row)
+            print(json.dumps(row, ensure_ascii=False))
+            if item.get("status") != "ok" or opp.get("score") is None:
+                failures.append(ticker)
+        except Exception as exc:
+            failures.append(ticker)
+            print(json.dumps({"ticker": ticker, "error": str(exc)}, ensure_ascii=False))
+
+    summary = {
+        "universe_size": len(TICKERS),
+        "validated": len(results),
+        "failures": failures,
+        "label_counts": labels,
+        "insider_detail_covered": insider_covered,
+        "insider_no_recent_detail": insider_missing,
+        "insider_unavailable": insider_unavailable,
+        "coverage_pct": round((len(results) / len(TICKERS)) * 100.0, 2) if TICKERS else 0.0,
+    }
+    print(json.dumps({"summary": summary}, ensure_ascii=False))
+
+    with open("opportunity_live_validation.json", "w", encoding="utf-8") as f:
+        json.dump({"summary": summary, "results": results, "diagnostics": diagnostics}, f, ensure_ascii=False, indent=2)
+
+    minimum = max(3, int(len(TICKERS) * 0.85))
+    max_failures = max(2, int(len(TICKERS) * 0.15))
+    if len(results) < minimum or len(failures) > max_failures:
+        raise SystemExit("Universe-wide live validation coverage too low")
+    if insider_unavailable > max_failures:
+        raise SystemExit("Insider evidence provider unavailable for too much of universe")
+
+
+if __name__ == "__main__":
+    main()
