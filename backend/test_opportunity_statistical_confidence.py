@@ -11,14 +11,15 @@ class OpportunityStatisticalConfidenceTests(unittest.TestCase):
         self.assertLess(weak["lower_pct"], 50.0)
         self.assertGreater(stronger["lower_pct"], 50.0)
 
-    def test_exact_median_interval_requires_more_than_15_of_20_positive(self):
+    def test_exact_median_interval_rejects_14_of_20_but_can_accept_15(self):
+        fourteen_positive = [-2.0] * 6 + [1.0] * 14
         fifteen_positive = [-2.0] * 5 + [1.0] * 15
-        sixteen_positive = [-2.0] * 4 + [1.0] * 16
-        weak = confidence._median_interval(fifteen_positive)
-        strong = confidence._median_interval(sixteen_positive)
+        weak = confidence._median_interval(fourteen_positive)
+        strong = confidence._median_interval(fifteen_positive)
         self.assertLessEqual(weak["lower"], 0.0)
         self.assertGreater(strong["lower"], 0.0)
         self.assertGreaterEqual(strong["coverage"], 0.95)
+        self.assertEqual(strong["order_k"], 6)
 
     def test_gate_requires_two_horizons_with_raw_and_alpha_support(self):
         rows = []
