@@ -11,9 +11,10 @@ import re
 
 import insider_runtime
 
-# A price is one localized numeric token, not an arbitrary run of numbers/spaces.
-# Supports 26.65, 26,65, 1 234,50 and 1234 while stopping before a second number.
-_PRICE_TOKEN = r"([0-9]{1,3}(?:[ \u00a0][0-9]{3})*(?:[.,][0-9]{1,4})?|[0-9]{1,6}(?:[.,][0-9]{1,4})?)"
+# A price is exactly one localized numeric token, not an arbitrary run of numbers.
+# Supports 26.65, 26,65, 1 234,50 and 1234; the final lookahead prevents a partial
+# match such as 123 out of 1234 while still stopping safely before a second number.
+_PRICE_TOKEN = r"([0-9]{1,3}(?:[ \u00a0][0-9]{3})*(?:[.,][0-9]{1,4})?|[0-9]{1,6}(?:[.,][0-9]{1,4})?)(?![0-9.,])"
 _PATTERNS = (
     rf"\b(?:at|for)\s+(?:a\s+)?(?:price\s+(?:of\s+)?)?(?:NOK|SEK|DKK|EUR|USD)\s*{_PRICE_TOKEN}",
     rf"\b(?:price|kurs)\s*(?:of|på|til|:)?\s*(?:NOK|SEK|DKK|EUR|USD)?\s*{_PRICE_TOKEN}",
