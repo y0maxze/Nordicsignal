@@ -1,4 +1,4 @@
-from opportunity_confluence_runtime import calculate_opportunity
+from opportunity_confluence_runtime import calculate_opportunity, _sanitize_value_rows
 
 
 def _rev(score, volume, regime="EARLY_REVERSAL", raw_volume=None):
@@ -48,3 +48,43 @@ def test_insufficient_reversal_data_is_explicit():
     result = calculate_opportunity({"score": None, "metrics": {}}, _ins("STRONG", 3, 1_000_000, 5))
     assert result["score"] is None
     assert result["label"] == "INSUFFICIENT_DATA"
+
+
+def test_implausible_insider_price_keeps_trade_but_rejects_value():
+    rows = [{
+        "person": "Example CEO",
+        "transaction_type": "buy",
+        "trade_date": "2026-08-20",
+        "shares": 37500,
+        "price": 1_445_401.70,
+        "transaction_value": 54_202_563_750.0,
+    }]
+    history = [
+        {"date": "2026-08-19", "close": 24.65},
+        {"date": "2026-08-20", "close": 23.50},
+    ]
+    safe, rejected = _sanitize_value_rows(rows, history)
+    assert len(safe) == 1
+    assert len(rejected) == 1
+    assert safe[0]["transaction_type"] == "buy"
+    assert safe[0]["shares"] == 37500
+    assert safe[0]["price"] is None
+    assert safe[0]["transaction_value"] is None
+    assert safe[0]["value_quality"] == "rejected_market_price_outlier"
+
+
+def test_plausible_insider_price_preserves_value():
+    rows = [{
+        "person": "Example CEO",
+        "transaction_type": "buy",
+        "trade_date": "2026-08-20",
+        "shares": 37500,
+        "price": 26.65,
+        "transaction_value": 999375.0,
+    }]
+    history = [{"date": "2026-08-20", "close": 23.50}]
+    safe, rejected = _sanitize_value_rows(rows, history)
+    assert rejected == []
+    assert safe[0]["price"] == 26.65
+    assert safe[0]["transaction_value"] == 999375.0
+    assert safe[0]["value_quality"] == "market_price_plausible"
