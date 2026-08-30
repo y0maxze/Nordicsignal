@@ -1,8 +1,11 @@
 from opportunity_confluence_runtime import calculate_opportunity
 
 
-def _rev(score, volume, regime="EARLY_REVERSAL"):
-    return {"score": score, "regime": regime, "metrics": {"volume_ratio": volume}}
+def _rev(score, volume, regime="EARLY_REVERSAL", raw_volume=None):
+    metrics = {"volume_ratio": volume}
+    if raw_volume is not None:
+        metrics["raw_volume_ratio"] = raw_volume
+    return {"score": score, "regime": regime, "metrics": metrics}
 
 
 def _ins(label, buyers=0, value=0, points=0):
@@ -22,6 +25,13 @@ def test_reversal_and_volume_without_insider_is_opportunity_not_high():
     assert result["label"] == "EARLY_OPPORTUNITY"
     assert result["components"]["evidence_count"] == 2
     assert result["score"] < 80
+
+
+def test_raw_high_volume_without_bullish_confirmation_does_not_count():
+    result = calculate_opportunity(_rev(78, None, raw_volume=2.5), _ins("NONE"))
+    assert result["components"]["volume_state"] == "NONE"
+    assert result["components"]["evidence_count"] == 1
+    assert result["label"] == "REVERSAL_CANDIDATE"
 
 
 def test_insider_cluster_cannot_rescue_weak_trend_by_itself():
