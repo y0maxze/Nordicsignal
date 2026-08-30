@@ -5,6 +5,8 @@ verified regulatory insider feed with a separate signal that can be backtested b
 we allow it to influence BUY/WATCH/RISK.
 """
 from datetime import datetime, timezone
+import re
+import unicodedata
 
 from providers import NordicRegulatoryProvider
 
@@ -23,8 +25,13 @@ def _date(value):
         return None
 
 
+def _fold(value):
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return " ".join("".join(ch for ch in text if not unicodedata.combining(ch)).lower().split())
+
+
 def _actor_key(row):
-    """Return the economic actor, preferring parsed person/entity fields over titles."""
+    """Return a stable economic-actor key, not announcement-title noise."""
     value = (
         row.get("person")
         or row.get("related_primary_insider")
@@ -34,7 +41,20 @@ def _actor_key(row):
         or row.get("insider_name")
         or row.get("name")
     )
-    return str(value or "").strip().lower()
+    text = " ".join(str(value or "").split()).strip(" ,.-–—")
+    if not text:
+        return ""
+
+    # Remove generic Euronext/title prefixes that sometimes leak into actor fields.
+    text = re.sub(r"^(?:primary\s+insider\s+transactions?|mandatory\s+notification(?:\s+of\s+trade)?|prim[aæ]rinsider(?:transaksjoner?|handel))\s*[:\-–—]*\s*", "", text, flags=re.I)
+
+    # Remove repeated issuer prefix, while preserving a related company/person suffix.
+    company = " ".join(str(row.get("company") or "").split()).strip(" ,.-–—")
+    if company:
+        pattern = re.compile(rf"^(?:{re.escape(company)}[\s:,.\-–—]*)+", re.I)
+        text = pattern.sub("", text).strip(" ,.-–—") or text
+
+    return _fold(text)
 
 
 def _role_weight(row):
@@ -161,7 +181,7 @@ def analyze(result, window_days=14):
         "score_effect": 0,
         "policy": "informational_only_pending_backtest",
     }
-    out["insider_signal_v2_version"] = "2026-08-30-v2"
+    out["insider_signal_v2_version"] = "2026-08-30-v3"
     return out
 
 
