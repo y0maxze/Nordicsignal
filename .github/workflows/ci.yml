@@ -21,11 +21,13 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest==8.4.2
       - name: Compile backend
         run: python -m compileall -q .
-      - name: Run unit tests
-        run: python -m unittest discover -p 'test_*.py' -v
+      - name: Run complete test suite
+        run: python -m pytest -q
 
   frontend-check:
     runs-on: ubuntu-latest
