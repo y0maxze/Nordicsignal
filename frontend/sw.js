@@ -1,4 +1,4 @@
-const CACHE_NAME='nordicsignal-shell-v5';
+const CACHE_NAME='nordicsignal-shell-v4';
 const SHELL=['/mobile','/alerts','/insider','/news','/readiness','/stock','/calendar','/theme.css','/mobile_shell.js','/access_gate.js','/manifest.webmanifest','/insider_clean_ui.js','/portfolio_dashboard.js','/analysis.js','/stock_evidence_ui.js','/alerts.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
 self.addEventListener('install',event=>{
