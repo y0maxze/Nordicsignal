@@ -20,9 +20,8 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run insider confluence backtest
-        continue-on-error: true
-        run: python backtest_insider_confluence_v2.py
+      - name: Run canonical insider confluence backtest
+        run: python run_insider_confluence_canonical.py
       - name: Upload confluence report
         if: always()
         uses: actions/upload-artifact@v4
