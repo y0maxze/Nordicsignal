@@ -83,7 +83,7 @@ def test_active_identity_is_deterministic_and_scoped():
     assert len(first["signal_fingerprint"]) == 16
     assert len(first["learning_policy_fingerprint"]) == 16
     assert first["signal_model_id"].startswith(first["signal_version"] + ":")
-    assert first["identity_scope"] == "signal_rules+first_observed_semantics+discovery_policy"
+    assert first["identity_scope"] == "signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy"
 
 
 def test_discovery_policy_change_changes_learning_identity(monkeypatch):
@@ -107,12 +107,22 @@ def test_first_observed_semantics_change_changes_signal_identity(monkeypatch):
     assert before["signal_model_id"] != after["signal_model_id"]
 
 
+def test_canonical_insider_routing_change_changes_signal_identity(monkeypatch):
+    before = identity_extension._current_identity()
+
+    def changed_router(payload, window_days=14):
+        return {"insider_signal_v2": {"policy": "changed-for-test"}}
+
+    monkeypatch.setattr(identity_extension.insider_bridge, "analyze_insider_policy", changed_router)
+    after = identity_extension._current_identity()
+    assert before["signal_fingerprint"] != after["signal_fingerprint"]
+    assert before["signal_model_id"] != after["signal_model_id"]
+
+
 def test_payload_version_is_audit_metadata_not_verified_fingerprint():
     event = {"payload": json.dumps({"opportunity": {"version": "2026-08-30-v1.4"}})}
     assert versioned._payload_signal_version(event) == "2026-08-30-v1.4"
     assert versioned._payload_signal_version({"payload": "{}"}) == "unknown"
-    # Legacy backfill deliberately uses a distinct model namespace; a matching
-    # human-readable version can therefore never equal the active verified model id.
     active = identity_extension._current_identity()["signal_model_id"]
     assert f"legacy:{versioned._payload_signal_version(event)}" != active
 
