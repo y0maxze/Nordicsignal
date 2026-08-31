@@ -17,10 +17,12 @@ _BASE_HEALTH = health.learning_health
 def shadow_collection_check():
     status = shadow.shadow_status()
     gate = dict(status.get("quality_gate") or {})
+    smart = dict(status.get("smart_money") or {})
     snapshots = int(status.get("active_model_snapshots") or 0)
     duplicate_groups = int(gate.get("duplicate_snapshot_groups") or 0)
     feature_pct = float(gate.get("feature_completeness_pct") or 0.0)
     context_pct = float(gate.get("market_context_coverage_pct") or 0.0)
+    smart_missing = int(smart.get("missing_sidecar") or 0) if not smart.get("error") else snapshots
     daily = list(gate.get("daily_coverage") or [])
     latest = dict(daily[-1]) if daily else {}
     latest_coverage = float(latest.get("coverage_pct") or 0.0)
@@ -34,12 +36,13 @@ def shadow_collection_check():
         "no_duplicate_groups": duplicate_groups == 0,
         "feature_completeness": snapshots > 0 and feature_pct >= feature_target,
         "market_context_coverage": snapshots > 0 and context_pct >= context_target,
+        "smart_money_sidecar_complete": snapshots == 0 or smart_missing == 0,
     }
     if duplicate_groups:
         state = "FAIL"
     elif not snapshots or not checks["latest_universe_coverage"]:
         state = "WARN"
-    elif not checks["feature_completeness"] or not checks["market_context_coverage"]:
+    elif not checks["feature_completeness"] or not checks["market_context_coverage"] or not checks["smart_money_sidecar_complete"]:
         state = "WARN"
     else:
         state = "PASS"
@@ -59,10 +62,12 @@ def shadow_collection_check():
         "required_feature_completeness_pct": feature_target,
         "market_context_coverage_pct": context_pct,
         "required_market_context_coverage_pct": context_target,
+        "smart_money_missing_sidecar": smart_missing,
+        "smart_money_quality_counts": dict(smart.get("quality_counts") or {}),
         "duplicate_snapshot_groups": duplicate_groups,
         "research_quality_status": gate.get("status") or "COLLECTING_DATA",
         "research_ready": bool(gate.get("ready_for_counterfactual_research")),
-        "rule": "operational shadow health checks current collection completeness; 40-day research maturity is reported but does not itself cause WARN",
+        "rule": "operational shadow health checks current collection completeness including Smart Money sidecar; 40-day research maturity is reported but does not itself cause WARN",
     }
 
 
