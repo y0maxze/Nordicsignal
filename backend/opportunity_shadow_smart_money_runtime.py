@@ -1,7 +1,9 @@
 """Persist and measure Smart Money metadata alongside immutable Shadow snapshots.
 
 Uses a sidecar table keyed by snapshot_id so the original frozen shadow schema and rows
-remain untouched. New captures store the Smart Money classification exactly once.
+remain untouched. New captures store Smart Money only when the base snapshot is created
+in the same call. A later scan must never backfill a missing sidecar with newer feature
+values and pretend they were first-observed. Missing sidecars are surfaced by health.
 This is research-only and never changes live Opportunity labels, thresholds or scores.
 """
 from __future__ import annotations
@@ -76,10 +78,14 @@ def _persist(snapshot_id, smart):
 
 def capture_snapshot_with_smart_money(result):
     info = _BASE_CAPTURE(result)
-    try:
-        _persist((info or {}).get("snapshot_id"), _smart_from_result(result))
-    except Exception:
-        pass
+    # Preserve immutable first-observed semantics: only a newly inserted base snapshot
+    # may receive sidecar features from this result. If sidecar persistence fails, a
+    # later scan leaves it missing and health exposes the data-quality problem.
+    if bool((info or {}).get("captured")):
+        try:
+            _persist((info or {}).get("snapshot_id"), _smart_from_result(result))
+        except Exception:
+            pass
     return info
 
 
