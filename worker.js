@@ -8,6 +8,10 @@ const ASSET_ROUTES = new Map([
   ["/dashboard/", "/index.html"],
   ["/mobile", "/mobile.html"],
   ["/mobile/", "/mobile.html"],
+  ["/alerts", "/alerts.html"],
+  ["/alerts/", "/alerts.html"],
+  ["/notifications", "/alerts.html"],
+  ["/notifications/", "/alerts.html"],
   ["/insider", "/insider.html"],
   ["/insider/", "/insider.html"],
   ["/stock", "/stock.html"],
@@ -51,7 +55,7 @@ const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script><script src="/stock_opportunity_ui.js"></script>';
 const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_smart_money_ui.js"></script><script src="/learning_temporal_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_failure_streak_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
-const MOBILE_SHELL = '<script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script>';
+const MOBILE_SHELL = '<script src="/alert_local_capture.js"></script><script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script><script src="/alert_nav_ui.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 const SECURITY_HEADERS = {
   "x-content-type-options":"nosniff",
@@ -90,7 +94,7 @@ function enhanceHtml(html, pathname) {
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
   if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
-    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
+    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
     if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
