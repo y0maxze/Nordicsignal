@@ -2,6 +2,7 @@
 import insider_purchase_threshold_runtime as purchase_policy
 import insider_smart_money_runtime as smart_money
 import opportunity_data_coverage_runtime as coverage
+import opportunity_insider_policy_bridge_runtime as insider_bridge
 import opportunity_versioned_learning_runtime as versioned
 
 _BASE_IDENTITY = versioned._current_identity
@@ -19,6 +20,8 @@ def _current_identity():
         purchase_policy.POLICY_VERSION,
         versioned._source_text(smart_money.enrich),
         smart_money.POLICY_VERSION,
+        versioned._source_text(insider_bridge.analyze_insider_policy),
+        versioned._source_text(insider_bridge.calculate_opportunity_with_smart_money),
     ])
     policy_fingerprint = versioned._fingerprint([
         base.get("learning_policy_fingerprint"),
@@ -36,7 +39,7 @@ def _current_identity():
     base["signal_model_id"] = f"{base['signal_version']}:{signal_fingerprint}"
     base["learning_policy_fingerprint"] = policy_fingerprint
     base["learning_policy_id"] = f"{base['learning_policy_version']}:{policy_fingerprint}"
-    base["identity_scope"] = "signal_rules+meaningful_insider_buys+smart_money_role_quality+first_observed_semantics+discovery_policy"
+    base["identity_scope"] = "signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy"
     return base
 
 
