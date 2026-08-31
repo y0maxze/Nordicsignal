@@ -1,17 +1,18 @@
 """Role- and size-aware smart-money quality for qualified insider purchases.
 
 This layer enriches insider_signal_v2 after the hard NOK 100k/500k purchase filter.
-It does not change the main 0-100 stock score. Repeated purchases by one actor do not
-create independent-buyer credit; distinct qualified actors remain the cluster unit.
+It uses the exact same rolling time window/anchor semantics as the canonical insider
+signal. Repeated purchases by one actor do not create independent-buyer credit.
+The main 0-100 stock score remains untouched.
 """
 from __future__ import annotations
 
-import re
+from datetime import datetime, timezone
 from providers import NordicRegulatoryProvider
 import insider_signal_v2_runtime as base
 import insider_purchase_threshold_runtime as threshold
 
-POLICY_VERSION = "2026-08-31-smart-money-v1"
+POLICY_VERSION = "2026-08-31-smart-money-v2-window-aligned"
 EXECUTIVE_ROLES = ("ceo", "chief executive", "cfo", "chief financial")
 CHAIR_ROLES = ("chair", "chairman", "chairwoman", "chairperson", "styreleder")
 BOARD_ROLES = ("board member", "member of the board", "styremedlem", "director")
@@ -45,12 +46,19 @@ def enrich(result):
     out = dict(result or {})
     signal = dict(out.get("insider_signal_v2") or {})
     items = base.prepare_items(out.get("items") or [])
+    window_days = int(signal.get("window_days") or 14)
+    dates = [base._date(x.get("trade_date") or x.get("date") or x.get("published_at")) for x in items]
+    dates = [x for x in dates if x]
+    anchor = max(dates) if dates else datetime.now(timezone.utc).date()
+
     seen = set()
     qualified = []
     for row in items:
         if base._action(row) != "buy" or base._is_transfer(row):
             continue
         day = base._date(row.get("trade_date") or row.get("date") or row.get("published_at"))
+        if day and (anchor - day).days > window_days:
+            continue
         key = base._transaction_key(row, "buy", day)
         if key in seen:
             continue
@@ -104,6 +112,8 @@ def enrich(result):
     signal["smart_money"] = {
         "quality": quality,
         "quality_points": quality_points,
+        "window_days": window_days,
+        "anchor_date": str(anchor),
         "independent_qualified_actors": independent,
         "meaningful_actors_500k_plus": len(meaningful_actors),
         "million_plus_actors": len(million_actors),
@@ -115,7 +125,7 @@ def enrich(result):
             for actor, value in sorted(actor_totals.items(), key=lambda kv: (-kv[1], kv[0]))
         ],
         "reasons": reasons,
-        "policy": "distinct_actor_cluster+role_quality+500k_meaningful+1m_very_large",
+        "policy": "canonical_window+distinct_actor_cluster+role_quality+500k_meaningful+1m_very_large",
         "score_effect": 0,
     }
     signal["score_effect"] = 0

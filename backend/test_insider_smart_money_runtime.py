@@ -56,6 +56,22 @@ def test_multi_actor_meaningful_cluster_is_high_quality():
     assert q["quality_points"] >= 5
 
 
+def test_old_large_purchase_outside_canonical_window_is_excluded():
+    out = sm.enrich({
+        "items": [
+            row("Old CEO", 5_000_000, "CEO", "2026-07-01"),
+            row("Recent Buyer", 150_000, "Board Member", "2026-08-30"),
+        ],
+        "insider_signal_v2": {"window_days": 14},
+    })
+    q = out["insider_signal_v2"]["smart_money"]
+    assert q["window_days"] == 14
+    assert q["independent_qualified_actors"] == 1
+    assert q["meaningful_actors_500k_plus"] == 0
+    assert q["million_plus_actors"] == 0
+    assert q["senior_actors"] == 0
+
+
 def test_smart_money_never_changes_main_score_effect():
     out = sm.enrich({"items": [row("CEO Person", 2_000_000, "CEO")]})
     assert out["insider_signal_v2"]["score_effect"] == 0

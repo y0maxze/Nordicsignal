@@ -1,7 +1,8 @@
 """Universe-wide live validation for Early Opportunity Engine.
 
 Fetches current public Yahoo/Euronext-backed evidence for every stock in the
-NordicSignal universe. It never modifies production scoring.
+NordicSignal universe. It never modifies production scoring. The validation also
+asserts that the canonical Smart Money bridge is present on every successful result.
 """
 import json
 
@@ -37,6 +38,7 @@ def _compact_raw_rows(ticker):
 def main():
     results = []
     failures = []
+    integration_failures = []
     labels = {}
     insider_covered = 0
     insider_missing = 0
@@ -60,6 +62,9 @@ def main():
             else:
                 insider_missing += 1
 
+            if "smart_money_quality" not in components:
+                integration_failures.append(f"{ticker}:missing_smart_money_quality")
+
             label = str(opp.get("label") or "UNKNOWN")
             labels[label] = labels.get(label, 0) + 1
             row = {
@@ -75,6 +80,11 @@ def main():
                 "insider_label": components.get("insider_label"),
                 "independent_buyers": components.get("independent_buyers"),
                 "buy_value_nok": components.get("buy_value_nok"),
+                "smart_money_quality": components.get("smart_money_quality"),
+                "smart_money_points": components.get("smart_money_points"),
+                "meaningful_actors_500k_plus": components.get("meaningful_actors_500k_plus"),
+                "million_plus_actors": components.get("million_plus_actors"),
+                "senior_actors": components.get("senior_actors"),
                 "reasons": opp.get("reasons") or [],
                 "insider_coverage": coverage,
                 "insider_evidence_source": insider.get("evidence_source"),
@@ -94,6 +104,7 @@ def main():
         "universe_size": len(TICKERS),
         "validated": len(results),
         "failures": failures,
+        "integration_failures": integration_failures,
         "label_counts": labels,
         "insider_detail_covered": insider_covered,
         "insider_no_recent_detail": insider_missing,
@@ -111,6 +122,8 @@ def main():
         raise SystemExit("Universe-wide live validation coverage too low")
     if insider_unavailable > max_failures:
         raise SystemExit("Insider evidence provider unavailable for too much of universe")
+    if integration_failures:
+        raise SystemExit("Canonical Smart Money integration missing from live Opportunity results")
 
 
 if __name__ == "__main__":
