@@ -1,5 +1,6 @@
 """Extend Opportunity model identity with event/discovery/insider semantics."""
 import insider_purchase_threshold_runtime as purchase_policy
+import insider_smart_money_runtime as smart_money
 import opportunity_data_coverage_runtime as coverage
 import opportunity_versioned_learning_runtime as versioned
 
@@ -16,6 +17,8 @@ def _current_identity():
         purchase_policy.MEANINGFUL_BUY_NOK,
         purchase_policy.STRONG_TOTAL_BUY_NOK,
         purchase_policy.POLICY_VERSION,
+        versioned._source_text(smart_money.enrich),
+        smart_money.POLICY_VERSION,
     ])
     policy_fingerprint = versioned._fingerprint([
         base.get("learning_policy_fingerprint"),
@@ -33,7 +36,7 @@ def _current_identity():
     base["signal_model_id"] = f"{base['signal_version']}:{signal_fingerprint}"
     base["learning_policy_fingerprint"] = policy_fingerprint
     base["learning_policy_id"] = f"{base['learning_policy_version']}:{policy_fingerprint}"
-    base["identity_scope"] = "signal_rules+meaningful_insider_buys+first_observed_semantics+discovery_policy"
+    base["identity_scope"] = "signal_rules+meaningful_insider_buys+smart_money_role_quality+first_observed_semantics+discovery_policy"
     return base
 
 
