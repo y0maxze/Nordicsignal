@@ -1,8 +1,10 @@
 """Meaningful-purchase policy layered on verified insider data.
 
-Raw regulatory rows remain available for audit, but small buy transactions do not
-contribute to insider-signal strength. This changes signal evidence only; the main
-0-100 stock score remains untouched by insider_signal_v2.score_effect=0.
+Raw regulatory rows remain available for audit, but small or unattributed buy
+transactions do not contribute to insider-signal strength. A monetary purchase must
+be attributable to a concrete insider actor before it can qualify. This changes
+signal evidence only; the main 0-100 stock score remains untouched by
+insider_signal_v2.score_effect=0.
 """
 from __future__ import annotations
 
@@ -14,13 +16,13 @@ import insider_signal_v2_runtime as base
 MIN_SIGNAL_BUY_NOK = 100_000.0
 MEANINGFUL_BUY_NOK = 500_000.0
 STRONG_TOTAL_BUY_NOK = 1_000_000.0
-POLICY_VERSION = "2026-08-31-meaningful-buys-v1"
+POLICY_VERSION = "2026-08-31-meaningful-buys-v2-attributed-actor"
 
 
 def strict_analyze(result, window_days=14):
     out = dict(result or {})
     items = base.prepare_items(out.get("items") or [])
-    buys, sells, excluded, small_buys = [], [], [], []
+    buys, sells, excluded, small_buys, unattributed_buys = [], [], [], [], []
     seen_transactions = set()
     duplicate_count = 0
     dates = [base._date(x.get("trade_date") or x.get("date") or x.get("published_at")) for x in items]
@@ -47,6 +49,9 @@ def strict_analyze(result, window_days=14):
             if value is None or value < MIN_SIGNAL_BUY_NOK:
                 small_buys.append(row)
                 continue
+            if not base._actor_key(row):
+                unattributed_buys.append(row)
+                continue
             buys.append(row)
         else:
             sells.append(row)
@@ -58,6 +63,7 @@ def strict_analyze(result, window_days=14):
     meaningful_buys = [v for v in buy_values if v >= MEANINGFUL_BUY_NOK]
     sell_value = sum(v for v in (base._trade_value(row) for row in sells) if v is not None)
     weighted_buy_value = sum((base._trade_value(row) or 0.0) * base._role_weight(row) for row in buys)
+    unattributed_value = sum((base._trade_value(row) or 0.0) for row in unattributed_buys)
 
     points = 0
     reasons = []
@@ -100,12 +106,14 @@ def strict_analyze(result, window_days=14):
         "meaningful_buy_threshold_nok": MEANINGFUL_BUY_NOK,
         "ignored_small_buy_count": len(small_buys),
         "ignored_small_buy_value_nok": round(sum((base._trade_value(row) or 0.0) for row in small_buys), 2),
+        "ignored_unattributed_buy_count": len(unattributed_buys),
+        "ignored_unattributed_buy_value_nok": round(unattributed_value, 2),
         "excluded_transfer_like_count": len(excluded),
         "deduplicated_row_count": duplicate_count,
         "prepared_item_count": len(items),
         "reasons": reasons,
         "score_effect": 0,
-        "policy": "qualified_buys_min_100k_meaningful_500k_no_main_score_effect",
+        "policy": "qualified_buys_require_attributed_actor_min_100k_meaningful_500k_no_main_score_effect",
     }
     out["insider_signal_v2_version"] = POLICY_VERSION
     return out
