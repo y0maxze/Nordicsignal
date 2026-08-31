@@ -1,10 +1,5 @@
-"""Extend Opportunity model identity with event/discovery semantics.
-
-The signal calculation alone is not enough to define a forward-validation cohort:
-how a qualifying state first becomes an event and which discovery instruments are
-eligible also change the observed sample. This layer folds those semantics into the
-runtime fingerprint used by opportunity_versioned_learning_runtime.
-"""
+"""Extend Opportunity model identity with event/discovery/insider semantics."""
+import insider_purchase_threshold_runtime as purchase_policy
 import opportunity_data_coverage_runtime as coverage
 import opportunity_versioned_learning_runtime as versioned
 
@@ -16,6 +11,11 @@ def _current_identity():
     signal_fingerprint = versioned._fingerprint([
         base.get("signal_fingerprint"),
         versioned._source_text(coverage._record_first_observed),
+        versioned._source_text(purchase_policy.strict_analyze),
+        purchase_policy.MIN_SIGNAL_BUY_NOK,
+        purchase_policy.MEANINGFUL_BUY_NOK,
+        purchase_policy.STRONG_TOTAL_BUY_NOK,
+        purchase_policy.POLICY_VERSION,
     ])
     policy_fingerprint = versioned._fingerprint([
         base.get("learning_policy_fingerprint"),
@@ -33,7 +33,7 @@ def _current_identity():
     base["signal_model_id"] = f"{base['signal_version']}:{signal_fingerprint}"
     base["learning_policy_fingerprint"] = policy_fingerprint
     base["learning_policy_id"] = f"{base['learning_policy_version']}:{policy_fingerprint}"
-    base["identity_scope"] = "signal_rules+first_observed_semantics+discovery_policy"
+    base["identity_scope"] = "signal_rules+meaningful_insider_buys+first_observed_semantics+discovery_policy"
     return base
 
 
