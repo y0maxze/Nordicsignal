@@ -2,7 +2,8 @@
 
 Fetches current public Yahoo/Euronext-backed evidence for every stock in the
 NordicSignal universe. It never modifies production scoring. The validation also
-asserts that the canonical Smart Money bridge is present on every successful result.
+asserts that the canonical Smart Money bridge is present on every successful result
+and that monetary insider evidence is always attributable to at least one actor.
 """
 import json
 
@@ -64,6 +65,13 @@ def main():
 
             if "smart_money_quality" not in components:
                 integration_failures.append(f"{ticker}:missing_smart_money_quality")
+            try:
+                independent_buyers = int(components.get("independent_buyers") or 0)
+                buy_value_nok = float(components.get("buy_value_nok") or 0.0)
+            except (TypeError, ValueError):
+                independent_buyers, buy_value_nok = 0, 0.0
+            if independent_buyers == 0 and buy_value_nok > 0:
+                integration_failures.append(f"{ticker}:unattributed_buy_value:{buy_value_nok:.2f}")
 
             label = str(opp.get("label") or "UNKNOWN")
             labels[label] = labels.get(label, 0) + 1
@@ -123,7 +131,7 @@ def main():
     if insider_unavailable > max_failures:
         raise SystemExit("Insider evidence provider unavailable for too much of universe")
     if integration_failures:
-        raise SystemExit("Canonical Smart Money integration missing from live Opportunity results")
+        raise SystemExit("Canonical insider/Smart Money integration invariants failed")
 
 
 if __name__ == "__main__":
