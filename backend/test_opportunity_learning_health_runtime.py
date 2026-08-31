@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import opportunity_learning_health_runtime as health
+import opportunity_shadow_health_runtime as shadow_health
 
 
 def test_freshness_thresholds():
@@ -37,7 +38,9 @@ def test_learning_health_combines_checks(monkeypatch):
         "market_context": {"status": "NOT_APPLICABLE"},
         "market_adjustment": {"status": "NOT_APPLICABLE"},
     })
-    result = health.learning_health()
+    # sitecustomize intentionally wraps health.learning_health with Shadow checks.
+    # This test targets the base watchdog in isolation, so call the preserved base.
+    result = shadow_health._BASE_HEALTH()
     assert result["learning_pipeline_status"] == "HEALTHY"
     assert result["errors"] == []
     assert result["policy"] == "read_only_operational_health_no_signal_or_threshold_effect"
@@ -50,7 +53,7 @@ def test_learning_health_surfaces_component_failure(monkeypatch):
     monkeypatch.setattr(health, "_scheduler_check", lambda: {"status": "PASS"})
     monkeypatch.setattr(health, "_discovery_check", lambda: {"status": "WARN"})
     monkeypatch.setattr(health, "_database_checks", broken)
-    result = health.learning_health()
+    result = shadow_health._BASE_HEALTH()
     assert result["learning_pipeline_status"] == "DEGRADED"
     assert "database_validation" in result["errors"]
     assert result["checks"]["model_versioning"]["status"] == "FAIL"
