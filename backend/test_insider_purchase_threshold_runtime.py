@@ -68,6 +68,27 @@ def test_total_qualified_value_over_1m_gets_strong_value_points():
     assert any("NOK 1m" in reason for reason in signal["reasons"])
 
 
+def test_unattributed_large_issuer_buy_is_not_insider_signal():
+    issuer_buy = {
+        "transaction_type": "buy",
+        "trade_date": "2026-08-26",
+        "display_transaction_value": 32_555_423.916,
+        "shares": 71_592,
+        "price": 454.7355,
+        "summary": "Today, Yara has purchased shares in the market on behalf of employees.",
+    }
+    result = runtime.strict_analyze({"items": [issuer_buy]})
+    signal = result["insider_signal_v2"]
+    assert signal["buy_count"] == 0
+    assert signal["independent_buyers"] == 0
+    assert signal["buy_value_nok"] == 0
+    assert signal["meaningful_buy_count"] == 0
+    assert signal["ignored_unattributed_buy_count"] == 1
+    assert signal["ignored_unattributed_buy_value_nok"] == 32_555_423.92
+    assert signal["label"] == "NONE"
+    assert not any("NOK 1m" in reason for reason in signal["reasons"])
+
+
 def test_threshold_policy_has_no_main_score_effect():
     signal = runtime.strict_analyze({"items": [row("A One", 500_000)]})["insider_signal_v2"]
     assert signal["minimum_signal_buy_nok"] == 100_000

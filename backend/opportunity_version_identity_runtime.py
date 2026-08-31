@@ -3,6 +3,7 @@ import insider_purchase_threshold_runtime as purchase_policy
 import insider_smart_money_runtime as smart_money
 import opportunity_data_coverage_runtime as coverage
 import opportunity_insider_policy_bridge_runtime as insider_bridge
+import opportunity_temporal_independence_runtime as temporal
 import opportunity_versioned_learning_runtime as versioned
 
 _BASE_IDENTITY = versioned._current_identity
@@ -34,12 +35,19 @@ def _current_identity():
         coverage.MIN_MEDIAN_DAILY_TURNOVER_NOK,
         coverage.MAX_LAST_TRADE_AGE_DAYS,
         coverage.MIN_NAME_MATCH,
+        versioned._source_text(temporal._temporal_stats),
+        temporal.MIN_UNIQUE_EVENT_DAYS,
+        temporal.MIN_CALENDAR_SPAN_DAYS,
+        temporal.MAX_SINGLE_DAY_SHARE_PCT,
+        temporal.CLUSTER_WINDOW_DAYS,
+        temporal.MAX_CLUSTER_WINDOW_SHARE_PCT,
+        temporal.POLICY_VERSION,
     ])
     base["signal_fingerprint"] = signal_fingerprint
     base["signal_model_id"] = f"{base['signal_version']}:{signal_fingerprint}"
     base["learning_policy_fingerprint"] = policy_fingerprint
     base["learning_policy_id"] = f"{base['learning_policy_version']}:{policy_fingerprint}"
-    base["identity_scope"] = "signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy"
+    base["identity_scope"] = "signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy+temporal_independence_policy"
     return base
 
 
