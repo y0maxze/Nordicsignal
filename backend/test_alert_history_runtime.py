@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import sqlite3
 
 import alert_history_runtime as history
@@ -5,7 +6,7 @@ import alert_history_runtime as history
 
 def _db_factory(path):
     def connect():
-        conn = sqlite3.connect(path)
+        conn = sqlite3.connect(path, timeout=30)
         conn.row_factory = sqlite3.Row
         return conn
     return connect
@@ -74,6 +75,28 @@ def test_successful_payload_is_idempotent_across_devices(tmp_path, monkeypatch):
     alert_id = data["items"][0]["id"]
     history.mark_read(alert_id)
     assert history.list_alerts(limit=20)["unread"] == 0
+
+
+def test_successful_payload_counts_concurrent_deliveries_atomically(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "connect", _db_factory(tmp_path / "alerts.sqlite"))
+    monkeypatch.setattr(history, "USING_POSTGRES", False)
+    history._ensure_schema()
+    payload = {
+        "tag": "opportunity:501",
+        "title": "LSG · Early Opportunity",
+        "body": "score 74 · reversal 81 · volum 2.1×",
+        "url": "/stock?ticker=LSG",
+        "timestamp": "2026-09-01T00:15:00+00:00",
+    }
+    deliveries = 12
+    with ThreadPoolExecutor(max_workers=deliveries) as pool:
+        results = list(pool.map(lambda _: history._record_successful_payload(payload), range(deliveries)))
+
+    assert results == [True] * deliveries
+    data = history.list_alerts(limit=20)
+    assert data["total"] == 1
+    assert data["items"][0]["event_key"] == "opportunity:501"
+    assert data["items"][0]["delivery_count"] == deliveries
 
 
 def test_test_push_is_not_persisted(tmp_path, monkeypatch):
