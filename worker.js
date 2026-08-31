@@ -50,7 +50,7 @@ const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#070707"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="NordicSignal">';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard">Nordic<span>Signal</span></a>';
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script><script src="/stock_opportunity_ui.js"></script>';
-const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
+const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_failure_streak_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
 const MOBILE_SHELL = '<script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script>';
 const ACCESS_GATE = '<script src="/access_gate.js"></script>';
 const SECURITY_HEADERS = {
@@ -78,80 +78,48 @@ function json(body, status = 200) {
 
 function assetPath(pathname) {
   if (ASSET_ROUTES.has(pathname)) return ASSET_ROUTES.get(pathname);
-  if (pathname.startsWith("/frontend/")) return pathname.slice("/frontend".length);
   return pathname;
 }
 
-function isStockEntry(pathname) {
-  return pathname === "/stock" || pathname === "/stock/" || pathname === "/stock-intelligence" || pathname === "/stock-intelligence/";
-}
+function isApiPath(pathname) { return pathname.startsWith('/api/'); }
+function isHtmlPath(pathname) { return ASSET_ROUTES.has(pathname); }
 
-function enhanceHtml(html, pathname) {
-  if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
-  if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
-  if (pathname === "/index.html") {
-    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
-    if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
-  } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
-    html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
-  }
-  if (pathname === "/stock.html" && !html.includes('src="/stock_selector.js"')) {
-    html = html.replace("</body>", `${STOCK_EXTRAS}</body>`);
-  }
-  if (pathname === "/learning.html" && !html.includes('src="/learning_version_ui.js"')) {
-    html = html.replace("</body>", `${LEARNING_EXTRAS}</body>`);
-  }
-  if (!html.includes('src="/mobile_shell.js"')) {
-    html = html.replace("</body>", `${MOBILE_SHELL}</body>`);
-  }
-  if (pathname !== "/legal.html" && !html.includes('src="/access_gate.js"')) {
-    html = html.replace("</body>", `${ACCESS_GATE}</body>`);
-  }
-  return html;
+async function proxyApi(request, env) {
+  const incoming = new URL(request.url);
+  const target = new URL(incoming.pathname + incoming.search, API_ORIGIN);
+  const headers = new Headers(request.headers);
+  headers.set('host', target.host);
+  if (env?.NORDICSIGNAL_WRITE_TOKEN && !headers.has('x-nordicsignal-token')) headers.set('x-nordicsignal-token', env.NORDICSIGNAL_WRITE_TOKEN);
+  return fetch(new Request(target, {method:request.method,headers,body:['GET','HEAD'].includes(request.method)?undefined:request.body,redirect:'follow'}));
 }
 
 async function serveAsset(request, env, pathname) {
-  const response = await env.ASSETS.fetch(assetRequest(request, pathname));
-  if (request.method === "HEAD" || !response.ok) return response;
-  const type = response.headers.get("content-type") || "";
-  if (!type.includes("text/html")) return response;
-  const html = enhanceHtml(await response.text(), pathname);
-  const headers = applySecurityHeaders(new Headers(response.headers));
-  headers.delete("content-length");
-  headers.set("cache-control", "no-store");
-  return new Response(html, {status:response.status, headers});
+  const assetResponse = await env.ASSETS.fetch(assetRequest(request, assetPath(pathname)));
+  if (!isHtmlPath(pathname) || !assetResponse.ok) return assetResponse;
+  let html = await assetResponse.text();
+  if (!html.includes('/theme.css')) html = html.replace('</head>', THEME_LINK + PWA_HEAD + '</head>');
+  if (!html.includes('nsGlobalHome')) html = html.replace('<body>', '<body>' + GLOBAL_HOME_UI);
+  if (pathname === '/stock' || pathname === '/stock/' || pathname === '/stock-intelligence' || pathname === '/stock-intelligence/') html = html.replace('</body>', STOCK_EXTRAS + '</body>');
+  if (pathname === '/learning' || pathname === '/learning/' || pathname === '/signal-performance' || pathname === '/signal-performance/') html = html.replace('</body>', LEARNING_EXTRAS + '</body>');
+  if (!html.includes('/mobile_shell.js')) html = html.replace('</body>', MOBILE_SHELL + ACCESS_GATE + '</body>');
+  return new Response(html,{status:assetResponse.status,headers:applySecurityHeaders(new Headers(assetResponse.headers))});
 }
 
-async function proxyApi(request, url, env) {
-  const upstream = new URL(`${API_ORIGIN}${url.pathname}`);
-  upstream.search = url.search;
+async function handleRequest(request, env) {
+  const url = new URL(request.url);
+  if (isApiPath(url.pathname)) return proxyApi(request, env);
+  return serveAsset(request, env, url.pathname);
+}
+
+async function handleScheduled(env) {
+  const headers = new Headers({'content-type':'application/json'});
+  if (env?.NORDICSIGNAL_WRITE_TOKEN) headers.set('x-nordicsignal-token', env.NORDICSIGNAL_WRITE_TOKEN);
   try {
-    const headers = new Headers(request.headers);
-    if (env && env.NORDICSIGNAL_WRITE_TOKEN) {
-      headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
-    }
-    const forwarded = new Request(upstream.toString(), request);
-    const secured = new Request(forwarded, {headers});
-    const response = await fetch(secured);
-    const responseHeaders = applySecurityHeaders(new Headers(response.headers));
-    responseHeaders.delete("access-control-allow-origin");
-    responseHeaders.set("cache-control", "no-store");
-    return new Response(response.body, {status:response.status, headers:responseHeaders});
-  } catch (error) {
-    return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:String(error)},502);
-  }
+    await fetch(`${API_ORIGIN}/api/opportunity-scan/run`, {method:'POST',headers});
+  } catch (_) {}
 }
 
 export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-      return json({status:"error",code:"ASSETS_BINDING_MISSING",message:"Cloudflare ASSETS binding is not available in this deployment.",path:url.pathname},500);
-    }
-    if (url.pathname.startsWith("/api/")) return proxyApi(request, url, env);
-    if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
-    let pathname = assetPath(url.pathname);
-    if (isStockEntry(url.pathname) && !url.searchParams.get("ticker") && !url.searchParams.get("symbol")) pathname = "/intelligence.html";
-    return serveAsset(request, env, pathname);
-  },
+  fetch: handleRequest,
+  scheduled(_event, env, _ctx) { return handleScheduled(env); },
 };
