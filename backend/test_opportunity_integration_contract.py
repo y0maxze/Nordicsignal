@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import sitecustomize
 import opportunity_confluence_runtime as opportunity
@@ -90,6 +91,17 @@ class OpportunityIntegrationContractTests(unittest.TestCase):
         self.assertEqual(smart["million"], 1)
         self.assertEqual(smart["senior"], 2)
         self.assertEqual(smart["role_adjusted"], 2_350_000)
+
+    def test_sidecar_is_written_only_with_new_first_observed_snapshot(self):
+        result = {"opportunity": {"components": {"smart_money_quality": "HIGH"}}}
+        with patch.object(shadow_smart, "_BASE_CAPTURE", return_value={"captured": True, "snapshot_id": 7}), \
+             patch.object(shadow_smart, "_persist", return_value=True) as persist:
+            shadow_smart.capture_snapshot_with_smart_money(result)
+            persist.assert_called_once()
+        with patch.object(shadow_smart, "_BASE_CAPTURE", return_value={"captured": False, "reason": "already_captured", "snapshot_id": 7}), \
+             patch.object(shadow_smart, "_persist") as persist:
+            shadow_smart.capture_snapshot_with_smart_money(result)
+            persist.assert_not_called()
 
 
 if __name__ == "__main__":
