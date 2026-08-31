@@ -141,18 +141,17 @@ def _record_successful_payload(payload):
 
     conn = connect()
     try:
-        existing = conn.execute("SELECT id FROM alert_history WHERE event_key=?", (event_key,)).fetchone()
-        if existing:
-            conn.execute(
-                "UPDATE alert_history SET last_sent_at=?,delivery_count=delivery_count+1 WHERE event_key=?",
-                (now, event_key),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO alert_history(event_key,alert_type,ticker,company_name,title,body,url,source_created_at,first_sent_at,last_sent_at,delivery_count,read_at,payload_json) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,1,NULL,?)",
-                (event_key, alert_type, ticker, company, title or "NordicSignal", body, url, source_created, now, now, encoded),
-            )
+        # A single UPSERT keeps one canonical row per event while making the
+        # delivery counter safe across concurrent workers/processes. The prior
+        # SELECT-then-INSERT sequence could lose a device increment if two
+        # successful deliveries for the same event raced on the unique key.
+        conn.execute(
+            "INSERT INTO alert_history(event_key,alert_type,ticker,company_name,title,body,url,source_created_at,first_sent_at,last_sent_at,delivery_count,read_at,payload_json) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,1,NULL,?) "
+            "ON CONFLICT(event_key) DO UPDATE SET "
+            "last_sent_at=excluded.last_sent_at,delivery_count=alert_history.delivery_count+1",
+            (event_key, alert_type, ticker, company, title or "NordicSignal", body, url, source_created, now, now, encoded),
+        )
         conn.execute("DELETE FROM alert_history WHERE source_created_at<?", (cutoff,))
         conn.commit()
         return True
