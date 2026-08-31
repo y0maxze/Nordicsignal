@@ -83,7 +83,10 @@ def test_active_identity_is_deterministic_and_scoped():
     assert len(first["signal_fingerprint"]) == 16
     assert len(first["learning_policy_fingerprint"]) == 16
     assert first["signal_model_id"].startswith(first["signal_version"] + ":")
-    assert first["identity_scope"] == "signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy"
+    scope = first["identity_scope"]
+    assert scope.startswith("signal_rules+meaningful_insider_buys+smart_money_role_quality+canonical_insider_routing+first_observed_semantics+discovery_policy")
+    assert "statistical_confidence_policy" in scope
+    assert "chronological_walk_forward_policy" in scope
 
 
 def test_discovery_policy_change_changes_learning_identity(monkeypatch):
