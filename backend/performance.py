@@ -13,20 +13,39 @@ T = TypeVar("T")
 
 _lock = threading.Lock()
 _cache: dict[str, tuple[float, object]] = {}
+_inflight: dict[str, threading.Event] = {}
 
 
 def ttl_cached(key: str, ttl_seconds: float, loader: Callable[[], T]) -> T:
-    now = time.monotonic()
-    with _lock:
-        entry = _cache.get(key)
-        if entry and entry[0] > now:
-            return entry[1]  # type: ignore[return-value]
+    while True:
+        now = time.monotonic()
+        with _lock:
+            entry = _cache.get(key)
+            if entry and entry[0] > now:
+                return entry[1]  # type: ignore[return-value]
 
-    value = loader()
-    expires = time.monotonic() + max(0.0, ttl_seconds)
-    with _lock:
-        _cache[key] = (expires, value)
-    return value
+            event = _inflight.get(key)
+            if event is None:
+                event = threading.Event()
+                _inflight[key] = event
+                leader = True
+            else:
+                leader = False
+
+        if leader:
+            try:
+                value = loader()
+                expires = time.monotonic() + max(0.0, ttl_seconds)
+                with _lock:
+                    _cache[key] = (expires, value)
+                return value
+            finally:
+                with _lock:
+                    finished = _inflight.pop(key, None)
+                    if finished is not None:
+                        finished.set()
+
+        event.wait()
 
 
 def invalidate(prefix: str | None = None) -> None:
