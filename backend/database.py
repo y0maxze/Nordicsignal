@@ -39,8 +39,10 @@ def _translate_sql(sql):
 
 
 class PostgresConnection:
-    def __init__(self, connection):
+    def __init__(self, connection, pool=None):
         self._connection = connection
+        self._pool = pool
+        self._closed = False
 
     def execute(self, sql, params=()):
         return self._connection.execute(_translate_sql(sql), params)
@@ -53,14 +55,41 @@ class PostgresConnection:
 
     def commit(self): self._connection.commit()
     def rollback(self): self._connection.rollback()
-    def close(self): self._connection.close()
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self._pool is not None:
+            self._pool.putconn(self._connection)
+        else:
+            self._connection.close()
+
+
+_POSTGRES_POOL = None
+
+
+def _postgres_pool():
+    global _POSTGRES_POOL
+    if _POSTGRES_POOL is None:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+        min_size = max(1, int(os.getenv("DB_POOL_MIN", "1")))
+        max_size = max(min_size, int(os.getenv("DB_POOL_MAX", "10")))
+        _POSTGRES_POOL = ConnectionPool(
+            conninfo=DATABASE_URL,
+            min_size=min_size,
+            max_size=max_size,
+            timeout=float(os.getenv("DB_POOL_TIMEOUT", "10")),
+            kwargs={"row_factory": dict_row, "connect_timeout": 10},
+            open=True,
+        )
+    return _POSTGRES_POOL
 
 
 def connect():
     if USING_POSTGRES:
-        import psycopg
-        from psycopg.rows import dict_row
-        return PostgresConnection(psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10))
+        pool = _postgres_pool()
+        return PostgresConnection(pool.getconn(), pool=pool)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
@@ -73,9 +102,6 @@ def connect():
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA_POSTGRES if USING_POSTGRES else SCHEMA_SQLITE)
-    # PostgreSQL aborts the entire transaction when a DDL statement fails.
-    # The old ALTER TABLE was redundant because `source` is already part of
-    # the schema above, so a duplicate-column error could roll back all tables.
     if not USING_POSTGRES:
         try:
             conn.execute("ALTER TABLE scores ADD COLUMN source TEXT DEFAULT 'stored'")
