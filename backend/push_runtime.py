@@ -29,6 +29,8 @@ VAPID_PRIVATE_KEY = os.getenv("NORDICSIGNAL_VAPID_PRIVATE_KEY", "").strip()
 VAPID_SUBJECT = os.getenv("NORDICSIGNAL_VAPID_SUBJECT", "mailto:nordicsignal@example.invalid").strip()
 DISPATCH_INTERVAL_SECONDS = 60
 _MAX_EVENTS_PER_CYCLE = 12
+_MAX_DELIVERY_ATTEMPTS = 3
+_RETRY_DELAY_SECONDS = 180
 _DISPATCH_STARTED = False
 _DISPATCH_LOCK = threading.Lock()
 
@@ -73,6 +75,14 @@ def _ensure_schema():
           endpoint_hash TEXT NOT NULL,
           status TEXT NOT NULL,
           created_at TEXT NOT NULL,
+          PRIMARY KEY(event_key,endpoint_hash)
+        );
+        CREATE TABLE IF NOT EXISTS push_delivery_attempts (
+          event_key TEXT NOT NULL,
+          endpoint_hash TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL DEFAULT 1,
+          last_status TEXT NOT NULL,
+          last_attempt_at TEXT NOT NULL,
           PRIMARY KEY(event_key,endpoint_hash)
         );
         """)
@@ -139,11 +149,63 @@ def _subscriptions():
         conn.close()
 
 
+def _retryable_delivery_status(status):
+    text = str(status or "").strip().lower()
+    if text == "delivery_error":
+        return True
+    if not text.startswith("http_"):
+        return False
+    try:
+        code = int(text.split("_", 1)[1])
+    except (TypeError, ValueError):
+        return False
+    return code in {408, 425, 429} or 500 <= code <= 599
+
+
 def _delivered(event_key, endpoint_hash):
     conn = connect()
     try:
-        row = conn.execute("SELECT 1 FROM push_deliveries WHERE event_key=? AND endpoint_hash=?", (event_key, endpoint_hash)).fetchone()
-        return bool(row)
+        row = conn.execute("SELECT status FROM push_deliveries WHERE event_key=? AND endpoint_hash=?", (event_key, endpoint_hash)).fetchone()
+        if not row:
+            return False
+        return not _retryable_delivery_status(row["status"])
+    finally:
+        conn.close()
+
+
+def _retry_allowed(event_key, endpoint_hash):
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT attempt_count,last_attempt_at FROM push_delivery_attempts WHERE event_key=? AND endpoint_hash=?",
+            (event_key, endpoint_hash),
+        ).fetchone()
+        if not row:
+            return True
+        if int(row["attempt_count"] or 0) >= _MAX_DELIVERY_ATTEMPTS:
+            return False
+        try:
+            last_attempt = datetime.fromisoformat(str(row["last_attempt_at"]))
+            if last_attempt.tzinfo is None:
+                last_attempt = last_attempt.replace(tzinfo=timezone.utc)
+            elapsed = (datetime.now(timezone.utc) - last_attempt.astimezone(timezone.utc)).total_seconds()
+            return elapsed >= _RETRY_DELAY_SECONDS
+        except (TypeError, ValueError):
+            return True
+    finally:
+        conn.close()
+
+
+def _record_attempt(event_key, endpoint_hash, status):
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT INTO push_delivery_attempts(event_key,endpoint_hash,attempt_count,last_status,last_attempt_at) VALUES(?,?,1,?,?) "
+            "ON CONFLICT(event_key,endpoint_hash) DO UPDATE SET "
+            "attempt_count=push_delivery_attempts.attempt_count+1,last_status=excluded.last_status,last_attempt_at=excluded.last_attempt_at",
+            (event_key, endpoint_hash, str(status or "unknown"), _now()),
+        )
+        conn.commit()
     finally:
         conn.close()
 
@@ -151,8 +213,11 @@ def _delivered(event_key, endpoint_hash):
 def _record_delivery(event_key, endpoint_hash, status):
     conn = connect()
     try:
-        if not conn.execute("SELECT 1 FROM push_deliveries WHERE event_key=? AND endpoint_hash=?", (event_key, endpoint_hash)).fetchone():
-            conn.execute("INSERT INTO push_deliveries(event_key,endpoint_hash,status,created_at) VALUES(?,?,?,?)", (event_key, endpoint_hash, status, _now()))
+        conn.execute(
+            "INSERT INTO push_deliveries(event_key,endpoint_hash,status,created_at) VALUES(?,?,?,?) "
+            "ON CONFLICT(event_key,endpoint_hash) DO UPDATE SET status=excluded.status,created_at=excluded.created_at",
+            (event_key, endpoint_hash, status, _now()),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -315,9 +380,13 @@ def dispatch_once():
                 continue
             if _delivered(event["event_key"], sub["endpoint_hash"]):
                 continue
+            if not _retry_allowed(event["event_key"], sub["endpoint_hash"]):
+                continue
             attempted += 1
             ok, status = _send(sub, payload)
-            _record_delivery(event["event_key"], sub["endpoint_hash"], status)
+            _record_attempt(event["event_key"], sub["endpoint_hash"], status)
+            if ok or not _retryable_delivery_status(status):
+                _record_delivery(event["event_key"], sub["endpoint_hash"], status)
             if ok:
                 sent += 1
     return {"status":"ok","subscriptions":len(subs),"events":len(events),"attempted":attempted,"sent":sent}
@@ -359,6 +428,7 @@ def push_status():
         "backend_awake_required":True,
         "opportunity_push":True,
         "opportunity_policy":"state_transition_only; early/high always; watch requires strong extra evidence",
+        "delivery_retry_policy":f"transient-only; max {_MAX_DELIVERY_ATTEMPTS} attempts; {_RETRY_DELAY_SECONDS}s cooldown",
         "note":"Real Web Push works for installed iPhone PWAs when VAPID secrets are configured. A sleeping backend cannot dispatch until it wakes.",
         "generated_at":_now(),
     }
