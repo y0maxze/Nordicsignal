@@ -56,3 +56,57 @@ def test_cache_is_safe_under_parallel_reads():
         thread.join()
 
     assert not errors
+
+
+def test_parallel_cache_miss_runs_loader_once():
+    calls = []
+    start = threading.Barrier(12)
+    results = []
+
+    def load():
+        calls.append(1)
+        time.sleep(0.05)
+        return {"value": 42}
+
+    def worker():
+        start.wait()
+        results.append(ttl_cached("stampede", 60, load))
+
+    threads = [threading.Thread(target=worker) for _ in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(calls) == 1
+    assert len(results) == 12
+    assert all(result == {"value": 42} for result in results)
+
+
+def test_failed_loader_does_not_deadlock_followers():
+    attempts = []
+    start = threading.Barrier(2)
+    outcomes = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) == 1:
+            time.sleep(0.03)
+            raise RuntimeError("temporary")
+        return "ok"
+
+    def worker():
+        start.wait()
+        try:
+            outcomes.append(ttl_cached("flaky", 60, flaky))
+        except RuntimeError:
+            outcomes.append("failed")
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes) == ["failed", "ok"]
+    assert len(attempts) == 2
