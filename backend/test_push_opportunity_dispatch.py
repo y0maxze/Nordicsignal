@@ -77,7 +77,9 @@ class OpportunityPushDispatchTests(unittest.TestCase):
             patch.object(push, "_subscriptions", return_value=[subscription]),
             patch.object(push, "_event_rows", return_value=[event]),
             patch.object(push, "_delivered", return_value=False),
+            patch.object(push, "_retry_allowed", return_value=True),
             patch.object(push, "_send", return_value=(True, "sent")) as sender,
+            patch.object(push, "_record_attempt") as attempt_recorder,
             patch.object(push, "_record_delivery") as recorder,
         ):
             result = push.dispatch_once()
@@ -86,6 +88,7 @@ class OpportunityPushDispatchTests(unittest.TestCase):
         self.assertEqual(result["attempted"], 1)
         self.assertEqual(result["sent"], 1)
         sender.assert_called_once()
+        attempt_recorder.assert_called_once_with("opportunity:42", "abc", "sent")
         recorder.assert_called_once_with("opportunity:42", "abc", "sent")
 
     def test_dispatch_once_deduplicates_already_delivered_event(self):
@@ -106,7 +109,89 @@ class OpportunityPushDispatchTests(unittest.TestCase):
             patch.object(push, "_subscriptions", return_value=[subscription]),
             patch.object(push, "_event_rows", return_value=[event]),
             patch.object(push, "_delivered", return_value=True),
+            patch.object(push, "_retry_allowed") as retry_allowed,
             patch.object(push, "_send") as sender,
+            patch.object(push, "_record_attempt") as attempt_recorder,
+            patch.object(push, "_record_delivery") as recorder,
+        ):
+            result = push.dispatch_once()
+
+        self.assertEqual(result["attempted"], 0)
+        self.assertEqual(result["sent"], 0)
+        retry_allowed.assert_not_called()
+        sender.assert_not_called()
+        attempt_recorder.assert_not_called()
+        recorder.assert_not_called()
+
+    def test_transient_failure_records_attempt_but_not_terminal_delivery(self):
+        subscription = {"endpoint_hash": "abc", "created_at": "2026-08-30T03:00:00+00:00"}
+        event = {
+            "event_key": "trend:91",
+            "title": "DNB · Høy aktivitet",
+            "body": "volum 2.0× normalt",
+            "url": "/stock?ticker=DNB",
+            "created_at": "2026-08-30T03:10:00+00:00",
+        }
+        with (
+            patch.object(push, "_ready", return_value=True),
+            patch.object(push, "_subscriptions", return_value=[subscription]),
+            patch.object(push, "_event_rows", return_value=[event]),
+            patch.object(push, "_delivered", return_value=False),
+            patch.object(push, "_retry_allowed", return_value=True),
+            patch.object(push, "_send", return_value=(False, "http_503")),
+            patch.object(push, "_record_attempt") as attempt_recorder,
+            patch.object(push, "_record_delivery") as recorder,
+        ):
+            result = push.dispatch_once()
+
+        self.assertEqual(result["attempted"], 1)
+        self.assertEqual(result["sent"], 0)
+        attempt_recorder.assert_called_once_with("trend:91", "abc", "http_503")
+        recorder.assert_not_called()
+
+    def test_permanent_failure_is_terminal_for_event_endpoint_pair(self):
+        subscription = {"endpoint_hash": "abc", "created_at": "2026-08-30T03:00:00+00:00"}
+        event = {
+            "event_key": "trend:92",
+            "title": "DNB · Signalendring",
+            "body": "ny signalstatus",
+            "url": "/stock?ticker=DNB",
+            "created_at": "2026-08-30T03:10:00+00:00",
+        }
+        with (
+            patch.object(push, "_ready", return_value=True),
+            patch.object(push, "_subscriptions", return_value=[subscription]),
+            patch.object(push, "_event_rows", return_value=[event]),
+            patch.object(push, "_delivered", return_value=False),
+            patch.object(push, "_retry_allowed", return_value=True),
+            patch.object(push, "_send", return_value=(False, "http_401")),
+            patch.object(push, "_record_attempt") as attempt_recorder,
+            patch.object(push, "_record_delivery") as recorder,
+        ):
+            result = push.dispatch_once()
+
+        self.assertEqual(result["attempted"], 1)
+        self.assertEqual(result["sent"], 0)
+        attempt_recorder.assert_called_once_with("trend:92", "abc", "http_401")
+        recorder.assert_called_once_with("trend:92", "abc", "http_401")
+
+    def test_retry_budget_blocks_dispatch_without_calling_sender(self):
+        subscription = {"endpoint_hash": "abc", "created_at": "2026-08-30T03:00:00+00:00"}
+        event = {
+            "event_key": "trend:93",
+            "title": "DNB · Høy aktivitet",
+            "body": "volum 2.0× normalt",
+            "url": "/stock?ticker=DNB",
+            "created_at": "2026-08-30T03:10:00+00:00",
+        }
+        with (
+            patch.object(push, "_ready", return_value=True),
+            patch.object(push, "_subscriptions", return_value=[subscription]),
+            patch.object(push, "_event_rows", return_value=[event]),
+            patch.object(push, "_delivered", return_value=False),
+            patch.object(push, "_retry_allowed", return_value=False),
+            patch.object(push, "_send") as sender,
+            patch.object(push, "_record_attempt") as attempt_recorder,
             patch.object(push, "_record_delivery") as recorder,
         ):
             result = push.dispatch_once()
@@ -114,6 +199,7 @@ class OpportunityPushDispatchTests(unittest.TestCase):
         self.assertEqual(result["attempted"], 0)
         self.assertEqual(result["sent"], 0)
         sender.assert_not_called()
+        attempt_recorder.assert_not_called()
         recorder.assert_not_called()
 
 
