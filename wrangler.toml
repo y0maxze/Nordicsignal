@@ -4,7 +4,7 @@ compatibility_date = "2026-08-22"
 workers_dev = true
 
 [triggers]
-crons = ["*/10 * * * *"]
+crons = ["*/10 * * * *", "17 * * * *"]
 
 [assets]
 directory = "./frontend"
