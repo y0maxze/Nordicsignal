@@ -43,11 +43,19 @@
   function organizeStockTools(){
     if(!path.startsWith('/stock'))return;const tabs=document.querySelector('.tabs');if(!tabs)return;tabs.classList.add('nsToolRail');
     if(!document.querySelector('.nsToolHeader'))tabs.insertAdjacentHTML('beforebegin','<div class="nsToolHeader"><div><span class="muted">VERKTØY</span><h2>Analyser valgt aksje</h2></div><span class="muted">Velg verktøy uten å forlate aksjen</span></div>');
-    [...tabs.querySelectorAll('[data-tab]')].forEach(btn=>{const key=btn.dataset.tab;if(TOOL_LABELS[key])btn.textContent=TOOL_LABELS[key];});TOOL_ORDER.forEach(key=>{const btn=tabs.querySelector(`[data-tab="${key}"]`);if(btn)tabs.appendChild(btn);});
+    const current=[...tabs.querySelectorAll('[data-tab]')];
+    current.forEach(btn=>{const key=btn.dataset.tab;if(TOOL_LABELS[key]&&btn.textContent!==TOOL_LABELS[key])btn.textContent=TOOL_LABELS[key];});
+    const rank=btn=>{const i=TOOL_ORDER.indexOf(btn.dataset.tab);return i===-1?TOOL_ORDER.length:i;};
+    const desired=[...current].sort((a,b)=>rank(a)-rank(b));
+    const needsReorder=desired.some((btn,index)=>btn!==current[index]);
+    if(needsReorder){const fragment=document.createDocumentFragment();desired.forEach(btn=>fragment.appendChild(btn));tabs.appendChild(fragment);}
     const title=document.querySelector('.top .muted');if(title)title.textContent='NORDICSIGNAL · AKSJE';const name=document.getElementById('name')?.textContent;if(name&&name!=='Loading…')document.title=name+' · NordicSignal';
   }
 
-  function stockObserver(){if(!path.startsWith('/stock'))return;organizeStockTools();const tabs=document.querySelector('.tabs');if(!tabs)return;new MutationObserver(()=>organizeStockTools()).observe(tabs,{childList:true,subtree:false});}
+  function stockObserver(){
+    if(!path.startsWith('/stock'))return;organizeStockTools();const tabs=document.querySelector('.tabs');if(!tabs)return;
+    new MutationObserver(()=>organizeStockTools()).observe(tabs,{childList:true,subtree:false});
+  }
 
   function renamePlainLanguage(){
     const map={'Market Dashboard':'Oversikt','Live signal-driven stock intelligence':'Det viktigste først. Åpne en aksje for alle verktøy.','Stock Radar':'Signaler','Watchlist':'Følger','Insider Activity':'Insider','Short Radar':'Short','Stock Intelligence':'Aksjeanalyse','Signal Performance':'Historikk','Investment Check':'Sjekkliste'};
