@@ -26,6 +26,13 @@ def test_stock_tool_shell_keeps_core_tools_available():
         assert f"'{tool}'" in shell
 
 
+def test_stock_tool_reorder_is_idempotent():
+    shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
+    assert "const needsReorder=desired.some" in shell
+    assert "if(needsReorder)" in shell
+    assert "TOOL_ORDER.forEach(key=>" not in shell
+
+
 def test_theme_is_visual_only():
     theme = (FRONTEND / "theme_mode.js").read_text(encoding="utf-8")
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
