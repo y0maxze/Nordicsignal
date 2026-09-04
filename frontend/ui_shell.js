@@ -33,7 +33,9 @@
   }
 
   function activateSignalsView(){
-    if(path!=='/app'&&path!=='/'&&path!=='/dashboard')return;if(new URLSearchParams(location.search).get('view')!=='signals')return;let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return;}if(tries++<20)setTimeout(run,100);};run();
+    if(path!=='/app'&&path!=='/'&&path!=='/dashboard')return;if(new URLSearchParams(location.search).get('view')!=='signals')return;
+    let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return true;}if(tries++<20)setTimeout(run,100);return false;};run();
+    setTimeout(()=>{if(typeof window.renderRadar==='function')window.renderRadar();},900);
   }
 
   const TOOL_ORDER=['overview','opportunity','readiness','pressure','insider','news','reports','dividend','short','evidence','backtest','paper'];
