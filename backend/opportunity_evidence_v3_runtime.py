@@ -12,6 +12,7 @@ import opportunity_tracking_runtime as tracking
 import opportunity_performance_v2_runtime as performance_v2
 
 HORIZONS = tuple(performance_v2.HORIZONS)
+_ORIGINAL_SETTLE_FORWARD_RETURNS = tracking.settle_forward_returns
 
 
 def _ensure_schema():
@@ -100,6 +101,13 @@ def settle_path_evidence(ticker, rows=None):
         conn.close()
 
 
+def settle_forward_returns_with_path(ticker, rows=None):
+    """Preserve the existing forward-return settlement and add path evidence."""
+    settled = _ORIGINAL_SETTLE_FORWARD_RETURNS(ticker, rows=rows)
+    settle_path_evidence(ticker, rows=rows)
+    return settled
+
+
 def _risk_stats(rows):
     drawdowns = [float(row["max_drawdown_pct"]) for row in rows if row.get("max_drawdown_pct") is not None]
     runups = [float(row["max_runup_pct"]) for row in rows if row.get("max_runup_pct") is not None]
@@ -150,6 +158,7 @@ def opportunity_performance(limit=100):
 
 def install():
     _ensure_schema()
+    tracking.settle_forward_returns = settle_forward_returns_with_path
     tracking.opportunity_performance = opportunity_performance
 
 
