@@ -11,6 +11,10 @@
     const next=theme==='light'?'light':'dark';
     root.dataset.theme=next;
     root.style.colorScheme=next;
+    const themeColor=next==='light'?'#f4f4f2':'#070707';
+    let meta=document.querySelector('meta[name="theme-color"]');
+    if(!meta){meta=document.createElement('meta');meta.name='theme-color';document.head.appendChild(meta)}
+    meta.content=themeColor;
     document.querySelectorAll('[data-ns-theme-toggle]').forEach(btn=>{
       btn.setAttribute('aria-label',next==='dark'?'Bytt til lyst tema':'Bytt til mørkt tema');
       btn.setAttribute('title',next==='dark'?'Lyst tema':'Mørkt tema');
