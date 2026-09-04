@@ -5,6 +5,8 @@ or the aggregate stock score. It compares settled Opportunity returns with OSEBX
 for the same trading-day horizons and exposes excess-return diagnostics.
 """
 from statistics import median
+import threading
+import time
 
 import opportunity_tracking_runtime as tracking
 import opportunity_evidence_v3_runtime as evidence_v3
@@ -13,6 +15,9 @@ import portfolio_benchmark_runtime as benchmarks
 HORIZONS = tuple(evidence_v3.HORIZONS)
 BENCHMARK_ID = "OSEBX"
 MIN_SAMPLE = 20
+BENCHMARK_CACHE_SECONDS = 10 * 60
+_BENCHMARK_CACHE_LOCK = threading.Lock()
+_BENCHMARK_CACHE = {"expires": 0.0, "rows": None}
 
 
 def _ensure_schema():
@@ -34,11 +39,30 @@ def _ensure_schema():
         conn.close()
 
 
-def _benchmark_rows():
+def _load_benchmark_rows():
     provider = benchmarks.YahooProvider()
     definition = benchmarks.BENCHMARKS[BENCHMARK_ID]
     _, rows = benchmarks._first_working(provider, definition["symbols"], "1y")
     return [{"date": d, "close": float(v)} for d, v in rows]
+
+
+def _benchmark_rows(force=False):
+    now = time.monotonic()
+    with _BENCHMARK_CACHE_LOCK:
+        cached = _BENCHMARK_CACHE.get("rows")
+        expires = float(_BENCHMARK_CACHE.get("expires") or 0.0)
+        if not force and cached is not None and expires > now:
+            return cached
+        rows = _load_benchmark_rows()
+        _BENCHMARK_CACHE["rows"] = rows
+        _BENCHMARK_CACHE["expires"] = time.monotonic() + BENCHMARK_CACHE_SECONDS
+        return rows
+
+
+def _reset_benchmark_cache_for_tests():
+    with _BENCHMARK_CACHE_LOCK:
+        _BENCHMARK_CACHE["rows"] = None
+        _BENCHMARK_CACHE["expires"] = 0.0
 
 
 def settle_benchmark_evidence(ticker, benchmark_rows=None):
