@@ -4,6 +4,7 @@
   function addStyles(){
     if(document.getElementById('nsUiShellStyles'))return;
     const s=document.createElement('style');s.id='nsUiShellStyles';s.textContent=`
+      .nsOpportunityMetric,.nsOpportunityReason,.nsEvidenceMetric{background:var(--surface-2,#151515)!important;border-color:var(--line,#292929)!important}.nsReadyBrief{color:var(--t,#f5f5f5)!important}.nsOppWatch,.nsEvidenceWarn{color:var(--y,#e6b94b)!important}
       .nsMobileNav .nsMobileMoreToggle{border:0;background:transparent;color:var(--m,#9c9c9c);padding:10px 2px 9px;text-align:center;font:700 9px Inter,system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer}.nsMobileNav .nsMobileMoreToggle .nsMobileNavIcon{display:block;font-size:16px;line-height:18px;margin-bottom:3px;color:var(--t,#eaeaea)}
       .nsMobileMoreMenu{position:fixed;z-index:2147483050;left:12px;right:12px;bottom:88px;padding:10px;background:var(--surface,#0f0f0f);border:1px solid var(--line,#292929);border-radius:16px;box-shadow:var(--shadow,0 18px 42px rgba(0,0,0,.45));display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.nsMobileMoreMenu[hidden]{display:none}.nsMobileMoreMenu a{padding:11px 12px;border-radius:10px;text-decoration:none!important;background:var(--surface-2,#151515);color:var(--t,#f5f5f5)!important;font-weight:700;font-size:12px}
       @media(max-width:900px){.nsMobileNav{grid-template-columns:repeat(5,1fr)!important}.nsMobileNav a,.nsMobileNav .nsMobileMoreToggle{font-size:9px!important}.nsAlertShortcut{bottom:96px!important}.top{align-items:center!important}.top>.nsThemeToggle{display:inline-grid!important;place-items:center!important}}
@@ -34,8 +35,7 @@
 
   function activateSignalsView(){
     if(path!=='/app'&&path!=='/'&&path!=='/dashboard')return;if(new URLSearchParams(location.search).get('view')!=='signals')return;
-    let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return true;}if(tries++<20)setTimeout(run,100);return false;};run();
-    setTimeout(()=>{if(typeof window.renderRadar==='function')window.renderRadar();},900);
+    let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return true;}if(tries++<20)setTimeout(run,100);return false;};run();setTimeout(()=>{if(typeof window.renderRadar==='function')window.renderRadar();},900);
   }
 
   const TOOL_ORDER=['overview','opportunity','readiness','pressure','insider','news','reports','dividend','short','evidence','backtest','paper'];
