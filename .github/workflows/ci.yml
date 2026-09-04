@@ -67,9 +67,9 @@ jobs:
         run: |
           set -e
           for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
-          for file in production.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
-          grep -q 'startCommand: uvicorn production:app' render.yaml
-          grep -q 'uvicorn production:app' DEPLOY.md
+          for file in production.py api_entrypoint.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
+          grep -q 'startCommand: uvicorn api_entrypoint:app' render.yaml
+          grep -q 'uvicorn api_entrypoint:app' DEPLOY.md
           grep -q '\["/mobile", "/mobile.html"\]' worker.js
           grep -q '\["/insider", "/insider.html"\]' worker.js
           grep -q '\["/stock", "/stock.html"\]' worker.js

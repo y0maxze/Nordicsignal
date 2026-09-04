@@ -2,18 +2,20 @@
 
 NordicSignal uses two production services:
 
-- **Cloudflare Workers + Static Assets** serves `frontend/` through `worker.js`.
+- **Cloudflare Workers + Static Assets** serves `frontend/` through `scheduler_worker.js` / `worker.js`.
 - **Render** runs the FastAPI application under `backend/`.
 
 ## Cloudflare Workers
 
 The source of truth is `wrangler.toml`:
 
-- `main = "worker.js"`
+- `main = "scheduler_worker.js"`
 - `assets.directory = "./frontend"`
 - `assets.binding = "ASSETS"`
 - `assets.run_worker_first = true`
 - explicit application routes are handled by `worker.js`
+- Opportunity autoscan runs every 10 minutes
+- authenticated provider-wide market refresh runs hourly at minute 17
 
 Production deploy command:
 
@@ -52,10 +54,10 @@ pip install -r requirements.txt
 Start:
 
 ```bash
-uvicorn production:app --host 0.0.0.0 --port $PORT
+uvicorn api_entrypoint:app --host 0.0.0.0 --port $PORT
 ```
 
-`production:app` is intentional: it replaces the blocking development startup handler with the non-blocking production warmup, installs production indexes, and removes exact shadowed route duplicates.
+`api_entrypoint:app` is intentional. It imports the hardened production route/runtime configuration but replaces deploy-time provider warmup with database/schema/index initialization only. Provider-wide market work is owned by the authenticated Cloudflare cron, while manual/scheduled `/api/refresh` still uses the bounded production refresh implementation and its cooldown guard.
 
 Backend dependencies are pinned in `backend/requirements.txt` so CI and Render use the same tested versions.
 
@@ -76,6 +78,7 @@ After every backend deployment verify at least:
 - `/api/market-pressure/LSG`
 - `/api/paper/portfolio`
 - `/api/paper/dashboard`
+- `/api/opportunity-performance`
 
 ## CI gate
 
