@@ -24,7 +24,8 @@ def api_startup():
 
 
 # Importing production registers its safer bounded refresh route behavior, but ASGI
-# startup has not executed yet. Replace only the warmup startup handler.
+# startup has not executed yet. Replace only the warmup startup handler; manual and
+# scheduled /api/refresh still use production's bounded, authenticated refresh path.
 try:
     app.router.on_startup.remove(production.production_startup)
 except ValueError:
