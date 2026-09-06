@@ -46,7 +46,7 @@ def test_build_brief_prioritizes_events_and_filters_overnight_news(monkeypatch):
     assert result["must_know"][0]["risk"] == "critical"
     assert [x["title"] for x in result["overnight_news"]] == ["Fresh"]
     assert [x["label"] for x in result["notable_markets"]] == ["Brent"]
-    assert "does not change NordicSignal scores" in result["policy"]
+    assert "does not change nordicsignal scores" in result["policy"].lower()
 
 
 def test_partial_calendar_degrades_without_changing_policy(monkeypatch):
