@@ -66,11 +66,12 @@ jobs:
       - name: Check production assets and routes
         run: |
           set -e
-          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
-          for file in production.py api_entrypoint.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
+          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html morning.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
+          for file in production.py api_entrypoint.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py morning_brief_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
           grep -q 'startCommand: uvicorn api_entrypoint:app' render.yaml
           grep -q 'uvicorn api_entrypoint:app' DEPLOY.md
           grep -q '\["/mobile", "/mobile.html"\]' worker.js
+          grep -q '\["/morning", "/morning.html"\]' worker.js
           grep -q '\["/insider", "/insider.html"\]' worker.js
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/intelligence", "/intelligence.html"\]' worker.js
@@ -104,6 +105,7 @@ jobs:
           grep -q '/api/ops-readiness' frontend/mobile.html
           if grep -q '/api/holdings/events\|/api/holdings/calendar' frontend/portfolio_dashboard.js; then echo 'Desktop home must use aggregated dashboard API'; exit 1; fi
           if grep -q '/api/holdings/events\|/api/insider-market\|/api/radar\|/api/holdings/calendar' frontend/mobile.html; then echo 'Mobile home must use aggregated dashboard API'; exit 1; fi
+          grep -q '/api/morning-brief' frontend/morning.html
           grep -q '/api/calendar' frontend/calendar.html
           grep -q '/api/readiness/' frontend/readiness.html
           grep -q '/api/readiness/' frontend/stock_readiness.js
@@ -124,7 +126,7 @@ jobs:
           grep -q 'theme.css' worker.js
           grep -q 'stock_extras.js' worker.js
           grep -q 'Market Pressure' frontend/stock_extras.js
-          grep -q "CACHE_NAME='nordicsignal-shell-v4'" frontend/sw.js
+          grep -q "CACHE_NAME='nordicsignal-shell-v5'" frontend/sw.js
           grep -q "addEventListener('push'" frontend/sw.js
           grep -q '/api/push/public-key' frontend/mobile_shell.js
           grep -q '/api/push/subscribe' frontend/mobile_shell.js
@@ -133,6 +135,8 @@ jobs:
           grep -q 'EURONEXT_INSIDER_TOPIC_ID = "1081"' backend/insider_market_v2_runtime.py
           grep -q 'insider_market_v2_runtime' backend/sitecustomize.py
           grep -q 'insider_company_cleanup_runtime' backend/sitecustomize.py
+          grep -q 'morning_brief_runtime' backend/sitecustomize.py
+          grep -q '/api/morning-brief' backend/morning_brief_runtime.py
           grep -q 'signal_evidence_runtime' backend/sitecustomize.py
           grep -q 'push_runtime' backend/sitecustomize.py
           grep -q 'security_runtime' backend/sitecustomize.py
@@ -161,6 +165,7 @@ jobs:
         run: |
           set -e
           grep -q 'href="/app"' worker.js
+          grep -q 'href="/morning"' worker.js
           grep -q 'nsGlobalHome' worker.js
           grep -q 'href="/calendar"' worker.js
           grep -q 'href="/readiness"' worker.js
@@ -173,6 +178,7 @@ jobs:
           if grep -q 'href="/paper"\|href="/holdings"\|view=insider' frontend/mobile_shell.js; then echo 'Focused mobile shell must not expose desktop-only routes or legacy insider view'; exit 1; fi
           grep -q '"start_url": "/mobile"' frontend/manifest.webmanifest
           grep -q "'/mobile'" frontend/sw.js
+          grep -q "'/morning'" frontend/sw.js
           grep -q "data-tab='pressure'\|data-tab=\"pressure\"\|dataset.tab='pressure'" frontend/stock_extras.js
           grep -q 'data-tab="readiness"' frontend/stock_readiness.js
           if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then echo 'Global search must open instrument intelligence, not Holdings'; exit 1; fi
