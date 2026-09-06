@@ -14,10 +14,20 @@ def test_shared_ui_assets_exist_and_are_cached():
     assert "nordicsignal-theme" in theme
     assert "data-theme" in (FRONTEND / "theme.css").read_text(encoding="utf-8")
     assert "Analyser valgt aksje" in shell
-    assert "Hjem" in shell and "Signaler" in shell and "Portefølje" in shell and "Søk" in shell
+    assert "Hjem" in shell and "Før børs" in shell and "Signaler" in shell and "Portefølje" in shell and "Søk" in shell
+    assert "/morning" in sw
     assert "/theme_mode.js" in sw and "/ui_shell.js" in sw
     assert "loadScript('/theme_mode.js'" in loader
     assert "loadScript('/ui_shell.js'" in loader
+
+
+def test_morning_brief_page_uses_shared_theme_and_api():
+    page = (FRONTEND / "morning.html").read_text(encoding="utf-8")
+    assert "/theme.css" in page
+    assert "/theme_mode.js" in page
+    assert "/ui_shell.js" in page
+    assert "/api/morning-brief" in page
+    assert "Før børs" in page
 
 
 def test_stock_tool_shell_keeps_core_tools_available():

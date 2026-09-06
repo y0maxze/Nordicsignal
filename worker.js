@@ -8,6 +8,8 @@ const ASSET_ROUTES = new Map([
   ["/dashboard/", "/index.html"],
   ["/mobile", "/mobile.html"],
   ["/mobile/", "/mobile.html"],
+  ["/morning", "/morning.html"],
+  ["/morning/", "/morning.html"],
   ["/alerts", "/alerts.html"],
   ["/alerts/", "/alerts.html"],
   ["/notifications", "/alerts.html"],
@@ -94,7 +96,7 @@ function enhanceHtml(html, pathname) {
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
   if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
-    const navExtras = '<a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
+    const navExtras = '<a href="/morning">Før børs</a><a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
     if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
