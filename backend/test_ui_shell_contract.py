@@ -30,6 +30,24 @@ def test_morning_brief_page_uses_shared_theme_and_api():
     assert "Før børs" in page
 
 
+def test_morning_brief_rows_open_related_stock():
+    page = (FRONTEND / "morning.html").read_text(encoding="utf-8")
+    assert "'/stock?ticker='" in page
+    assert "data-stock-url" in page
+    assert "Trykk for å åpne aksjen" in page
+    assert "data-source-link" in page
+    assert "e.target.closest('[data-source-link]')" in page
+
+
+def test_mobile_bottom_nav_is_pinned_to_viewport():
+    shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
+    assert "position:fixed!important" in shell
+    assert "bottom:0!important" in shell
+    assert "env(safe-area-inset-bottom)" in shell
+    assert "translate3d(0,0,0)" in shell
+    assert "contain:layout paint" in shell
+
+
 def test_stock_tool_shell_keeps_core_tools_available():
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
     for tool in ("overview", "opportunity", "readiness", "pressure", "insider", "news", "reports", "dividend", "short", "evidence", "backtest", "paper"):
