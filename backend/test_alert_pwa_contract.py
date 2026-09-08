@@ -10,12 +10,13 @@ def _read(relative_path):
 
 def test_alert_inbox_is_part_of_versioned_pwa_shell():
     sw = _read("frontend/sw.js")
-    assert "CACHE_NAME='nordicsignal-shell-v5'" in sw
+    assert "CACHE_NAME='nordicsignal-shell-v6'" in sw
     for asset in (
         "'/alerts'",
         "'/alerts.js'",
         "'/alert_local_capture.js'",
         "'/alert_nav_ui.js'",
+        "'/mobile_nav.js'",
     ):
         assert asset in sw
 
