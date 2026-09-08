@@ -16,6 +16,7 @@ def test_alert_inbox_is_part_of_versioned_pwa_shell():
         "'/alerts.js'",
         "'/alert_local_capture.js'",
         "'/alert_nav_ui.js'",
+        "'/mobile_nav.js'",
     ):
         assert asset in sw
 

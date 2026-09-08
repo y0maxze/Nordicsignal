@@ -5,10 +5,7 @@
     if(document.getElementById('nsUiShellStyles'))return;
     const s=document.createElement('style');s.id='nsUiShellStyles';s.textContent=`
       .nsOpportunityMetric,.nsOpportunityReason,.nsEvidenceMetric{background:var(--surface-2,#151515)!important;border-color:var(--line,#292929)!important}.nsReadyBrief{color:var(--t,#f5f5f5)!important}.nsOppWatch,.nsEvidenceWarn{color:var(--y,#e6b94b)!important}
-      .nsMobileNav .nsMobileMoreToggle{border:0;background:transparent;color:var(--m,#9c9c9c);padding:10px 2px 9px;text-align:center;font:700 9px Inter,system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer}.nsMobileNav .nsMobileMoreToggle .nsMobileNavIcon{display:block;font-size:16px;line-height:18px;margin-bottom:3px;color:var(--t,#eaeaea)}
-      .nsMobileMoreMenu{position:fixed;z-index:2147483050;left:12px;right:12px;bottom:88px;padding:10px;background:var(--surface,#0f0f0f);border:1px solid var(--line,#292929);border-radius:16px;box-shadow:var(--shadow,0 18px 42px rgba(0,0,0,.45));display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.nsMobileMoreMenu[hidden]{display:none}.nsMobileMoreMenu a{padding:11px 12px;border-radius:10px;text-decoration:none!important;background:var(--surface-2,#151515);color:var(--t,#f5f5f5)!important;font-weight:700;font-size:12px}
-      @media(max-width:900px){html,body{overflow-x:hidden!important}.nsMobileNav{display:grid!important;position:fixed!important;z-index:2147483000!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;margin:0!important;grid-template-columns:repeat(6,1fr)!important;padding:6px 6px calc(6px + env(safe-area-inset-bottom))!important;background:var(--surface,#0f0f0f)!important;border:0!important;border-top:1px solid var(--line,#292929)!important;border-radius:0!important;box-shadow:0 -8px 24px rgba(0,0,0,.2)!important;transform:translate3d(0,0,0)!important;-webkit-transform:translate3d(0,0,0)!important;backface-visibility:hidden!important;-webkit-backface-visibility:hidden!important;will-change:transform;contain:layout paint}.nsMobileNav a,.nsMobileNav .nsMobileMoreToggle{font-size:8px!important;min-width:0!important}.nsMobileNav a.active{background:var(--surface-2,#151515)!important;color:var(--t,#f5f5f5)!important}.nsMobileMoreMenu{bottom:calc(78px + env(safe-area-inset-bottom))!important;transform:translate3d(0,0,0)}.nsAlertShortcut{bottom:96px!important}.top{align-items:center!important}.top>.nsThemeToggle{display:inline-grid!important;place-items:center!important}}
-      @media(min-width:901px){.nsMobileMoreMenu{display:none!important}}
+      @media(max-width:900px){.nsAlertShortcut{bottom:96px!important}.top{align-items:center!important}.top>.nsThemeToggle{display:inline-grid!important;place-items:center!important}}
     `;document.head.appendChild(s);
   }
 
@@ -24,15 +21,6 @@
 
   function installTopTheme(){
     if(document.querySelector('[data-slot="top"]'))return;const top=document.querySelector('.top');if(top)top.insertAdjacentHTML('beforeend',themeButton('top'));else document.body.insertAdjacentHTML('afterbegin',`<div class="nsFloatingTheme">${themeButton('top')}</div>`);
-  }
-
-  function installMobileNav(){
-    const nav=document.getElementById('nsMobileNav');if(!nav||nav.dataset.nsSimplified==='1')return;nav.dataset.nsSimplified='1';
-    const mobileActive=path.startsWith('/morning')?'morning':path.startsWith('/holdings')?'portfolio':path.startsWith('/stock')||path.startsWith('/intelligence')||path.startsWith('/instrument')?'search':location.search.includes('view=signals')?'signals':'home';
-    const cls=name=>mobileActive===name?' class="active"':'';
-    nav.innerHTML=`<a href="/mobile"${cls('home')}><span class="nsMobileNavIcon">⌂</span>Hjem</a><a href="/morning"${cls('morning')}><span class="nsMobileNavIcon">☀</span>Før børs</a><a href="/app?view=signals"${cls('signals')}><span class="nsMobileNavIcon">↗</span>Signaler</a><a href="/holdings"${cls('portfolio')}><span class="nsMobileNavIcon">◇</span>Portefølje</a><a href="/stock"${cls('search')}><span class="nsMobileNavIcon">⌕</span>Søk</a><button class="nsMobileMoreToggle" type="button"><span class="nsMobileNavIcon">•••</span>Mer</button>`;
-    if(!document.getElementById('nsMobileMoreMenu'))document.body.insertAdjacentHTML('beforeend','<div id="nsMobileMoreMenu" class="nsMobileMoreMenu" hidden><a href="/alerts">Varsler</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/development">System</a><a href="/legal">Vilkår & risiko</a></div>');
-    const btn=nav.querySelector('.nsMobileMoreToggle'),menu=document.getElementById('nsMobileMoreMenu');btn&&btn.addEventListener('click',()=>{menu.hidden=!menu.hidden;});
   }
 
   function activateSignalsView(){
@@ -64,6 +52,6 @@
     document.querySelectorAll('h1,h2,.sub,.label').forEach(el=>{const text=el.textContent.trim();if(map[text])el.textContent=map[text];});
   }
 
-  function install(){addStyles();installGlobalNav();installTopTheme();activateSignalsView();stockObserver();renamePlainLanguage();setTimeout(installMobileNav,50);}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();setTimeout(installMobileNav,300);setTimeout(organizeStockTools,250);setTimeout(organizeStockTools,900);setTimeout(renamePlainLanguage,350);
+  function install(){addStyles();installGlobalNav();installTopTheme();activateSignalsView();stockObserver();renamePlainLanguage();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();setTimeout(organizeStockTools,250);setTimeout(organizeStockTools,900);setTimeout(renamePlainLanguage,350);
 })();
