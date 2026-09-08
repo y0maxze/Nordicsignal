@@ -1,57 +1,15 @@
 (function(){
   const path=location.pathname;
-
-  function addStyles(){
-    if(document.getElementById('nsUiShellStyles'))return;
-    const s=document.createElement('style');s.id='nsUiShellStyles';s.textContent=`
-      .nsOpportunityMetric,.nsOpportunityReason,.nsEvidenceMetric{background:var(--surface-2,#151515)!important;border-color:var(--line,#292929)!important}.nsReadyBrief{color:var(--t,#f5f5f5)!important}.nsOppWatch,.nsEvidenceWarn{color:var(--y,#e6b94b)!important}
-      @media(max-width:900px){.nsAlertShortcut{bottom:96px!important}.top{align-items:center!important}.top>.nsThemeToggle{display:inline-grid!important;place-items:center!important}}
-    `;document.head.appendChild(s);
-  }
-
-  function themeButton(slot){return `<button class="nsThemeToggle" data-ns-theme-toggle data-slot="${slot}" type="button" aria-label="Bytt tema">☀︎</button>`;}
-
-  function installGlobalNav(){
-    const side=document.querySelector('.side');const nav=side&&side.querySelector('nav');if(!side||!nav||nav.dataset.nsSimplified==='1')return;
-    nav.dataset.nsSimplified='1';nav.innerHTML=`<a href="/app" data-ns-nav="home">Hjem</a><a href="/morning" data-ns-nav="morning">Før børs</a><a href="/app?view=signals" data-ns-nav="signals">Signaler</a><a href="/holdings" data-ns-nav="portfolio">Portefølje</a><a href="/stock" data-ns-nav="search">Søk</a><button class="nsMoreToggle" type="button" aria-expanded="false">Mer</button><div class="nsMoreMenu" hidden><a href="/alerts">Varsler</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/development">System</a><a href="/legal">Vilkår & risiko</a></div>`;
-    if(!side.querySelector('.nsSideFooter'))side.insertAdjacentHTML('beforeend',`<div class="nsSideFooter"><span>NordicSignal</span>${themeButton('side')}</div>`);
-    const more=nav.querySelector('.nsMoreToggle'),menu=nav.querySelector('.nsMoreMenu');more&&more.addEventListener('click',()=>{const open=more.getAttribute('aria-expanded')==='true';more.setAttribute('aria-expanded',String(!open));menu.hidden=open;});
-    const active=path.startsWith('/morning')?'morning':path.startsWith('/holdings')?'portfolio':path.startsWith('/stock')||path.startsWith('/intelligence')||path.startsWith('/instrument')?'search':location.search.includes('view=signals')?'signals':'home';nav.querySelector(`[data-ns-nav="${active}"]`)?.classList.add('active');
-  }
-
-  function installTopTheme(){
-    if(document.querySelector('[data-slot="top"]'))return;const top=document.querySelector('.top');if(top)top.insertAdjacentHTML('beforeend',themeButton('top'));else document.body.insertAdjacentHTML('afterbegin',`<div class="nsFloatingTheme">${themeButton('top')}</div>`);
-  }
-
-  function activateSignalsView(){
-    if(path!=='/app'&&path!=='/'&&path!=='/dashboard')return;if(new URLSearchParams(location.search).get('view')!=='signals')return;
-    let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return true;}if(tries++<20)setTimeout(run,100);return false;};run();setTimeout(()=>{if(typeof window.renderRadar==='function')window.renderRadar();},900);
-  }
-
-  const TOOL_ORDER=['overview','opportunity','readiness','pressure','insider','news','reports','dividend','short','evidence','backtest','paper'];
-  const TOOL_LABELS={overview:'Oversikt',opportunity:'Signal',readiness:'Analyse',pressure:'Marked',insider:'Insider',news:'Nyheter',reports:'Rapporter',dividend:'Utbytte',short:'Short',evidence:'Historikk',backtest:'Backtest',paper:'Paper'};
-  function organizeStockTools(){
-    if(!path.startsWith('/stock'))return;const tabs=document.querySelector('.tabs');if(!tabs)return;tabs.classList.add('nsToolRail');
-    if(!document.querySelector('.nsToolHeader'))tabs.insertAdjacentHTML('beforebegin','<div class="nsToolHeader"><div><span class="muted">VERKTØY</span><h2>Analyser valgt aksje</h2></div><span class="muted">Velg verktøy uten å forlate aksjen</span></div>');
-    const current=[...tabs.querySelectorAll('[data-tab]')];
-    current.forEach(btn=>{const key=btn.dataset.tab;if(TOOL_LABELS[key]&&btn.textContent!==TOOL_LABELS[key])btn.textContent=TOOL_LABELS[key];});
-    const rank=btn=>{const i=TOOL_ORDER.indexOf(btn.dataset.tab);return i===-1?TOOL_ORDER.length:i;};
-    const desired=[...current].sort((a,b)=>rank(a)-rank(b));
-    const needsReorder=desired.some((btn,index)=>btn!==current[index]);
-    if(needsReorder){const fragment=document.createDocumentFragment();desired.forEach(btn=>fragment.appendChild(btn));tabs.appendChild(fragment);}
-    const title=document.querySelector('.top .muted');if(title)title.textContent='NORDICSIGNAL · AKSJE';const name=document.getElementById('name')?.textContent;if(name&&name!=='Loading…')document.title=name+' · NordicSignal';
-  }
-
-  function stockObserver(){
-    if(!path.startsWith('/stock'))return;organizeStockTools();const tabs=document.querySelector('.tabs');if(!tabs)return;
-    new MutationObserver(()=>organizeStockTools()).observe(tabs,{childList:true,subtree:false});
-  }
-
-  function renamePlainLanguage(){
-    const map={'Market Dashboard':'Oversikt','Live signal-driven stock intelligence':'Det viktigste først. Åpne en aksje for alle verktøy.','Stock Radar':'Signaler','Watchlist':'Følger','Insider Activity':'Insider','Short Radar':'Short','Stock Intelligence':'Aksjeanalyse','Signal Performance':'Historikk','Investment Check':'Sjekkliste'};
-    document.querySelectorAll('h1,h2,.sub,.label').forEach(el=>{const text=el.textContent.trim();if(map[text])el.textContent=map[text];});
-  }
-
-  function install(){addStyles();installGlobalNav();installTopTheme();activateSignalsView();stockObserver();renamePlainLanguage();}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();setTimeout(organizeStockTools,250);setTimeout(organizeStockTools,900);setTimeout(renamePlainLanguage,350);
+  function addStyles(){if(document.getElementById('nsUiShellStyles'))return;const s=document.createElement('style');s.id='nsUiShellStyles';s.textContent=`.nsOpportunityMetric,.nsOpportunityReason,.nsEvidenceMetric{background:var(--surface-2,#151515)!important;border-color:var(--line,#292929)!important}.nsReadyBrief{color:var(--t,#f5f5f5)!important}.nsOppWatch,.nsEvidenceWarn{color:var(--y,#e6b94b)!important}@media(max-width:900px){.nsAlertShortcut{bottom:96px!important}.top{align-items:center!important}.top>.nsThemeToggle{display:inline-grid!important;place-items:center!important}}`;document.head.appendChild(s)}
+  function themeButton(slot){return `<button class="nsThemeToggle" data-ns-theme-toggle data-slot="${slot}" type="button" aria-label="Bytt tema">☀︎</button>`}
+  function installGlobalNav(){const side=document.querySelector('.side');const nav=side&&side.querySelector('nav');if(!side||!nav||nav.dataset.nsSimplified==='1')return;nav.dataset.nsSimplified='1';nav.innerHTML=`<a href="/app" data-ns-nav="home">Hjem</a><a href="/morning" data-ns-nav="morning">Før børs</a><a href="/app?view=signals" data-ns-nav="signals">Signaler</a><a href="/holdings" data-ns-nav="portfolio">Portefølje</a><a href="/stock" data-ns-nav="search">Søk</a><button class="nsMoreToggle" type="button" aria-expanded="false">Mer</button><div class="nsMoreMenu" hidden><a href="/alerts">Varsler</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/development">System</a><a href="/legal">Vilkår & risiko</a></div>`;if(!side.querySelector('.nsSideFooter'))side.insertAdjacentHTML('beforeend',`<div class="nsSideFooter"><span>NordicSignal</span>${themeButton('side')}</div>`);const more=nav.querySelector('.nsMoreToggle'),menu=nav.querySelector('.nsMoreMenu');more&&more.addEventListener('click',()=>{const open=more.getAttribute('aria-expanded')==='true';more.setAttribute('aria-expanded',String(!open));menu.hidden=open});const active=path.startsWith('/morning')?'morning':path.startsWith('/holdings')?'portfolio':path.startsWith('/stock')||path.startsWith('/intelligence')||path.startsWith('/instrument')?'search':location.search.includes('view=signals')?'signals':'home';nav.querySelector(`[data-ns-nav="${active}"]`)?.classList.add('active')}
+  function installTopTheme(){if(document.querySelector('[data-slot="top"]'))return;const top=document.querySelector('.top');if(top)top.insertAdjacentHTML('beforeend',themeButton('top'));else document.body.insertAdjacentHTML('afterbegin',`<div class="nsFloatingTheme">${themeButton('top')}</div>`)}
+  function activateSignalsView(){if(path!=='/app'&&path!=='/'&&path!=='/dashboard')return;if(new URLSearchParams(location.search).get('view')!=='signals')return;let tries=0;const run=()=>{if(typeof window.renderRadar==='function'){window.renderRadar();return true}if(tries++<20)setTimeout(run,100);return false};run();setTimeout(()=>{if(typeof window.renderRadar==='function')window.renderRadar()},900)}
+  const TOOL_ORDER=['overview','opportunity','readiness','events','pressure','insider','news','reports','dividend','short','evidence','backtest','paper'];
+  const TOOL_LABELS={overview:'Oversikt',opportunity:'Signal',readiness:'Analyse',events:'Hendelser',pressure:'Marked',insider:'Insider',news:'Nyheter',reports:'Rapporter',dividend:'Utbytte',short:'Short',evidence:'Historikk',backtest:'Backtest',paper:'Paper'};
+  function organizeStockTools(){if(!path.startsWith('/stock'))return;const tabs=document.querySelector('.tabs');if(!tabs)return;tabs.classList.add('nsToolRail');if(!document.querySelector('.nsToolHeader'))tabs.insertAdjacentHTML('beforebegin','<div class="nsToolHeader"><div><span class="muted">VERKTØY</span><h2>Analyser valgt aksje</h2></div><span class="muted">Velg verktøy uten å forlate aksjen</span></div>');const current=[...tabs.querySelectorAll('[data-tab]')];current.forEach(btn=>{const key=btn.dataset.tab;if(TOOL_LABELS[key]&&btn.textContent!==TOOL_LABELS[key])btn.textContent=TOOL_LABELS[key]});const rank=btn=>{const i=TOOL_ORDER.indexOf(btn.dataset.tab);return i===-1?TOOL_ORDER.length:i};const desired=[...current].sort((a,b)=>rank(a)-rank(b));const needsReorder=desired.some((btn,index)=>btn!==current[index]);if(needsReorder){const fragment=document.createDocumentFragment();desired.forEach(btn=>fragment.appendChild(btn));tabs.appendChild(fragment)}const title=document.querySelector('.top .muted');if(title)title.textContent='NORDICSIGNAL · AKSJE';const name=document.getElementById('name')?.textContent;if(name&&name!=='Loading…')document.title=name+' · NordicSignal'}
+  function stockObserver(){if(!path.startsWith('/stock'))return;organizeStockTools();const tabs=document.querySelector('.tabs');if(!tabs)return;new MutationObserver(()=>organizeStockTools()).observe(tabs,{childList:true,subtree:false})}
+  function renamePlainLanguage(){const map={'Market Dashboard':'Oversikt','Live signal-driven stock intelligence':'Det viktigste først. Åpne en aksje for alle verktøy.','Stock Radar':'Signaler','Watchlist':'Følger','Insider Activity':'Insider','Short Radar':'Short','Stock Intelligence':'Aksjeanalyse','Signal Performance':'Historikk','Investment Check':'Sjekkliste'};document.querySelectorAll('h1,h2,.sub,.label').forEach(el=>{const text=el.textContent.trim();if(map[text])el.textContent=map[text]})}
+  function install(){addStyles();installGlobalNav();installTopTheme();activateSignalsView();stockObserver();renamePlainLanguage()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();setTimeout(organizeStockTools,250);setTimeout(organizeStockTools,900);setTimeout(renamePlainLanguage,350)
 })();
