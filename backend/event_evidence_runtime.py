@@ -1,9 +1,8 @@
 """Persistent evidence archive for verified NordicSignal event-radar observations.
 
-This module deliberately separates observation capture from outcome evaluation. It
-stores only information that was available when the verified exchange event was seen,
-preventing future evidence from leaking into the original event record. Historical
-return evaluation can then be added on top of this stable archive.
+This module separates point-in-time event capture from later outcome evaluation. It
+stores only information available when a verified exchange event was observed so the
+future evidence layer can avoid look-ahead bias.
 """
 from datetime import datetime, timezone
 import hashlib
@@ -23,10 +22,8 @@ def _now():
 
 def _event_id(item):
     identity = "|".join([
-        str(item.get("node_id") or ""),
-        str(item.get("url") or ""),
-        str(item.get("ticker") or "").upper(),
-        str(item.get("published_at") or ""),
+        str(item.get("node_id") or ""), str(item.get("url") or ""),
+        str(item.get("ticker") or "").upper(), str(item.get("published_at") or ""),
         str(item.get("title") or ""),
     ])
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
@@ -41,7 +38,7 @@ def _ensure_schema():
           ticker TEXT,
           event_type TEXT,
           event_label TEXT,
-          materiality_bucket TEXT,
+          materiality_label TEXT,
           materiality_ratio_pct REAL,
           amount_nok REAL,
           published_at TEXT,
@@ -63,8 +60,7 @@ def _ensure_schema():
 def record_events(items):
     """Persist verified exchange events idempotently using point-in-time fields only."""
     _ensure_schema()
-    conn = connect()
-    inserted = 0
+    conn = connect(); inserted = 0
     try:
         for raw in items or []:
             if not raw.get("official") or raw.get("source_type") != "exchange":
@@ -73,26 +69,15 @@ def record_events(items):
             if not event_type:
                 continue
             event_id = _event_id(raw)
-            exists = conn.execute("SELECT event_id FROM event_evidence_events WHERE event_id=?", (event_id,)).fetchone()
-            if exists:
+            if conn.execute("SELECT event_id FROM event_evidence_events WHERE event_id=?", (event_id,)).fetchone():
                 continue
             materiality = raw.get("materiality") if isinstance(raw.get("materiality"), dict) else {}
             conn.execute(
-                "INSERT INTO event_evidence_events(event_id,ticker,event_type,event_label,materiality_bucket,materiality_ratio_pct,amount_nok,published_at,title,source_url,observed_at,raw_payload) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    event_id,
-                    str(raw.get("ticker") or "").upper() or None,
-                    event_type,
-                    raw.get("event_label"),
-                    materiality.get("bucket"),
-                    materiality.get("ratio_pct"),
-                    materiality.get("amount_nok"),
-                    raw.get("published_at"),
-                    raw.get("title"),
-                    raw.get("url"),
-                    _now(),
-                    json.dumps(raw, ensure_ascii=False, separators=(",", ":"), default=str),
-                ),
+                "INSERT INTO event_evidence_events(event_id,ticker,event_type,event_label,materiality_label,materiality_ratio_pct,amount_nok,published_at,title,source_url,observed_at,raw_payload) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (event_id, str(raw.get("ticker") or "").upper() or None, event_type,
+                 raw.get("event_label"), materiality.get("label"), materiality.get("revenue_ratio_pct"),
+                 materiality.get("announced_value_nok"), raw.get("published_at"), raw.get("title"),
+                 raw.get("url"), _now(), json.dumps(raw, ensure_ascii=False, separators=(",", ":"), default=str)),
             )
             inserted += 1
         conn.commit()
@@ -122,60 +107,48 @@ def _horizon_stats(samples, horizon):
 
 
 def summarize_samples(samples):
-    """Summarize already-matured point-in-time event observations without prediction."""
-    samples = list(samples or [])
-    groups = {}
+    """Summarize matured event observations. This function never predicts direction."""
+    samples = list(samples or []); groups = {}
     for item in samples:
-        key = (
-            str(item.get("event_type") or "unknown"),
-            str(item.get("materiality_bucket") or "unknown"),
-        )
+        key = (str(item.get("event_type") or "unknown"), str(item.get("materiality_label") or "unknown"))
         groups.setdefault(key, []).append(item)
 
     def summarize(group):
         drawdowns = [float(x["max_drawdown_pct"]) for x in group if isinstance(x.get("max_drawdown_pct"), (int, float))]
         runups = [float(x["max_runup_pct"]) for x in group if isinstance(x.get("max_runup_pct"), (int, float))]
         return {
-            "sample_count": len(group),
-            "maturity": _maturity(len(group)),
+            "sample_count": len(group), "maturity": _maturity(len(group)),
             "horizons": {str(h): _horizon_stats(group, h) for h in HORIZONS},
             "median_max_drawdown_pct": round(median(drawdowns), 3) if drawdowns else None,
             "median_max_runup_pct": round(median(runups), 3) if runups else None,
         }
 
     return {
-        "model": MODEL_VERSION,
-        "sample_count": len(samples),
-        "maturity": _maturity(len(samples)),
+        "model": MODEL_VERSION, "sample_count": len(samples), "maturity": _maturity(len(samples)),
         "overall": summarize(samples),
         "by_event_materiality": [
-            {"event_type": event_type, "materiality_bucket": bucket, **summarize(group)}
-            for (event_type, bucket), group in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0]))
+            {"event_type": event_type, "materiality_label": label, **summarize(group)}
+            for (event_type, label), group in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0]))
         ],
         "policy": "Measurement only. Historical evidence does not change NordicSignal scores, signals or thresholds.",
     }
 
 
 def archive_status(ticker=""):
-    _ensure_schema()
-    wanted = str(ticker or "").strip().upper()
-    conn = connect()
+    _ensure_schema(); wanted = str(ticker or "").strip().upper(); conn = connect()
     try:
         if wanted:
-            rows = conn.execute("SELECT event_type,materiality_bucket,COUNT(*) AS n FROM event_evidence_events WHERE ticker=? GROUP BY event_type,materiality_bucket ORDER BY n DESC", (wanted,)).fetchall()
+            rows = conn.execute("SELECT event_type,materiality_label,COUNT(*) AS n FROM event_evidence_events WHERE ticker=? GROUP BY event_type,materiality_label ORDER BY n DESC", (wanted,)).fetchall()
             total_row = conn.execute("SELECT COUNT(*) AS n FROM event_evidence_events WHERE ticker=?", (wanted,)).fetchone()
         else:
-            rows = conn.execute("SELECT event_type,materiality_bucket,COUNT(*) AS n FROM event_evidence_events GROUP BY event_type,materiality_bucket ORDER BY n DESC").fetchall()
+            rows = conn.execute("SELECT event_type,materiality_label,COUNT(*) AS n FROM event_evidence_events GROUP BY event_type,materiality_label ORDER BY n DESC").fetchall()
             total_row = conn.execute("SELECT COUNT(*) AS n FROM event_evidence_events").fetchone()
     finally:
         conn.close()
     total = int(total_row["n"] if total_row else 0)
     return {
-        "status": "collecting" if total < 20 else "evidence_building",
-        "ticker": wanted or None,
-        "event_count": total,
-        "maturity": _maturity(total),
-        "groups": [dict(x) for x in rows],
+        "status": "collecting" if total < 20 else "evidence_building", "ticker": wanted or None,
+        "event_count": total, "maturity": _maturity(total), "groups": [dict(x) for x in rows],
         "model": MODEL_VERSION,
         "policy": "Point-in-time archive only. No predictive claim and no score/threshold changes.",
         "generated_at": _now(),
@@ -183,20 +156,13 @@ def archive_status(ticker=""):
 
 
 def install():
-    if getattr(extra_api, "_event_evidence_runtime_v1", False):
-        return
+    if getattr(extra_api, "_event_evidence_runtime_v1", False): return
     original_install = extra_api.install
-
     def patched_install(app):
-        original_install(app)
-        _ensure_schema()
-
+        original_install(app); _ensure_schema()
         @app.get("/api/event-evidence")
         def event_evidence_status(ticker: str = ""):
             return archive_status(ticker)
-
-    extra_api.install = patched_install
-    extra_api._event_evidence_runtime_v1 = True
-
+    extra_api.install = patched_install; extra_api._event_evidence_runtime_v1 = True
 
 install()
