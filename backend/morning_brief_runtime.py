@@ -1,8 +1,8 @@
 """Pre-market Morning Brief for NordicSignal.
 
-Combines the existing official Euronext financial calendar and market-news feed with
-small, cached global-market snapshots.  This is informational/event-risk context only;
-it never changes NordicSignal scores, Opportunity rules or signal thresholds.
+Combines the existing official Euronext financial calendar, verified event radar and
+market-news feed with cached global-market snapshots. This is informational/event-risk
+context only; it never changes NordicSignal scores, Opportunity rules or thresholds.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +12,7 @@ import threading
 import time
 
 import extra_api
+import event_radar_runtime
 import general_news_runtime
 import market_calendar_runtime
 from providers import YahooProvider
@@ -110,6 +111,16 @@ def _event_sort_key(item):
     return (risk_rank.get(item.get("risk"), 9), int(item.get("days_until") or 0), 0 if item.get("tracked") else 1, item.get("ticker") or item.get("company") or "")
 
 
+def _radar_risk(priority):
+    return "high" if priority == "high" else "watch" if priority == "watch" else "normal"
+
+
+def _must_know_sort(item):
+    rank = {"critical": 0, "high": 1, "watch": 2, "normal": 3}
+    source_rank = 0 if item.get("source_context") == "calendar" else 1
+    return (rank.get(item.get("risk"), 9), source_rank, int(item.get("days_until") or 99))
+
+
 def build_morning_brief(days=7, news_limit=12, now=None, provider=None, force=False):
     days = max(1, min(int(days or 7), 30))
     news_limit = max(1, min(int(news_limit or 12), 30))
@@ -131,21 +142,41 @@ def build_morning_brief(days=7, news_limit=12, now=None, provider=None, force=Fa
     close = _previous_oslo_close(current)
     market_news = general_news_runtime.general_market_news(provider=provider, limit=40)
     overnight_news = []
+    radar_events = []
     for raw in market_news.get("items") or []:
         published = _parse_time(raw.get("published_at"))
-        if published and published.astimezone(OSLO) >= close:
-            overnight_news.append(dict(raw))
+        if not published or published.astimezone(OSLO) < close:
+            continue
+        item = dict(raw)
+        overnight_news.append(item)
+        if item.get("official") and item.get("source_type") == "exchange":
+            radar = event_radar_runtime._event(item)
+            if radar:
+                radar["risk"] = _radar_risk(radar.get("priority"))
+                radar["source_context"] = "radar"
+                radar_events.append(radar)
     overnight_news = overnight_news[:news_limit]
+    radar_events.sort(key=lambda x: str(x.get("published_at") or ""), reverse=True)
+    radar_rank = {"high": 0, "watch": 1, "normal": 2}
+    radar_events.sort(key=lambda x: radar_rank.get(x.get("priority"), 9))
 
     markets, market_errors = _market_snapshot(provider)
     notable_markets = [x for x in markets if isinstance(x.get("change_pct"), (int, float)) and abs(x["change_pct"]) >= 1.0]
     urgent_events = [x for x in events if x.get("risk") in ("critical", "high")]
     tracked_upcoming = [x for x in events if x.get("tracked")][:12]
 
+    calendar_must = [dict(x, source_context="calendar") for x in urgent_events]
+    radar_must = [x for x in radar_events if x.get("risk") in ("high", "watch")]
+    must_know = (calendar_must + radar_must)[:16]
+    must_know.sort(key=_must_know_sort)
+    must_know = must_know[:10]
+
     bullets = []
     if urgent_events:
         bullets.append(f"{len(urgent_events)} rapport-/eventrisikoer de neste 3 dagene")
-    if overnight_news:
+    if radar_events:
+        bullets.append(f"{len(radar_events)} verifiserte Radar-hendelser siden forrige Oslo-close")
+    elif overnight_news:
         bullets.append(f"{len(overnight_news)} nye markedsmeldinger siden forrige Oslo-close")
     if notable_markets:
         labels = ", ".join(x["label"] for x in notable_markets[:3])
@@ -160,7 +191,8 @@ def build_morning_brief(days=7, news_limit=12, now=None, provider=None, force=Fa
         "as_of": current.isoformat(),
         "previous_oslo_close": close.isoformat(),
         "summary": bullets,
-        "must_know": urgent_events[:8],
+        "must_know": must_know,
+        "radar_events": radar_events[:12],
         "upcoming": tracked_upcoming,
         "calendar": events[:30],
         "overnight_news": overnight_news,
@@ -168,6 +200,7 @@ def build_morning_brief(days=7, news_limit=12, now=None, provider=None, force=Fa
         "notable_markets": notable_markets,
         "sources": {
             "calendar": calendar.get("source"),
+            "radar": "Verified Euronext / Oslo Børs announcements",
             "news": market_news.get("source"),
             "markets": "Yahoo Finance chart snapshots",
         },
