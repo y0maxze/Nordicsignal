@@ -123,7 +123,7 @@ def build_profile(candidate, provider=None, research=None, document_facts=None):
         "document_status": (document_facts or {}).get("status"),
         "coverage": {"known": known, "total": len(_REQUIRED_FIELDS), "pct": coverage_pct, "fields": evidence},
         "status": status, "assessment": assessment,
-        "policy": "Pre-listing context only. Verified facts remain separate from the stock score; no threshold tuning or investment recommendation.",
+        "policy": "Pre-listing context only. No stock-score change, no threshold tuning and no investment recommendation; verified document facts remain separate from the stock score.",
         "generated_at": _now(),
     }
 
