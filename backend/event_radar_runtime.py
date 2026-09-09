@@ -19,7 +19,7 @@ _CACHE_LOCK = threading.Lock()
 _CACHE_TTL = 180
 
 _RULES = (
-    ("contract_lost", "Kontrakt tapt / avsluttet", "high", ("contract termination", "terminated contract", "contract cancelled", "contract canceled", "lost contract", "avsluttet kontrakt", "terminert kontrakt", "mistet kontrakt")),
+    ("contract_lost", "Kontrakt tapt / avsluttet", "high", ("contract termination", "contract terminated", "terminated contract", "contract cancelled", "contract canceled", "lost contract", "avsluttet kontrakt", "terminert kontrakt", "mistet kontrakt")),
     ("profit_warning", "Resultatvarsel / guiding", "high", ("profit warning", "guidance update", "outlook update", "trading update", "resultatvarsel", "nedjusterer guiding", "oppjusterer guiding", "guiding")),
     ("acquisition", "Oppkjøp / fusjon", "high", ("acquisition", "acquires", "merger", "takeover", "oppkjop", "fusjon", "kjoper")),
     ("disposal", "Salg / avhendelse", "watch", ("divestment", "disposal", "sells subsidiary", "sale of", "avhendelse", "selger")),
