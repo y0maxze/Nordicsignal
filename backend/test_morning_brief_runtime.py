@@ -32,8 +32,9 @@ def test_build_brief_prioritizes_events_and_filters_overnight_news(monkeypatch):
     monkeypatch.setattr(brief.general_news_runtime, "general_market_news", lambda **kwargs: {
         "source": "news test",
         "items": [
+            {"ticker": "KOG", "title": "KOG: awarded contract valued at NOK 2 billion", "publisher": "Euronext", "published_at": "2026-09-06T21:00:00+00:00", "official": True, "source_type": "exchange", "url": "https://example.test/kog"},
             {"ticker": "AKRBP", "title": "Fresh", "publisher": "Euronext", "published_at": "2026-09-06T20:00:00+00:00"},
-            {"ticker": "DNB", "title": "Old", "publisher": "Euronext", "published_at": "2026-09-04T10:00:00+00:00"},
+            {"ticker": "DNB", "title": "Old", "publisher": "Euronext", "published_at": "2026-09-04T10:00:00+00:00", "official": True, "source_type": "exchange"},
         ],
     })
     monkeypatch.setattr(brief, "_market_snapshot", lambda provider: ([
@@ -44,8 +45,11 @@ def test_build_brief_prioritizes_events_and_filters_overnight_news(monkeypatch):
     result = brief.build_morning_brief(now=now, provider=object())
     assert result["must_know"][0]["ticker"] == "AKRBP"
     assert result["must_know"][0]["risk"] == "critical"
-    assert [x["title"] for x in result["overnight_news"]] == ["Fresh"]
+    assert any(x["ticker"] == "KOG" and x["source_context"] == "radar" for x in result["must_know"])
+    assert result["radar_events"][0]["event_type"] == "contract"
+    assert [x["title"] for x in result["overnight_news"]] == ["KOG: awarded contract valued at NOK 2 billion", "Fresh"]
     assert [x["label"] for x in result["notable_markets"]] == ["Brent"]
+    assert any("Radar-hendelser" in x for x in result["summary"])
     assert "does not change nordicsignal scores" in result["policy"].lower()
 
 
