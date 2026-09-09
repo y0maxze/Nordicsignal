@@ -52,12 +52,15 @@ def test_mobile_nav_has_single_canonical_owner():
     assert "nsMobileMoreToggle" in nav
     assert "installMobileNav" not in shell
     assert "nsMobileMoreMenu" not in shell
-    assert "loadScript('/mobile_nav.js',()=>loadScript('/ui_shell.js')" in loader
+    mobile_pos = loader.index("loadScript('/mobile_nav.js'")
+    shell_pos = loader.index("loadScript('/ui_shell.js'")
+    assert mobile_pos < shell_pos
+    assert loader.count("loadScript('/mobile_nav.js'") == 1
 
 
 def test_stock_tool_shell_keeps_core_tools_available():
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
-    for tool in ("overview", "opportunity", "readiness", "pressure", "insider", "news", "reports", "dividend", "short", "evidence", "backtest", "paper"):
+    for tool in ("overview", "opportunity", "readiness", "events", "pressure", "insider", "news", "reports", "dividend", "short", "evidence", "backtest", "paper"):
         assert f"'{tool}'" in shell
 
 
