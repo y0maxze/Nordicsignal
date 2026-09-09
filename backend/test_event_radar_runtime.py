@@ -22,6 +22,19 @@ def test_irrelevant_release_is_not_promoted():
     assert radar._event({"title":"Invitation to presentation"}) is None
 
 
+def test_provider_work_happens_outside_cache_lock(monkeypatch):
+    acquired=[]
+    def fake_feed(provider=None,limit=50):
+        ok=radar._CACHE_LOCK.acquire(timeout=0.1)
+        acquired.append(ok)
+        if ok:
+            radar._CACHE_LOCK.release()
+        return {"items":[]}
+    monkeypatch.setattr(radar.general_news_runtime,"general_market_news",fake_feed)
+    radar.build_event_radar(force=True,provider=object())
+    assert acquired == [True]
+
+
 def test_policy_keeps_radar_separate_from_score(monkeypatch):
     monkeypatch.setattr(radar.general_news_runtime,"general_market_news",lambda provider=None,limit=50:{"items":[]})
     result=radar.build_event_radar(force=True,provider=object())
