@@ -30,6 +30,9 @@ def test_morning_brief_page_uses_shared_theme_and_api():
     assert "/ui_shell.js" in page
     assert "/api/morning-brief" in page
     assert "Før børs" in page
+    assert "RADAR" in page
+    assert "Originalmelding" in page
+    assert "source_context==='radar'" in page
 
 
 def test_morning_brief_rows_open_related_stock():
