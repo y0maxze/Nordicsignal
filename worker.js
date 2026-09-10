@@ -28,10 +28,6 @@ const ASSET_ROUTES = new Map([
   ["/instrument/", "/instrument.html"],
   ["/holdings", "/holdings.html"],
   ["/holdings/", "/holdings.html"],
-  ["/paper", "/paper.html"],
-  ["/paper/", "/paper.html"],
-  ["/paper-trading", "/paper.html"],
-  ["/paper-trading/", "/paper.html"],
   ["/history", "/history.html"],
   ["/history/", "/history.html"],
   ["/news", "/news.html"],
@@ -46,12 +42,15 @@ const ASSET_ROUTES = new Map([
   ["/learning/", "/learning.html"],
   ["/signal-performance", "/learning.html"],
   ["/signal-performance/", "/learning.html"],
-  ["/development", "/development.html"],
-  ["/development/", "/development.html"],
   ["/legal", "/legal.html"],
   ["/legal/", "/legal.html"],
   ["/frontend", "/index.html"],
   ["/frontend/", "/index.html"],
+]);
+
+const REMOVED_PRODUCT_ROUTES = new Set([
+  "/paper", "/paper/", "/paper-trading", "/paper-trading/",
+  "/development", "/development/",
 ]);
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
@@ -96,14 +95,12 @@ function isStockEntry(pathname) {
 }
 
 function enhanceHtml(html, pathname) {
-  // The public landing page is intentionally self-contained. Injecting the app
-  // shell/theme here would override its cinematic layout and private app gate.
   if (pathname === "/home.html") return html;
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
   if (!html.includes('id="nsBrandMarkStyle"')) html = html.replace("</head>", `${BRAND_STYLE}</head>`);
   if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
-    const navExtras = '<a href="/morning">Før børs</a><a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
+    const navExtras = '<a href="/morning">Før børs</a><a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/legal">Vilkår & risiko</a>';
     if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
@@ -161,8 +158,14 @@ export default {
     if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
       return json({status:"error",code:"ASSETS_BINDING_MISSING",message:"Cloudflare ASSETS binding is not available in this deployment.",path:url.pathname},500);
     }
+    if (url.pathname === "/api/paper" || url.pathname.startsWith("/api/paper/")) {
+      return json({status:"removed",code:"FEATURE_REMOVED",message:"Paper trading and product backtesting are no longer part of NordicSignal."},410);
+    }
     if (url.pathname.startsWith("/api/")) return proxyApi(request, url, env);
     if (request.method !== "GET" && request.method !== "HEAD") return json({status:"error",code:"METHOD_NOT_ALLOWED"},405);
+    if (REMOVED_PRODUCT_ROUTES.has(url.pathname)) {
+      return Response.redirect(new URL("/app", url), 302);
+    }
     let pathname = assetPath(url.pathname);
     if (isStockEntry(url.pathname) && !url.searchParams.get("ticker") && !url.searchParams.get("symbol")) pathname = "/intelligence.html";
     return serveAsset(request, env, pathname);
