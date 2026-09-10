@@ -1,5 +1,6 @@
 /app /frontend/index.html 200
 /dashboard /frontend/index.html 200
+/capital-flow /frontend/capital-flow.html 200
 /stock /frontend/stock.html 200
 /stock-intelligence /frontend/stock.html 200
 /history /frontend/history.html 200
