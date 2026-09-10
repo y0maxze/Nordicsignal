@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#020913">
+<meta name="theme-color" content="#020713">
 <title>NordicSignal</title>
 <meta name="description" content="NordicSignal · data, innsikt og beslutningsstøtte for Oslo/Nordic-aksjer.">
 <link rel="icon" href="/nordicsignal-brand.svg" type="image/svg+xml">
@@ -12,10 +12,12 @@
 <body>
 <main class="intro" aria-labelledby="introTitle">
   <img class="introArt" src="/nordicsignal-intro.jpg" alt="NordicSignal systemoversikt med Market Data, Fundamentals, Insider Data, Event Radar, Trend Engine, Score Engine, Opportunity, IPO Radar, Push, Morning Brief og High Conviction.">
+  <div class="signalField" aria-hidden="true"><i></i><i></i><i></i><b></b><b></b><b></b></div>
   <div class="shade" aria-hidden="true"></div>
+  <div class="systemRail" aria-hidden="true"><span><i></i>MARKET INTELLIGENCE</span><span><i></i>CAPITAL FLOW</span><span><i></i>EVENT RADAR</span></div>
   <section class="introActions">
     <span class="srOnly" id="introTitle">NordicSignal</span>
-    <button class="continueBtn" id="introContinue" type="button">Fortsett</button>
+    <button class="continueBtn" id="introContinue" type="button"><span>Åpne systemet</span><b aria-hidden="true">↗</b></button>
     <a class="legalLink" href="/legal">Vilkår & risiko</a>
   </section>
 </main>
@@ -25,7 +27,7 @@
     <div class="riskBrand"><img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span></div>
     <h1 id="riskTitle">Før du bruker NordicSignal</h1>
     <p>NordicSignal analyserer markedsdata, nyheter og modeller, men gir ikke personlig investeringsrådgivning og kan ikke garantere at data eller analyser er riktige.</p>
-    <p class="warning"><strong>Investering innebærer risiko.</strong> Du kan tape deler av eller hele beløpet du investerer. Score, AI-brief, Investment Check, signaler og backtester er beslutningsstøtte — ikke en garanti eller ordre om å kjøpe eller selge.</p>
+    <p class="warning"><strong>Investering innebærer risiko.</strong> Du kan tape deler av eller hele beløpet du investerer. Score, AI-brief, Investment Check, signaler, historikk og evidens er beslutningsstøtte — ikke en garanti eller ordre om å kjøpe eller selge.</p>
     <label class="acceptRow"><input id="riskAccept" type="checkbox"><span>Jeg har lest og forstått risikoen, forstår at jeg selv er ansvarlig for investeringsbeslutninger, og godtar NordicSignals vilkår og ansvarsbegrensning for denne nettleserøkten.</span></label>
     <div class="riskActions"><a href="/legal" target="_blank" rel="noopener">Les full policy og vilkår</a><button id="riskContinue" type="button" disabled>Godta og åpne NordicSignal</button></div>
     <small>Policy NS-RISK-2026-08-27-2 · Ny nettleserøkt krever ny bekreftelse.</small>
@@ -47,6 +49,10 @@
   checkbox.addEventListener('change',()=>{acceptButton.disabled=!checkbox.checked});
   acceptButton.addEventListener('click',()=>{if(!checkbox.checked)return;const record={version:POLICY_VERSION,accepted:true,accepted_at:new Date().toISOString()};try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(record))}catch{}try{localStorage.setItem(AUDIT_KEY,JSON.stringify(record))}catch{}openApp()});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!gate.hidden){gate.hidden=true;document.documentElement.classList.remove('riskOpen');introButton.focus()}});
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    let x=0,y=0,raf=0;
+    addEventListener('pointermove',event=>{x=(event.clientX/innerWidth-.5)*2;y=(event.clientY/innerHeight-.5)*2;if(raf)return;raf=requestAnimationFrame(()=>{document.documentElement.style.setProperty('--mx',x.toFixed(3));document.documentElement.style.setProperty('--my',y.toFixed(3));raf=0})},{passive:true});
+  }
 })();
 </script>
 </body>
