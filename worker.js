@@ -56,6 +56,7 @@ const ASSET_ROUTES = new Map([
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const PWA_HEAD = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#070707"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="NordicSignal">';
+const BRAND_STYLE = '<style id="nsBrandMarkStyle">.logo{display:inline-flex!important;align-items:center!important;gap:0!important;font-size:0!important;color:#eef7ff!important}.logo span{display:none!important}.logo:before{content:"";display:block;width:34px;height:34px;flex:0 0 34px;margin-right:10px;background:url("/nordicsignal-brand.svg") center/contain no-repeat;filter:drop-shadow(0 0 10px rgba(25,167,255,.42))}.logo:after{content:"NORDICSIGNAL";font-size:16px;line-height:1;letter-spacing:.08em;font-weight:820;color:#eef7ff}.nsGlobalHome{display:inline-flex!important;align-items:center!important}</style>';
 const GLOBAL_HOME_UI = '<a class="nsGlobalHome" href="/app" aria-label="Til NordicSignal dashboard" title="Til dashboard"><img src="/nordicsignal-brand.svg" alt="" width="23" height="23" style="display:block;margin-right:7px">NORDICSIGNAL</a>';
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script><script src="/stock_opportunity_ui.js"></script>';
 const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_smart_money_ui.js"></script><script src="/learning_temporal_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_failure_streak_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
@@ -99,6 +100,7 @@ function enhanceHtml(html, pathname) {
   // shell/theme here would override its cinematic layout and private app gate.
   if (pathname === "/home.html") return html;
   if (!html.includes('href="/theme.css"')) html = html.replace("</head>", `${THEME_LINK}</head>`);
+  if (!html.includes('id="nsBrandMarkStyle"')) html = html.replace("</head>", `${BRAND_STYLE}</head>`);
   if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
     const navExtras = '<a href="/morning">Før børs</a><a href="/stock">Stock Intelligence</a><a href="/alerts">Varsler</a><a href="/readiness">Investment Check</a><a href="/paper">Paper Trading</a><a href="/news">Nyheter</a><a href="/calendar">Kalender</a><a href="/learning">Signal Performance</a><a href="/development">Development</a><a href="/legal">Vilkår & risiko</a>';
