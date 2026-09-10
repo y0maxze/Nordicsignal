@@ -144,6 +144,7 @@ class _FakeProvider:
 def test_discovery_adds_only_screened_inactive_metadata(tmp_path, monkeypatch):
     connect = _connect_factory(str(tmp_path / "discovery.db"))
     monkeypatch.setattr(tracking, "connect", connect)
+    monkeypatch.setattr(coverage, "_now", lambda: datetime(2026, 8, 30, tzinfo=timezone.utc))
     _init_test_db(connect)
     conn = connect()
     try:
