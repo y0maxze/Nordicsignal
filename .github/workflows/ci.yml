@@ -66,8 +66,12 @@ jobs:
       - name: Check production assets and routes
         run: |
           set -e
-          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html paper.html history.html news.html insider.html insider_clean_ui.js mobile.html morning.html calendar.html readiness.html development.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
+          for file in theme.css index.html stock.html stock_selector.js stock_extras.js stock_readiness.js stock_evidence_ui.js intelligence.html instrument.html history.html news.html insider.html insider_clean_ui.js mobile.html morning.html calendar.html readiness.html legal.html access_gate.js holdings.html dashboard_performance.js portfolio_dashboard.js manifest.webmanifest sw.js mobile_shell.js; do test -s "frontend/$file"; done
           for file in production.py api_entrypoint.py http_cache_runtime.py holdings_integrity_runtime.py market_calendar_runtime.py morning_brief_runtime.py investment_readiness_runtime.py insider_market_v2_runtime.py insider_company_cleanup_runtime.py persistent_feed_cache_runtime.py performance_runtime.py signal_evidence_runtime.py push_runtime.py security_runtime.py data_quality_runtime.py ops_readiness_runtime.py system_health_runtime.py; do test -s "backend/$file"; done
+          test ! -e frontend/paper.html
+          test ! -e frontend/development.html
+          test ! -e backend/generic_paper_runtime.py
+          test ! -e backend/paper_history_runtime.py
           grep -q 'startCommand: uvicorn api_entrypoint:app' render.yaml
           grep -q 'uvicorn api_entrypoint:app' DEPLOY.md
           grep -q '\["/mobile", "/mobile.html"\]' worker.js
@@ -77,11 +81,14 @@ jobs:
           grep -q '\["/intelligence", "/intelligence.html"\]' worker.js
           grep -q '\["/instrument", "/instrument.html"\]' worker.js
           grep -q '\["/holdings", "/holdings.html"\]' worker.js
-          grep -q '\["/paper", "/paper.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q '\["/calendar", "/calendar.html"\]' worker.js
           grep -q '\["/readiness", "/readiness.html"\]' worker.js
           grep -q '\["/legal", "/legal.html"\]' worker.js
+          grep -q 'FEATURE_REMOVED' worker.js
+          if grep -q '\["/paper"\|\["/development"' worker.js; then echo 'Retired product routes must not be asset routes'; exit 1; fi
+          if grep -q 'href="/paper"\|href="/development"' worker.js frontend/ui_shell.js; then echo 'Retired product links must stay removed'; exit 1; fi
+          if grep -q 'data-tab="paper"\|data-tab="backtest"' frontend/stock.html; then echo 'Paper/backtest stock tabs must stay removed'; exit 1; fi
           grep -q 'const API=""' frontend/index.html
           if grep -R -Fq 'nordicsignal-api.onrender.com' frontend; then echo 'Frontend must use same-origin /api proxy'; exit 1; fi
           if grep -Fq 'Number(p)*100' frontend/index.html; then echo 'Short percent invariant failed'; exit 1; fi
@@ -117,7 +124,6 @@ jobs:
           grep -q 'NS-RISK-2026-08-27-2' frontend/access_gate.js
           grep -q 'NS-RISK-2026-08-27-2' frontend/legal.html
           grep -q 'sessionStorage' frontend/access_gate.js
-          grep -q 'Development Visualisation' frontend/development.html
           grep -q 'access_gate.js' worker.js
           grep -q 'mobile_shell.js' worker.js
           grep -q 'manifest.webmanifest' worker.js
@@ -144,6 +150,7 @@ jobs:
           grep -q 'ops_readiness_runtime' backend/sitecustomize.py
           grep -q 'persistent_feed_cache_runtime' backend/sitecustomize.py
           grep -q 'performance_runtime' backend/sitecustomize.py
+          if grep -q 'paper_history_runtime\|generic_paper_runtime' backend/sitecustomize.py; then echo 'Retired Paper Trading runtimes must not load'; exit 1; fi
           grep -q 'canonical_issuer' backend/insider_company_cleanup_runtime.py
           grep -q '/api/dashboard-home' backend/performance_runtime.py
           grep -q '/api/performance' backend/performance_runtime.py
