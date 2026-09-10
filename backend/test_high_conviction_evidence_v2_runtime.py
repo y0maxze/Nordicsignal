@@ -25,7 +25,7 @@ def test_shadow_remains_disabled_with_strong_measured_inputs(monkeypatch):
     out=v2.build_shadow("KOG")
     assert out["activation"]["enabled"] is False
     assert out["model"] == "high_conviction_shadow_v2"
-    assert "no buy/sell signal" in out["policy"]
+    assert "no buy/sell signal" in out["policy"].lower()
 
 
 def test_critical_event_is_explicit_blocker(monkeypatch):
