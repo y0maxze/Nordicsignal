@@ -1,0 +1,1 @@
+The cinematic home hero intentionally uses native CSS animation rather than a large autoplay video. This preserves the approved visual language while keeping startup light, honoring reduced-motion preferences, and avoiding decorative sample market figures that could be mistaken for live data.
