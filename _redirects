@@ -2,8 +2,6 @@
 /dashboard /frontend/index.html 200
 /stock /frontend/stock.html 200
 /stock-intelligence /frontend/stock.html 200
-/paper /frontend/paper.html 200
-/paper-trading /frontend/paper.html 200
 /history /frontend/history.html 200
 /news /frontend/news.html 200
 /learning /frontend/learning.html 200
