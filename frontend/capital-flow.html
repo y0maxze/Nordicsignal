@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Kapitalflyt · NordicSignal</title>
+  <meta name="description" content="Nye og historiske eier- og kapitalbevegelser i NordicSignal.">
+  <link rel="stylesheet" href="/theme.css">
+  <style>
+    .cfPage{max-width:1220px;margin:0 auto;padding:28px 24px 100px}.cfHero{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin:14px 0 24px}.cfHero h1{margin:4px 0 8px;font-size:clamp(30px,4vw,52px)}.cfHero p{max-width:760px;margin:0;color:var(--m,#9ca7b6);line-height:1.55}.cfActions{display:flex;gap:8px;flex-wrap:wrap}.cfBtn{border:1px solid var(--line,#28313d);background:var(--surface-2,#131923);color:var(--t,#f4f7fb);border-radius:10px;padding:10px 14px;font-weight:750;cursor:pointer}.cfBtn.primary{border-color:#198cff;background:#1279db}.cfStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}.cfStat,.cfPanel{background:var(--surface,#0f141c);border:1px solid var(--line,#26303c);border-radius:14px}.cfStat{padding:15px}.cfStat b{display:block;font-size:25px;margin-top:4px}.cfStat span{font-size:12px;color:var(--m,#9ca7b6)}.cfToolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}.cfTabs,.cfFilters{display:flex;gap:7px;flex-wrap:wrap}.cfChip{border:1px solid var(--line,#26303c);background:transparent;color:var(--m,#aab4c2);border-radius:999px;padding:8px 11px;font-weight:700;cursor:pointer}.cfChip.active{color:#fff;border-color:#168fff;background:#168fff26}.cfList{display:grid;gap:10px}.cfItem{padding:16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px}.cfTop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cfTicker{font-weight:850;color:#dff2ff}.cfTitle{font-size:17px;font-weight:800;margin:8px 0 6px;line-height:1.35}.cfSummary{color:var(--m,#a6b0bd);line-height:1.45;font-size:14px}.cfMeta{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--m,#8e9aaa)}.cfBadge{font-size:11px;font-weight:850;padding:5px 8px;border-radius:999px;border:1px solid var(--line,#26303c)}.cfBadge.new{color:#75e7bd;border-color:#2de6a766;background:#2de6a714}.cfBadge.active{color:#7fc8ff;border-color:#19a7ff66;background:#19a7ff14}.cfBadge.historical{color:#aeb7c2}.cfBadge.verified{color:#82d5ff;border-color:#20b9ff66}.cfBadge.reported{color:#ffc96d;border-color:#ffb84a66}.cfDirection{min-width:72px;text-align:right;font-weight:850}.cfDirection.buy{color:#49dda9}.cfDirection.sell{color:#ff7d8d}.cfEmpty{padding:34px;text-align:center;color:var(--m,#9ca7b6)}.cfNotice{margin-top:16px;padding:14px 16px;font-size:13px;color:var(--m,#9ca7b6);line-height:1.5}.cfSourceLink{color:#6ec8ff;text-decoration:none}.cfSourceLink:hover{text-decoration:underline}.cfSearch{min-width:220px;border:1px solid var(--line,#26303c);background:var(--surface-2,#131923);color:var(--t,#f4f7fb);border-radius:10px;padding:10px 12px}.cfLive{font-size:12px;color:var(--m,#9ca7b6)}
+    @media(max-width:760px){.cfPage{padding:18px 14px 96px}.cfHero{display:block}.cfActions{margin-top:14px}.cfStats{grid-template-columns:repeat(2,minmax(0,1fr))}.cfItem{grid-template-columns:1fr}.cfDirection{text-align:left}.cfToolbar{align-items:flex-start}.cfSearch{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="cfPage">
+    <section class="cfHero">
+      <div>
+        <div class="muted">NORDICSIGNAL · CAPITAL FLOW RADAR</div>
+        <h1>Kapitalflyt</h1>
+        <p>Fanger nye eierbevegelser, primærinnsidehandler, flaggemeldinger, institusjonell/fond-aktivitet og utenlandsk eierskapsinteresse. Verifiserte børskilder holdes tydelig adskilt fra rapportert mediekontekst.</p>
+      </div>
+      <div class="cfActions"><button class="cfBtn primary" id="cfRefresh" type="button">Oppdater nå</button><a class="cfBtn" href="/alerts">Varsler</a></div>
+    </section>
+
+    <section class="cfStats" aria-label="Kapitalflyt status">
+      <div class="cfStat"><span>Nytt · 48t</span><b id="cfNew">—</b></div>
+      <div class="cfStat"><span>Pågående · 30d</span><b id="cfActive">—</b></div>
+      <div class="cfStat"><span>Historisk</span><b id="cfHistorical">—</b></div>
+      <div class="cfStat"><span>Viser</span><b id="cfShown">—</b></div>
+    </section>
+
+    <div class="cfToolbar">
+      <div class="cfTabs" id="cfStates">
+        <button class="cfChip active" data-state="NEW" type="button">Nytt</button>
+        <button class="cfChip" data-state="ACTIVE" type="button">Pågående</button>
+        <button class="cfChip" data-state="HISTORICAL" type="button">Historisk</button>
+        <button class="cfChip" data-state="ALL" type="button">Alle</button>
+      </div>
+      <input class="cfSearch" id="cfSearch" type="search" placeholder="Søk ticker, fond, investor…" autocomplete="off">
+    </div>
+
+    <div class="cfFilters" id="cfTypes" aria-label="Filtrer type">
+      <button class="cfChip active" data-type="ALL" type="button">Alle</button>
+      <button class="cfChip" data-type="PRIMARY_INSIDER" type="button">Insider</button>
+      <button class="cfChip" data-type="INSTITUTIONAL_FLOW" type="button">Fond/institusjon</button>
+      <button class="cfChip" data-type="LARGE_HOLDING" type="button">Flagging</button>
+      <button class="cfChip" data-type="FOREIGN_OWNERSHIP" type="button">Utenlandsk</button>
+      <button class="cfChip" data-type="BLOCK_TRADE" type="button">Blokkhandel</button>
+    </div>
+
+    <p class="cfLive" id="cfLive" role="status" aria-live="polite">Laster kapitalflyt…</p>
+    <section class="cfList" id="cfList"></section>
+    <div class="cfPanel cfNotice"><strong>Datapolicy:</strong> Kapitalflyt er et observasjonslag og endrer ikke NordicSignal-score. «Verifisert» betyr offisiell børs-/primærinnsidekilde. «Rapportert» betyr medie-/kontekstsignal og behandles ikke som verifisert beholdningsendring før det finnes sterkere dokumentasjon.</div>
+  </main>
+  <script src="/theme_mode.js"></script>
+  <script src="/ui_shell.js"></script>
+  <script src="/capital-flow.js"></script>
+  <script src="/mobile_nav.js"></script>
+</body>
+</html>
