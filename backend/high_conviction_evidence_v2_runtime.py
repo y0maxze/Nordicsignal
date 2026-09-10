@@ -19,6 +19,7 @@ HORIZON_DAYS = 20
 MIN_EARLY_SAMPLE = 20
 MIN_USEFUL_SAMPLE = 50
 RECENT_EVENT_DAYS = 7
+_BASE_BUILD = shadow.build_shadow
 
 
 def _num(value):
@@ -70,7 +71,7 @@ def _recent_event_risk(ticker):
             (ticker, cutoff),
         ).fetchall()
     except Exception:
-        return {"available": False, "lookback_days": RECENT_EVENT_DAYS, "count": 0, "critical_count": 0, "items": []}
+        return {"available": False, "lookback_days": RECENT_EVENT_DAYS, "count": 0, "critical_count": 0, "has_critical_event_risk": False, "items": []}
     finally:
         conn.close()
 
@@ -127,7 +128,10 @@ def _opportunity_evidence(ticker):
             "benchmark": "OSEBX",
             "horizon_days": HORIZON_DAYS,
             "sample_n": 0,
+            "benchmark_sample_n": 0,
             "maturity": "insufficient",
+            "regime_counts": {},
+            "regime_coverage_pct": 0.0,
         }
     finally:
         conn.close()
@@ -169,7 +173,7 @@ def _opportunity_evidence(ticker):
 
 
 def build_shadow(ticker):
-    result = shadow.build_shadow(ticker)
+    result = _BASE_BUILD(ticker)
     if result.get("status") == "invalid":
         return result
 
