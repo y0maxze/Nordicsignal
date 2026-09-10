@@ -3,17 +3,26 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 
-def test_cinematic_homepage_contract():
+def test_image_first_homepage_contract():
     html = (ROOT / "home.html").read_text()
     css = (ROOT / "home.css").read_text()
-    js = (ROOT / "home.js").read_text()
-    for token in ("NORDICSIGNAL", "MARKET DATA", "FUNDAMENTALS", "INSIDER DATA", "EVENT RADAR", "HIGH CONVICTION", "IPO · PUSH · BRIEF"):
+    artwork = ROOT / "nordicsignal-intro.jpg"
+    assert artwork.stat().st_size > 10_000
+    assert artwork.read_bytes()[:2] == b"\xff\xd8"
+    for token in (
+        "/nordicsignal-intro.jpg",
+        "NS-RISK-2026-08-27-2",
+        "nordicsignal_policy_session_acceptance",
+        "nordicsignal_policy_acceptance",
+        "riskAccept",
+        "Godta og åpne NordicSignal",
+        "location.assign('/app')",
+    ):
         assert token in html
+    assert "/home.js" not in html
+    assert ".introArt" in css
+    assert ".riskGate" in css
     assert "prefers-reduced-motion" in css
-    assert "IntersectionObserver" in js
-    assert "/api/stocks" in js
-    assert "/api/push/status" in js
-    assert "/api/ipo-radar/autoscan/status" in js
 
 
 def test_blue_brand_asset_exists():
