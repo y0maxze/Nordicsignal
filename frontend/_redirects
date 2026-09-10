@@ -1,6 +1,11 @@
+/ /home.html 200
+/home /home.html 200
 /app /index.html 200
 /dashboard /index.html 200
 /mobile /mobile.html 200
+/morning /morning.html 200
+/alerts /alerts.html 200
+/notifications /alerts.html 200
 /insider /insider.html 200
 /stock /stock.html 200
 /stock-intelligence /stock.html 200
@@ -10,6 +15,8 @@
 /paper /paper.html 200
 /paper-trading /paper.html 200
 /history /history.html 200
+/learning /learning.html 200
+/signal-performance /learning.html 200
 /news /news.html 200
 /calendar /calendar.html 200
 /ipo-radar /ipo-radar.html 200

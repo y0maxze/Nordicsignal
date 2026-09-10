@@ -1,1 +1,0 @@
-NordicSignal brand hero: blue canonical mark, animated native hero on home/dashboard, reduced-motion safe, hidden on focused signals view. Decorative hero does not display fabricated live prices or recommendations.
