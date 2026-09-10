@@ -45,7 +45,7 @@
     let menu=document.getElementById('nsMobileMoreMenu');
     if(!menu){menu=document.createElement('div');menu.id='nsMobileMoreMenu';menu.className='nsMobileMoreMenu';document.body.appendChild(menu)}
     menu.className='nsMobileMoreMenu';menu.hidden=true;
-    menu.innerHTML='<a href="/alerts">Varsler</a><a href="/ipo-radar">IPO Radar</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/development">System</a><a href="/legal">Vilkår & risiko</a>';
+    menu.innerHTML='<a href="/capital-flow">Kapitalflyt</a><a href="/alerts">Varsler</a><a href="/ipo-radar">IPO Radar</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/legal">Vilkår & risiko</a>';
 
     const more=document.getElementById('nsMobileMoreToggle');
     more.onclick=()=>{const next=menu.hidden;menu.hidden=!next;more.setAttribute('aria-expanded',String(next))};
