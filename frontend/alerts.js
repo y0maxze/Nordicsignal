@@ -2,7 +2,7 @@
   const list=document.getElementById('alertList'),summary=document.getElementById('summary'),unread=document.getElementById('unreadCount'),filters=document.getElementById('filters'),markAll=document.getElementById('markAll');
   let active='ALL',items=[];
   const esc=v=>String(v??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-  const typeName=t=>({INSIDER:'Insider',OPPORTUNITY:'Opportunity',ACTIVITY:'Aktivitet',TREND:'Trend',SIGNAL:'Signal',SHORT:'Short',OTHER:'Annet'}[t]||t||'Varsel');
+  const typeName=t=>({INSIDER:'Insider',CAPITAL_FLOW:'Kapitalflyt',OPPORTUNITY:'Opportunity',ACTIVITY:'Aktivitet',TREND:'Trend',SIGNAL:'Signal',SHORT:'Short',OTHER:'Annet'}[t]||t||'Varsel');
   function ago(value){const d=new Date(value);if(Number.isNaN(d.getTime()))return '';const sec=Math.max(0,(Date.now()-d.getTime())/1000);if(sec<60)return 'nå';if(sec<3600)return `${Math.floor(sec/60)} min siden`;if(sec<86400)return `${Math.floor(sec/3600)} t siden`;if(sec<604800)return `${Math.floor(sec/86400)} d siden`;return d.toLocaleDateString('no-NO',{day:'numeric',month:'short'});}
   function render(){
     const visible=active==='ALL'?items:items.filter(x=>x.alert_type===active);
