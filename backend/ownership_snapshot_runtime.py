@@ -147,7 +147,7 @@ def _normalize_holders(holders):
 
 
 def ingest_snapshot(provider, ticker, as_of_date, holders, source_ref=None):
-    """Store one immutable dated ownership snapshot and derive holder deltas.
+    """Store one dated ownership snapshot and derive holder deltas.
 
     Re-ingesting the same provider/ticker/date with an identical payload is idempotent.
     A changed payload replaces positions for that exact dated snapshot and recomputes
@@ -177,11 +177,17 @@ def ingest_snapshot(provider, ticker, as_of_date, holders, source_ref=None):
                 (captured_at, source_ref, len(normalized), payload_hash, snapshot_id),
             )
         else:
-            cur = conn.execute(
+            conn.execute(
                 "INSERT INTO ownership_snapshots(provider,ticker,as_of_date,captured_at,source_ref,holder_count,payload_hash) VALUES(?,?,?,?,?,?,?)",
                 (provider, ticker, as_of_date, captured_at, source_ref, len(normalized), payload_hash),
             )
-            snapshot_id = int(cur.lastrowid)
+            inserted = conn.execute(
+                "SELECT id FROM ownership_snapshots WHERE provider=? AND ticker=? AND as_of_date=?",
+                (provider, ticker, as_of_date),
+            ).fetchone()
+            if not inserted:
+                raise RuntimeError("ownership snapshot insert could not be resolved")
+            snapshot_id = int(inserted["id"])
         for row in normalized:
             conn.execute(
                 "INSERT INTO ownership_positions(snapshot_id,holder_key,holder_name,holder_type,country,shares,ownership_pct,rank_no) VALUES(?,?,?,?,?,?,?,?)",
