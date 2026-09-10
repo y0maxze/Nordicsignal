@@ -13,6 +13,28 @@ app = production.app
 log = logging.getLogger("nordicsignal.api_entrypoint")
 
 
+def remove_retired_product_routes():
+    """Remove retired user-facing Paper Trading / Backtest endpoints from production."""
+    kept = []
+    removed = []
+    for route in app.router.routes:
+        path = getattr(route, "path", "") or ""
+        if path == "/api/paper" or path.startswith("/api/paper/"):
+            removed.append(path)
+            continue
+        kept.append(route)
+    app.router.routes[:] = kept
+    if removed:
+        log.info("Removed %d retired Paper Trading routes", len(removed))
+    return removed
+
+
+# Paper Trading and its product backtest were retired from NordicSignal. Filtering at
+# the production entrypoint means the endpoints are absent from routing/OpenAPI rather
+# than merely hidden in the frontend. Internal model-validation workflows are separate.
+remove_retired_product_routes()
+
+
 def api_startup():
     production.main.init_db()
     production.main.seed_db()

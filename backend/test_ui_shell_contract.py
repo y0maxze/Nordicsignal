@@ -63,8 +63,11 @@ def test_mobile_nav_has_single_canonical_owner():
 
 def test_stock_tool_shell_keeps_core_tools_available():
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
-    for tool in ("overview", "opportunity", "readiness", "events", "pressure", "insider", "news", "reports", "dividend", "short", "evidence", "backtest", "paper"):
+    for tool in ("overview", "opportunity", "readiness", "events", "pressure", "insider", "news", "reports", "dividend", "short", "evidence"):
         assert f"'{tool}'" in shell
+    assert "REMOVED_STOCK_TOOLS=new Set(['backtest','paper'])" in shell
+    assert "href=\"/development\"" not in shell
+    assert "href=\"/paper\"" not in shell
 
 
 def test_stock_tool_reorder_is_idempotent():

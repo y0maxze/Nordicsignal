@@ -23,13 +23,6 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
             '/api/intelligence/{ticker}',
             '/api/market-pressure/{ticker}',
             '/api/readiness/{symbol}',
-            '/api/paper/history',
-            '/api/paper/dashboard',
-            '/api/paper/account',
-            '/api/paper/portfolio',
-            '/api/paper/trades',
-            '/api/paper/backtest',
-            '/api/paper/instrument-order',
             '/api/holdings',
             '/api/holdings/{holding_id}',
             '/api/holdings/{holding_id}/purchases',
@@ -56,6 +49,7 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
         }
         missing = sorted(required - paths)
         self.assertFalse(missing, f'Missing runtime API routes: {missing}')
+        self.assertFalse(any(path == '/api/paper' or path.startswith('/api/paper/') for path in paths))
 
     def test_purchase_lot_route_supports_edit_and_delete(self):
         code = (

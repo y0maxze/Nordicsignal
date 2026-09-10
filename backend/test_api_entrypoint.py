@@ -28,6 +28,10 @@ class ApiEntrypointTests(unittest.TestCase):
             production.main.refresh_all = original_refresh
         self.assertEqual(calls, ["init", "seed", "indexes"])
 
+    def test_retired_paper_routes_are_not_exposed(self):
+        paths = [getattr(route, "path", "") for route in api_entrypoint.app.router.routes]
+        self.assertFalse(any(path == "/api/paper" or path.startswith("/api/paper/") for path in paths))
+
 
 if __name__ == "__main__":
     unittest.main()

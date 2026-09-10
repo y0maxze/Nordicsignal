@@ -27,17 +27,20 @@ Do not use `wrangler versions upload` as the production deploy command. A versio
 
 ### Routes to verify after deploy
 
+- `/`
 - `/app`
 - `/stock?ticker=LSG`
 - `/stock?ticker=LSG&tab=news`
 - `/stock?ticker=LSG&tab=insider`
-- `/stock?ticker=LSG&tab=paper`
-- `/stock?ticker=LSG&tab=backtest`
 - `/stock?ticker=LSG&tab=pressure`
-- `/paper`
 - `/history`
 - `/news`
+- `/morning`
+- `/calendar`
+- `/readiness`
 - `/theme.css`
+
+Retired product routes `/paper`, `/paper-trading` and `/development` must not expose their old features. Paper Trading and the old user-facing Backtest are removed from production; internal model-validation workflows remain separate CI/research controls.
 
 Confirm the NordicSignal logo returns to `/app` and that dashboard summary cards open their filtered stock lists.
 
@@ -65,7 +68,7 @@ Backend dependencies are pinned in `backend/requirements.txt` so CI and Render u
 
 Set `DATABASE_URL` to the Render PostgreSQL internal connection string. PostgreSQL is the recommended production store. SQLite remains a local-development fallback when `DATABASE_URL` is absent.
 
-Keep the current API at one instance until paper-account writes and refresh jobs are explicitly designed for multi-instance concurrency.
+Keep the current API at one instance until shared write paths and refresh jobs are explicitly designed for multi-instance concurrency.
 
 After every backend deployment verify at least:
 
@@ -76,9 +79,9 @@ After every backend deployment verify at least:
 - `/api/insider/LSG`
 - `/api/short/LSG`
 - `/api/market-pressure/LSG`
-- `/api/paper/portfolio`
-- `/api/paper/dashboard`
 - `/api/opportunity-performance`
+
+Also verify `/api/paper/*` is absent from the production FastAPI router.
 
 ## CI gate
 
@@ -92,12 +95,9 @@ After every backend deployment verify at least:
 - required frontend assets
 - production route declarations
 - key navigation/deep-link invariants
+- retired Paper Trading, Backtest and Development surfaces stay removed
 
 A production deploy should not be treated as ready until the latest `main` workflow is green.
-
-## Paper trading integrity
-
-Starting capital cannot be changed after the first paper trade. Reset the paper account first if a new starting balance is required. This avoids revaluing historical performance against a different initial-capital assumption.
 
 ## Data and security notes
 

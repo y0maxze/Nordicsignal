@@ -11,27 +11,31 @@ NordicSignal is an Oslo Børs stock-intelligence dashboard built around transpar
 - Public primary-insider disclosures with structured buy/sell, person/company, shares, price, value, post-trade holding and ownership percentage when available
 - Finanstilsynet public short-position data
 - Market Pressure view with transparent LONG proxy, public SHORT changes and abnormal-volume alerts
-- Paper Trading with live-valued open positions and a FIFO trade journal
-- Historical backtesting with monthly contributions, fees and dividend handling
+- Opportunity, Event Radar, IPO Radar, Morning Brief, alerts and evidence views
 - PostgreSQL production storage with SQLite fallback for local development
-- Cloudflare Worker shell with explicit application routes and a shared monochrome UI theme
+- Cloudflare Worker shell with explicit application routes and a shared NordicSignal UI theme
 - CI checks for Python tests, frontend JavaScript, Worker syntax, required assets, routes and navigation invariants
+
+Paper Trading, the old user-facing Backtest and the Development/System page are retired product features. Internal validation/backtest jobs used to test signal hypotheses remain as research safeguards and are not user-facing trading tools.
 
 ## Architecture
 
 - `frontend/` — static application pages and `theme.css`
 - `worker.js` — Cloudflare routing, API proxy and small UI enhancement layer
-- `backend/` — FastAPI service, providers, scoring, paper trading and runtime enrichments
+- `backend/` — FastAPI service, providers, scoring and runtime enrichments
 - `render.yaml` — Render API deployment configuration
 - `wrangler.toml` — Cloudflare Workers + Static Assets configuration
 
 ## Main routes
 
+- `/` — NordicSignal intro and risk acceptance flow
 - `/app` — dashboard
 - `/stock?ticker=LSG` — per-stock intelligence
-- `/paper` — paper trading
 - `/history` — historical price view
 - `/news` — company news/events view
+- `/morning` — morning brief
+- `/calendar` — market/event calendar
+- `/readiness` — investment check
 - `/api/health` — backend health check
 
 ## Run locally
