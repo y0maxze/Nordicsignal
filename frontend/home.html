@@ -4,93 +4,50 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#020913">
-<title>NordicSignal · Data → innsikt → mulighet</title>
-<meta name="description" content="NordicSignal samler markedsdata, fundamentals, insideraktivitet, hendelser og historisk evidens i ett beslutningssystem.">
+<title>NordicSignal</title>
+<meta name="description" content="NordicSignal · data, innsikt og beslutningsstøtte for Oslo/Nordic-aksjer.">
 <link rel="icon" href="/nordicsignal-brand.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/home.css">
 </head>
 <body>
-<div class="scrollProgress" id="scrollProgress" aria-hidden="true"></div>
-<header class="homeNav" id="homeNav">
-  <a class="brand" href="/" aria-label="NordicSignal hjem"><img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span></a>
-  <nav aria-label="Hovedmeny">
-    <a href="#system">Systemet</a><a href="/morning">Før børs</a><a href="/ipo-radar">IPO Radar</a><a href="#research">Research</a>
-  </nav>
-  <a class="navCta" href="/app">Åpne dashboard <span>↗</span></a>
-</header>
-
-<main>
-<section class="hero" id="system">
-  <div class="stars" id="stars" aria-hidden="true"></div>
-  <div class="aurora auroraA" aria-hidden="true"></div><div class="aurora auroraB" aria-hidden="true"></div>
-  <div class="heroCopy reveal">
-    <span class="eyebrow">REAL DATA · REAL SIGNALS</span>
-    <h1>Et klarere bilde<br>av markedet.</h1>
-    <p>NordicSignal kobler sammen markedsdata, fundamentals, insideraktivitet, verifiserte hendelser og målbar evidens — uten å blande research inn i hovedscoren før data støtter det.</p>
-    <div class="heroActions"><a class="primary" href="/app">Gå til NordicSignal</a><a class="ghost" href="#how">Se hvordan det virker ↓</a></div>
-  </div>
-
-  <div class="systemScene" id="systemScene" aria-label="Interaktiv NordicSignal systemoversikt">
-    <svg class="connections" viewBox="0 0 1000 720" preserveAspectRatio="none" aria-hidden="true">
-      <g><path d="M500 355 L180 130"/><path d="M500 355 L390 90"/><path d="M500 355 L625 90"/><path d="M500 355 L830 150"/><path d="M500 355 L155 520"/><path d="M500 355 L365 620"/><path d="M500 355 L640 620"/><path d="M500 355 L855 520"/></g>
-    </svg>
-    <div class="core" data-depth=".10">
-      <div class="globeGrid"></div><img src="/nordicsignal-brand.svg" alt=""><strong>NORDICSIGNAL</strong><span>DATA → INSIGHT → OPPORTUNITY</span>
-    </div>
-    <a class="module m1 blue" data-depth=".30" href="/app"><i>◉</i><b>MARKET DATA</b><small>Oslo Børs · pris · volum</small></a>
-    <a class="module m2 green" data-depth=".22" href="/stock"><i>▤</i><b>FUNDAMENTALS</b><small>Nøkkeltall · kvalitet · verdi</small></a>
-    <a class="module m3 amber" data-depth=".26" href="/insider"><i>●●</i><b>INSIDER DATA</b><small>Handler · eierskap · smart money</small></a>
-    <a class="module m4 red" data-depth=".34" href="/calendar"><i>ϟ</i><b>EVENT RADAR</b><small>Hendelser · materialitet · evidens</small></a>
-    <a class="module m5 cyan" data-depth=".28" href="/app"><i>↗</i><b>OSEBX</b><small>Benchmark · regime · relativ styrke</small></a>
-    <a class="module m6 blue" data-depth=".20" href="/app?view=signals"><i>⚙</i><b>SCORE ENGINE</b><small>Coverage-aware · multi-factor</small></a>
-    <a class="module m7 violet" data-depth=".36" href="#research"><i>★</i><b>HIGH CONVICTION</b><small>Point-in-time · validation</small></a>
-    <a class="module m8 cyan" data-depth=".24" href="/ipo-radar"><i>⌁</i><b>IPO · PUSH · BRIEF</b><small>Nye noteringer · varsler · morgenbrief</small></a>
-    <div class="pulse p1"></div><div class="pulse p2"></div><div class="pulse p3"></div>
-  </div>
-
-  <aside class="livePanel reveal" aria-live="polite">
-    <div class="liveTitle"><span class="statusDot" id="statusDot"></span><b id="systemStatus">Kobler til systemet…</b></div>
-    <div class="liveRow"><span>Data feeds</span><strong id="dataStatus">—</strong></div>
-    <div class="liveRow"><span>Push</span><strong id="pushStatus">—</strong></div>
-    <div class="liveRow"><span>IPO scan</span><strong id="ipoStatus">—</strong></div>
-    <div class="liveRow"><span>Research</span><strong>Shadow only</strong></div>
-  </aside>
-  <div class="heroQuote reveal"><q>Better data.<br>Better perspective.<br>Better decisions.</q><span>NORDICSIGNAL</span></div>
-  <a class="scrollHint" href="#how"><span>SCROLL TO EXPLORE</span><i>↓</i></a>
-</section>
-
-<section class="story" id="how">
-  <div class="sectionIntro reveal"><span class="eyebrow">ET SYSTEM · IKKE EN ENKEL SCORE</span><h2>Fra rådata til en beslutning du kan forstå.</h2><p>Hvert lag har én jobb. Når du scroller, bygger systemet seg opp i samme rekkefølge som dataene behandles.</p></div>
-  <div class="storyGrid">
-    <div class="stickyVisual reveal" id="stickyVisual"><div class="miniCore"><img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span></div><div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div><div class="flowLabel" id="flowLabel">MARKET DATA</div></div>
-    <div class="steps">
-      <article class="step reveal" data-flow="MARKET DATA"><span>01</span><div><h3>Markedet inn</h3><p>Pris, volum, referansedata og markedskontekst danner grunnlaget. Manglende data skjules ikke.</p><a href="/app">Åpne oversikten →</a></div></article>
-      <article class="step reveal" data-flow="ANALYSE"><span>02</span><div><h3>Uavhengige analysemotorer</h3><p>Fundamentals, valuation, trend, insider og event-risk holdes adskilt slik at én overskrift ikke kan dominere alt.</p><a href="/stock">Analyser en aksje →</a></div></article>
-      <article class="step reveal" data-flow="OPPORTUNITY"><span>03</span><div><h3>Opportunity</h3><p>Systemet leter etter konfluens og tidlige vendepunkter, men tersklene senkes ikke bare for å produsere flere signaler.</p><a href="/app?view=signals">Se signalene →</a></div></article>
-      <article class="step reveal" data-flow="EVIDENCE"><span>04</span><div><h3>Evidens mot OSEBX</h3><p>Resultater måles fremover og benchmark-relativt. Avkastning, drawdown og run-up vurderes før nye lag får tillit.</p><a href="/development">Se systemstatus →</a></div></article>
-    </div>
-  </div>
-</section>
-
-<section class="radarBand reveal">
-  <a href="/morning" class="feature blue"><span>FØR BØRS</span><h3>Morgenbrief</h3><p>Rapporter, verifiserte hendelser, nattens meldinger og markedet før Oslo åpner.</p><b>Åpne brief →</b></a>
-  <a href="/ipo-radar" class="feature violet"><span>NYE MULIGHETER</span><h3>IPO Radar</h3><p>Offisielle Euronext-noteringer, dokumentfakta og historisk IPO-evidens.</p><b>Åpne IPO Radar →</b></a>
-  <a href="/alerts" class="feature cyan"><span>LIVE</span><h3>Push & varsler</h3><p>Materiale signalendringer og nye verifiserte børsnoteringer, levert uten støy.</p><b>Se varsler →</b></a>
-</section>
-
-<section class="research" id="research">
-  <div class="researchGlow" aria-hidden="true"></div>
-  <div class="researchCopy reveal"><span class="eyebrow violetText">HIGH CONVICTION · RESEARCH</span><h2>Først samle data.<br>Så bevise edge.</h2><p>High Conviction kjører fortsatt i shadow mode. Systemet fryser point-in-time snapshots, måler 1/5/20/60D utfall mot OSEBX og grupperer korrelerte dager til uavhengige episoder før statistisk inferens.</p><div class="researchActions"><a class="primary violetBtn" href="/development">Systemstatus</a><a class="ghost" href="/app">Til dashboard</a></div></div>
-  <div class="researchPipeline reveal">
-    <div><i>01</i><b>POINT-IN-TIME</b><span>Ingen look-ahead</span></div><em>→</em><div><i>02</i><b>FORWARD OUTCOMES</b><span>1D · 5D · 20D · 60D</span></div><em>→</em><div><i>03</i><b>VALIDATION</b><span>OSEBX · MAE/MFE</span></div><em>→</em><div><i>04</i><b>WALK-FORWARD</b><span>Activation OFF</span></div>
-  </div>
-</section>
-
-<section class="finalCta reveal">
-  <img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span><h2>Se hva markedet sier nå.</h2><p>Data → innsikt → mulighet.</p><a class="primary" href="/app">Åpne NordicSignal</a>
-</section>
+<main class="intro" aria-labelledby="introTitle">
+  <img class="introArt" src="/nordicsignal-intro.jpg" alt="NordicSignal systemoversikt med Market Data, Fundamentals, Insider Data, Event Radar, Trend Engine, Score Engine, Opportunity, IPO Radar, Push, Morning Brief og High Conviction.">
+  <div class="shade" aria-hidden="true"></div>
+  <section class="introActions">
+    <span class="srOnly" id="introTitle">NordicSignal</span>
+    <button class="continueBtn" id="introContinue" type="button">Fortsett</button>
+    <a class="legalLink" href="/legal">Vilkår & risiko</a>
+  </section>
 </main>
-<footer><div class="brand smallBrand"><img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span></div><p>Research- og beslutningsstøtte. Ikke personlig investeringsrådgivning.</p><div><a href="/legal">Vilkår & risiko</a><a href="/development">System</a></div></footer>
-<script src="/home.js"></script>
+
+<section class="riskGate" id="riskGate" hidden aria-labelledby="riskTitle" aria-modal="true" role="dialog">
+  <div class="riskCard">
+    <div class="riskBrand"><img src="/nordicsignal-brand.svg" alt=""><span>NORDICSIGNAL</span></div>
+    <h1 id="riskTitle">Før du bruker NordicSignal</h1>
+    <p>NordicSignal analyserer markedsdata, nyheter og modeller, men gir ikke personlig investeringsrådgivning og kan ikke garantere at data eller analyser er riktige.</p>
+    <p class="warning"><strong>Investering innebærer risiko.</strong> Du kan tape deler av eller hele beløpet du investerer. Score, AI-brief, Investment Check, signaler og backtester er beslutningsstøtte — ikke en garanti eller ordre om å kjøpe eller selge.</p>
+    <label class="acceptRow"><input id="riskAccept" type="checkbox"><span>Jeg har lest og forstått risikoen, forstår at jeg selv er ansvarlig for investeringsbeslutninger, og godtar NordicSignals vilkår og ansvarsbegrensning for denne nettleserøkten.</span></label>
+    <div class="riskActions"><a href="/legal" target="_blank" rel="noopener">Les full policy og vilkår</a><button id="riskContinue" type="button" disabled>Godta og åpne NordicSignal</button></div>
+    <small>Policy NS-RISK-2026-08-27-2 · Ny nettleserøkt krever ny bekreftelse.</small>
+  </div>
+</section>
+
+<script>
+(function(){
+  const POLICY_VERSION='NS-RISK-2026-08-27-2';
+  const SESSION_KEY='nordicsignal_policy_session_acceptance';
+  const AUDIT_KEY='nordicsignal_policy_acceptance';
+  const introButton=document.getElementById('introContinue');
+  const gate=document.getElementById('riskGate');
+  const checkbox=document.getElementById('riskAccept');
+  const acceptButton=document.getElementById('riskContinue');
+  function accepted(){try{const row=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');return !!(row&&row.version===POLICY_VERSION&&row.accepted===true)}catch{return false}}
+  function openApp(){location.assign('/app')}
+  introButton.addEventListener('click',()=>{if(accepted()){openApp();return}gate.hidden=false;document.documentElement.classList.add('riskOpen');setTimeout(()=>checkbox.focus(),50)});
+  checkbox.addEventListener('change',()=>{acceptButton.disabled=!checkbox.checked});
+  acceptButton.addEventListener('click',()=>{if(!checkbox.checked)return;const record={version:POLICY_VERSION,accepted:true,accepted_at:new Date().toISOString()};try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(record))}catch{}try{localStorage.setItem(AUDIT_KEY,JSON.stringify(record))}catch{}openApp()});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!gate.hidden){gate.hidden=true;document.documentElement.classList.remove('riskOpen');introButton.focus()}});
+})();
+</script>
 </body>
 </html>
