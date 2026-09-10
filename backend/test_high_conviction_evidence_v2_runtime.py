@@ -36,3 +36,15 @@ def test_critical_event_is_explicit_blocker(monkeypatch):
     out=v2.build_shadow("KOG")
     assert "current_critical_event_risk" in out["blockers"]
     assert out["activation"]["enabled"] is False
+
+
+def test_missing_event_archive_fails_closed_without_creating_risk(monkeypatch):
+    class BrokenConn:
+        def execute(self,*args,**kwargs):
+            raise RuntimeError("db unavailable")
+        def close(self):
+            pass
+    monkeypatch.setattr(v2, "connect", lambda: BrokenConn())
+    out=v2._recent_event_risk("KOG")
+    assert out["available"] is False
+    assert out["has_critical_event_risk"] is False
