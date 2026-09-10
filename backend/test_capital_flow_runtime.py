@@ -1,6 +1,9 @@
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 import capital_flow_runtime as c
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_classifies_major_holding_and_institutional_flows():
@@ -33,3 +36,34 @@ def test_policy_is_observational_only():
     assert data["policy"]["score_effect"] == "none"
     assert data["policy"]["new_hours"] == 48
     assert data["policy"]["active_days"] == 30
+
+
+def test_capital_flow_product_contract_is_wired_everywhere():
+    worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+    shell = (ROOT / "frontend" / "ui_shell.js").read_text(encoding="utf-8")
+    mobile = (ROOT / "frontend" / "mobile_learning_nav.js").read_text(encoding="utf-8")
+    page = (ROOT / "frontend" / "capital-flow.html").read_text(encoding="utf-8")
+    client = (ROOT / "frontend" / "capital-flow.js").read_text(encoding="utf-8")
+    alerts = (ROOT / "frontend" / "alerts.html").read_text(encoding="utf-8")
+    sitecustomize = (ROOT / "backend" / "sitecustomize.py").read_text(encoding="utf-8")
+
+    assert '["/capital-flow", "/capital-flow.html"]' in worker
+    assert 'href="/capital-flow"' in shell
+    assert "'/api/capital-flow?state=NEW&limit=40'" in mobile
+    assert 'href="/capital-flow"' in mobile
+    assert 'data-state="NEW"' in page and 'data-state="HISTORICAL"' in page
+    assert '/api/capital-flow?' in client
+    assert 'data-type="CAPITAL_FLOW"' in alerts
+    assert 'capital_flow_runtime' in sitecustomize
+    assert 'capital_flow_push_bridge_runtime' in sitecustomize
+
+
+def test_retired_system_surface_has_no_mobile_residue():
+    ui = (ROOT / "frontend" / "ui_shell.js").read_text(encoding="utf-8")
+    mobile = (ROOT / "frontend" / "mobile_nav.js").read_text(encoding="utf-8")
+    worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+    assert 'href="/development"' not in ui
+    assert 'href="/development"' not in mobile
+    assert '["/development",' not in worker
+    assert not (ROOT / "frontend" / "test_system_hero.mjs").exists()
+    assert (ROOT / "frontend" / "test_intro_risk_gate.mjs").exists()
