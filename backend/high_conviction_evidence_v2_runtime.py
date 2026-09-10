@@ -214,8 +214,8 @@ def build_shadow(ticker):
         "reason": "Shadow-only. Activation requires pre-registered rules, adequate forward sample size, benchmark-relative edge, regime diversity and acceptable path risk.",
     }
     result["policy"] = (
-        "Research-only evidence assembly. Trend, event risk, OSEBX excess return, MAE/MFE-style path evidence and regime coverage are descriptive only; "
-        "no buy/sell signal, stock-score change, threshold tuning or position sizing."
+        "Research-only evidence assembly. Trend, event risk, OSEBX excess return, MAE/MFE-style path evidence and regime coverage are descriptive only. "
+        "No buy/sell signal is emitted; no stock-score change, threshold tuning or position sizing."
     )
     result["generated_at"] = datetime.now(timezone.utc).isoformat()
     return result
