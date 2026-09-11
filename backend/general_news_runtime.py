@@ -180,8 +180,6 @@ def _parse_current_euronext_rows(html, limit):
         if href:
             url = urljoin("https://live.euronext.com", href)
         elif node_id:
-            # The current Euronext list opens releases through a modal and leaves href
-            # empty. /node/<nid> is the canonical resolver users can open in-browser.
             url = f"https://live.euronext.com/en/node/{node_id}"
         else:
             continue
@@ -218,7 +216,6 @@ def parse_general_euronext_html(html, limit=30):
     if current:
         return current
 
-    # Legacy fallback for older cached/alternate Euronext markup with ordinary hrefs.
     parser = news_runtime._RowLinkParser()
     parser.feed(html)
     items = []
@@ -254,6 +251,12 @@ def parse_general_euronext_html(html, limit=30):
 
 
 def _general_yahoo_items(provider, limit):
+    """Return only media items explicitly linked to an Oslo-listed ticker.
+
+    The Yahoo search query itself is not evidence that an article belongs to the
+    Norwegian market. ``relatedTickers`` with a ``.OL`` symbol is the admission
+    criterion; unlinked macro/PR noise must not enter the market feed.
+    """
     items = []
     try:
         data = provider._get(
@@ -263,9 +266,11 @@ def _general_yahoo_items(provider, limit):
             title = " ".join(str(row.get("title") or "").split()).strip()
             if not title:
                 continue
-            ts = row.get("providerPublishTime")
             related = [str(x).upper() for x in (row.get("relatedTickers") or [])]
             oslo = next((x[:-3] for x in related if x.endswith(".OL")), None)
+            if not oslo:
+                continue
+            ts = row.get("providerPublishTime")
             items.append({
                 "ticker": oslo,
                 "title": title,
@@ -276,14 +281,18 @@ def _general_yahoo_items(provider, limit):
                 "summary": title,
                 "source_type": "media",
                 "official": False,
-                "verified_issuer": bool(oslo),
+                "verified_issuer": True,
                 "related_tickers": related,
             })
             if len(items) >= limit:
                 break
-        return items, {"status": "live" if items else "no_matches", "items": len(items)}
+        return items, {
+            "status": "live" if items else "no_matches",
+            "items": len(items),
+            "admission": "explicit_related_ticker_ol",
+        }
     except Exception as exc:
-        return [], {"status": "unavailable", "items": 0, "error": str(exc)}
+        return [], {"status": "unavailable", "items": 0, "error": str(exc), "admission": "explicit_related_ticker_ol"}
 
 
 def general_market_news(provider=None, limit=30):
@@ -319,7 +328,7 @@ def general_market_news(provider=None, limit=30):
         "market": "Oslo Børs",
         "items": merged,
         "status": "live_general_news" if merged else "no_market_news",
-        "source": "Euronext / Oslo Børs + markedsnyheter",
+        "source": "Euronext / Oslo Børs + ticker-linked markedsnyheter",
         "sources": sources,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

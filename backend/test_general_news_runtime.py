@@ -1,6 +1,30 @@
 import unittest
 
-from general_news_runtime import _clean_company_news, _is_generic_ir_navigation, parse_general_euronext_html
+from general_news_runtime import _clean_company_news, _general_yahoo_items, _is_generic_ir_navigation, parse_general_euronext_html
+
+
+class _FakeYahoo:
+    BASE = "https://query1.finance.yahoo.com"
+
+    def _get(self, _url):
+        return {
+            "news": [
+                {
+                    "title": "Unrelated international conference",
+                    "publisher": "Newswire",
+                    "link": "https://example.test/noise",
+                    "providerPublishTime": 1789110000,
+                    "relatedTickers": ["EURUSD=X"],
+                },
+                {
+                    "title": "Aker update covered by media",
+                    "publisher": "Media",
+                    "link": "https://example.test/aker",
+                    "providerPublishTime": 1789110001,
+                    "relatedTickers": ["AKER.OL", "AKAAF"],
+                },
+            ]
+        }
 
 
 class GeneralNewsRuntimeTests(unittest.TestCase):
@@ -51,6 +75,14 @@ class GeneralNewsRuntimeTests(unittest.TestCase):
         self.assertEqual(items[0]['category'], 'Rapport')
         self.assertTrue(items[0]['official'])
         self.assertIsNotNone(items[0]['published_at'])
+
+    def test_general_yahoo_feed_requires_explicit_oslo_related_ticker(self):
+        items, status = _general_yahoo_items(_FakeYahoo(), 10)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['ticker'], 'AKER')
+        self.assertTrue(items[0]['verified_issuer'])
+        self.assertEqual(status['admission'], 'explicit_related_ticker_ol')
+        self.assertNotIn('Unrelated international conference', [x['title'] for x in items])
 
 
 if __name__ == '__main__':

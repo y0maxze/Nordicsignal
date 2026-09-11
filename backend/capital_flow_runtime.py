@@ -129,6 +129,25 @@ def _upsert(event):
         conn.close()
 
 
+def _cleanup_unlinked_reported_events():
+    """Delete non-actionable media rows that have no explicit issuer link.
+
+    A broad news search can surface unrelated macro/PR stories. Reported Capital
+    Flow evidence is admitted only when the upstream item is explicitly linked to
+    a listed ticker, so legacy tickerless media rows are safe to remove.
+    """
+    conn = connect()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM capital_flow_events WHERE evidence_level='reported' AND (ticker IS NULL OR TRIM(ticker)='')"
+        )
+        deleted = max(0, int(getattr(cursor, "rowcount", 0) or 0))
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
 def _ingest_insider_history():
     conn = connect()
     try:
@@ -209,6 +228,11 @@ def _ingest_market_news():
         return 0
     count = 0
     for item in feed.get("items") or []:
+        ticker = str(item.get("ticker") or "").upper().replace(".OL", "") or None
+        # A title keyword match is not enough evidence to connect a story to an
+        # issuer. Require explicit ticker linkage for every news-derived flow.
+        if not ticker:
+            continue
         classified = _classify_news(item)
         if not classified:
             continue
@@ -216,13 +240,12 @@ def _ingest_market_news():
         event_at = item.get("published_at") or _now()
         official = bool(item.get("official"))
         evidence = "verified" if official else "reported"
-        ticker = str(item.get("ticker") or "").upper().replace(".OL", "") or None
         source_url = item.get("url")
         title = str(item.get("title") or "Kapitalflyt").strip()
         fp = _fingerprint("news", item.get("node_id") or source_url, ticker, title, event_at)
         # Media context can be useful, but only direct ticker-linked items with an
         # explicit direction become push-eligible. It never changes the score.
-        alert_eligible = official or bool(ticker and direction in {"buy", "sell"} and INSTITUTION_WORDS.search(title))
+        alert_eligible = official or bool(direction in {"buy", "sell"} and INSTITUTION_WORDS.search(title))
         _upsert({
             "fingerprint": fp,
             "ticker": ticker,
@@ -250,9 +273,16 @@ def scan_once():
         return {"status": "busy"}
     try:
         _ensure_schema()
+        cleaned = _cleanup_unlinked_reported_events()
         insiders = _ingest_insider_history()
         news = _ingest_market_news()
-        return {"status": "ok", "insider_events_seen": insiders, "ownership_news_seen": news, "generated_at": _now()}
+        return {
+            "status": "ok",
+            "insider_events_seen": insiders,
+            "ownership_news_seen": news,
+            "unlinked_reported_removed": cleaned,
+            "generated_at": _now(),
+        }
     finally:
         _SCAN_LOCK.release()
 
@@ -317,7 +347,8 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
             "active_days": ACTIVE_DAYS,
             "score_effect": "none",
             "verified_definition": "Official exchange/primary-insider evidence",
-            "reported_definition": "Media/context evidence; not treated as verified holdings delta",
+            "reported_definition": "Ticker-linked media/context evidence; not treated as verified holdings delta",
+            "news_admission": "explicit_ticker_link_required",
         },
         "generated_at": _now(),
     }
@@ -339,7 +370,12 @@ def status():
         "reported": int(reported["n"] if reported else 0),
         "last_seen_at": row["last_seen"] if row else None,
         "score_effect": "none",
-        "coverage": ["primary_insiders", "major_holding_disclosures", "institutional/fund ownership news", "foreign ownership context", "block trades"],
+        "daily_ownership_feed": False,
+        "coverage": [
+            "primary_insiders_verified",
+            "official_exchange_disclosures_classified_when_ticker_linked",
+            "ticker_linked_media_context_reported",
+        ],
         "generated_at": _now(),
     }
 
