@@ -11,7 +11,7 @@ before a provider is connected by reporting source/status truthfully.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 
@@ -111,11 +111,19 @@ def _ensure_schema():
 
 
 def _holder_key(row):
-    raw = "|".join([
-        str(row.get("holder_id") or "").strip().lower(),
-        str(row.get("name") or row.get("holder_name") or "").strip().lower(),
-        str(row.get("country") or "").strip().lower(),
-    ])
+    """Return a stable provider-holder identity.
+
+    A provider holder id is authoritative when present. Without one, normalized
+    holder name is the least-bad stable identity. Country is deliberately not
+    part of the key: a corrected/missing country must not manufacture an
+    EXITED+ENTERED ownership event.
+    """
+    holder_id = str(row.get("holder_id") or "").strip().lower()
+    if holder_id:
+        raw = f"id|{holder_id}"
+    else:
+        name = " ".join(str(row.get("name") or row.get("holder_name") or "").strip().lower().split())
+        raw = f"name|{name}"
     return hashlib.sha256(raw.encode("utf-8", "ignore")).hexdigest()[:32]
 
 
@@ -126,38 +134,129 @@ def _num(value):
         return None
 
 
+def _validate_as_of_date(value):
+    raw = str(value or "").strip()
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except (TypeError, ValueError):
+        raise ValueError("provider, ticker and valid YYYY-MM-DD as_of_date are required") from None
+
+
 def _normalize_holders(holders):
     out = []
+    seen = set()
     for raw in holders or []:
         if not isinstance(raw, dict):
             continue
         name = str(raw.get("name") or raw.get("holder_name") or "").strip()
         if not name:
             continue
+        holder_key = _holder_key(raw)
+        if holder_key in seen:
+            raise ValueError(f"duplicate holder identity in ownership snapshot: {name}")
+        seen.add(holder_key)
+        rank_raw = raw.get("rank")
         out.append({
-            "holder_key": _holder_key(raw),
+            "holder_key": holder_key,
             "holder_name": name[:300],
             "holder_type": str(raw.get("holder_type") or "").strip()[:80] or None,
             "country": str(raw.get("country") or "").strip()[:80] or None,
             "shares": _num(raw.get("shares")),
             "ownership_pct": _num(raw.get("ownership_pct")),
-            "rank_no": int(raw["rank"]) if str(raw.get("rank") or "").isdigit() else None,
+            "rank_no": int(rank_raw) if str(rank_raw or "").isdigit() else None,
         })
     return out
+
+
+def _positions_for_snapshot(conn, snapshot_id):
+    rows = conn.execute("SELECT * FROM ownership_positions WHERE snapshot_id=?", (snapshot_id,)).fetchall()
+    return {r["holder_key"]: dict(r) for r in rows}
+
+
+def _recompute_changes(conn, provider, ticker, to_date, created_at):
+    """Rebuild one snapshot transition from the immediately previous snapshot.
+
+    The first observation is a baseline, not evidence that every visible holder
+    bought that day, so it intentionally emits no ownership_changes rows.
+    """
+    current_snapshot = conn.execute(
+        "SELECT id,as_of_date FROM ownership_snapshots WHERE provider=? AND ticker=? AND as_of_date=?",
+        (provider, ticker, to_date),
+    ).fetchone()
+    if not current_snapshot:
+        return None
+
+    conn.execute(
+        "DELETE FROM ownership_changes WHERE provider=? AND ticker=? AND to_date=?",
+        (provider, ticker, to_date),
+    )
+    prev = conn.execute(
+        "SELECT id,as_of_date FROM ownership_snapshots WHERE provider=? AND ticker=? AND as_of_date<? ORDER BY as_of_date DESC LIMIT 1",
+        (provider, ticker, to_date),
+    ).fetchone()
+    if not prev:
+        return None
+
+    previous = _positions_for_snapshot(conn, prev["id"])
+    current = _positions_for_snapshot(conn, current_snapshot["id"])
+    for key in sorted(set(previous) | set(current)):
+        before = previous.get(key)
+        after = current.get(key)
+        identity = after or before
+        name = identity["holder_name"]
+        shares_before = _num(before.get("shares")) if before else None
+        shares_after = _num(after.get("shares")) if after else None
+        pct_before = _num(before.get("ownership_pct")) if before else None
+        pct_after = _num(after.get("ownership_pct")) if after else None
+        shares_delta = (shares_after - shares_before) if shares_before is not None and shares_after is not None else None
+        pct_delta = (pct_after - pct_before) if pct_before is not None and pct_after is not None else None
+        if before is None:
+            kind = "ENTERED"
+        elif after is None:
+            kind = "EXITED"
+        elif (shares_delta or 0) > 0 or (pct_delta or 0) > 0:
+            kind = "INCREASED"
+        elif (shares_delta or 0) < 0 or (pct_delta or 0) < 0:
+            kind = "DECREASED"
+        else:
+            kind = "UNCHANGED"
+        conn.execute(
+            "INSERT INTO ownership_changes(provider,ticker,from_date,to_date,holder_key,holder_name,holder_type,country,shares_before,shares_after,shares_delta,pct_before,pct_after,pct_delta,change_kind,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                provider,
+                ticker,
+                prev["as_of_date"],
+                to_date,
+                key,
+                name,
+                identity.get("holder_type"),
+                identity.get("country"),
+                shares_before,
+                shares_after,
+                shares_delta,
+                pct_before,
+                pct_after,
+                pct_delta,
+                kind,
+                created_at,
+            ),
+        )
+    return prev["as_of_date"]
 
 
 def ingest_snapshot(provider, ticker, as_of_date, holders, source_ref=None):
     """Store one dated ownership snapshot and derive holder deltas.
 
     Re-ingesting the same provider/ticker/date with an identical payload is idempotent.
-    A changed payload replaces positions for that exact dated snapshot and recomputes
-    changes against the previous snapshot from the same provider.
+    A changed payload replaces positions for that exact dated snapshot and rebuilds
+    both its transition and the immediately following transition, preventing stale
+    deltas when historical provider data is corrected or backfilled.
     """
     provider = str(provider or "").strip()
     ticker = str(ticker or "").strip().upper().replace(".OL", "")
-    as_of_date = str(as_of_date or "").strip()[:10]
-    if not provider or not ticker or len(as_of_date) != 10:
-        raise ValueError("provider, ticker and YYYY-MM-DD as_of_date are required")
+    as_of_date = _validate_as_of_date(as_of_date)
+    if not provider or not ticker:
+        raise ValueError("provider, ticker and valid YYYY-MM-DD as_of_date are required")
     normalized = _normalize_holders(holders)
     payload_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     captured_at = _now()
@@ -188,48 +287,35 @@ def ingest_snapshot(provider, ticker, as_of_date, holders, source_ref=None):
             if not inserted:
                 raise RuntimeError("ownership snapshot insert could not be resolved")
             snapshot_id = int(inserted["id"])
+
         for row in normalized:
             conn.execute(
                 "INSERT INTO ownership_positions(snapshot_id,holder_key,holder_name,holder_type,country,shares,ownership_pct,rank_no) VALUES(?,?,?,?,?,?,?,?)",
                 (snapshot_id,row["holder_key"],row["holder_name"],row["holder_type"],row["country"],row["shares"],row["ownership_pct"],row["rank_no"]),
             )
 
-        prev = conn.execute(
-            "SELECT id,as_of_date FROM ownership_snapshots WHERE provider=? AND ticker=? AND as_of_date<? ORDER BY as_of_date DESC LIMIT 1",
+        previous_date = _recompute_changes(conn, provider, ticker, as_of_date, captured_at)
+        next_snapshot = conn.execute(
+            "SELECT as_of_date FROM ownership_snapshots WHERE provider=? AND ticker=? AND as_of_date>? ORDER BY as_of_date ASC LIMIT 1",
             (provider, ticker, as_of_date),
         ).fetchone()
-        conn.execute("DELETE FROM ownership_changes WHERE provider=? AND ticker=? AND to_date=?", (provider,ticker,as_of_date))
-        previous = {}
-        if prev:
-            rows = conn.execute("SELECT * FROM ownership_positions WHERE snapshot_id=?", (prev["id"],)).fetchall()
-            previous = {r["holder_key"]: dict(r) for r in rows}
-        current = {r["holder_key"]: r for r in normalized}
-        for key in sorted(set(previous) | set(current)):
-            before = previous.get(key)
-            after = current.get(key)
-            name = (after or before)["holder_name"]
-            shares_before = _num(before.get("shares")) if before else None
-            shares_after = _num(after.get("shares")) if after else None
-            pct_before = _num(before.get("ownership_pct")) if before else None
-            pct_after = _num(after.get("ownership_pct")) if after else None
-            shares_delta = (shares_after - shares_before) if shares_before is not None and shares_after is not None else None
-            pct_delta = (pct_after - pct_before) if pct_before is not None and pct_after is not None else None
-            if before is None:
-                kind = "ENTERED"
-            elif after is None:
-                kind = "EXITED"
-            elif (shares_delta or 0) > 0 or (pct_delta or 0) > 0:
-                kind = "INCREASED"
-            elif (shares_delta or 0) < 0 or (pct_delta or 0) < 0:
-                kind = "DECREASED"
-            else:
-                kind = "UNCHANGED"
-            conn.execute(
-                "INSERT INTO ownership_changes(provider,ticker,from_date,to_date,holder_key,holder_name,holder_type,country,shares_before,shares_after,shares_delta,pct_before,pct_after,pct_delta,change_kind,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (provider,ticker,prev["as_of_date"] if prev else None,as_of_date,key,name,(after or before).get("holder_type"),(after or before).get("country"),shares_before,shares_after,shares_delta,pct_before,pct_after,pct_delta,kind,captured_at),
-            )
+        if next_snapshot:
+            _recompute_changes(conn, provider, ticker, next_snapshot["as_of_date"], captured_at)
+
         conn.commit()
-        return {"status": "stored", "snapshot_id": snapshot_id, "holders": len(normalized), "previous_date": prev["as_of_date"] if prev else None}
+        return {
+            "status": "stored",
+            "snapshot_id": snapshot_id,
+            "holders": len(normalized),
+            "previous_date": previous_date,
+            "recomputed_next_date": next_snapshot["as_of_date"] if next_snapshot else None,
+        }
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
 
@@ -240,11 +326,15 @@ def status():
         snapshots = conn.execute("SELECT COUNT(*) AS n FROM ownership_snapshots").fetchone()
         tickers = conn.execute("SELECT COUNT(DISTINCT ticker) AS n FROM ownership_snapshots").fetchone()
         latest = conn.execute("SELECT MAX(as_of_date) AS d FROM ownership_snapshots").fetchone()
+        snapshot_count = int(snapshots["n"] if snapshots else 0)
         return {
             "status": "ok",
-            "snapshots": int(snapshots["n"] if snapshots else 0),
+            "snapshots": snapshot_count,
             "tickers": int(tickers["n"] if tickers else 0),
             "latest_as_of_date": latest["d"] if latest else None,
+            "has_authoritative_snapshots": snapshot_count > 0,
+            "daily_marketwide_coverage": False,
+            "coverage_note": "Point-in-time snapshots only; no complete daily shareholder feed is configured.",
             "sources": SOURCE_POLICY,
             "policy": MODEL_POLICY,
             "generated_at": _now(),
@@ -260,7 +350,15 @@ def ownership(ticker, limit=50):
     try:
         snap = conn.execute("SELECT * FROM ownership_snapshots WHERE ticker=? ORDER BY as_of_date DESC, id DESC LIMIT 1", (ticker,)).fetchone()
         if not snap:
-            return {"status":"no_snapshot","ticker":ticker,"positions":[],"changes":[],"policy":MODEL_POLICY,"sources":SOURCE_POLICY}
+            return {
+                "status":"no_snapshot",
+                "ticker":ticker,
+                "positions":[],
+                "changes":[],
+                "policy":MODEL_POLICY,
+                "sources":SOURCE_POLICY,
+                "daily_marketwide_coverage":False,
+            }
         positions = conn.execute(
             "SELECT holder_name,holder_type,country,shares,ownership_pct,rank_no FROM ownership_positions WHERE snapshot_id=? ORDER BY COALESCE(rank_no,999999),COALESCE(shares,0) DESC LIMIT ?",
             (snap["id"],limit),
@@ -270,8 +368,15 @@ def ownership(ticker, limit=50):
             (snap["provider"],ticker,snap["as_of_date"],limit),
         ).fetchall()
         return {
-            "status":"ok","ticker":ticker,"provider":snap["provider"],"as_of_date":snap["as_of_date"],"source_ref":snap["source_ref"],
-            "positions":[dict(r) for r in positions],"changes":[dict(r) for r in changes],"policy":MODEL_POLICY,
+            "status":"ok",
+            "ticker":ticker,
+            "provider":snap["provider"],
+            "as_of_date":snap["as_of_date"],
+            "source_ref":snap["source_ref"],
+            "positions":[dict(r) for r in positions],
+            "changes":[dict(r) for r in changes],
+            "policy":MODEL_POLICY,
+            "daily_marketwide_coverage":False,
         }
     finally:
         conn.close()
@@ -282,14 +387,18 @@ def install():
         return
     _ensure_schema()
     original_install = extra_api.install
+
     def patched_install(app):
         original_install(app)
+
         @app.get("/api/ownership/status")
         def ownership_status():
             return status()
+
         @app.get("/api/ownership/{ticker}")
         def ownership_ticker(ticker: str, limit: int = 50):
             return ownership(ticker, limit)
+
     extra_api.install = patched_install
     extra_api._ownership_snapshot_runtime_v1 = True
 

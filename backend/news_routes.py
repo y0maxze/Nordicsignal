@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote_plus
 
 import extra_api
+from database import connect
 from news_runtime import aggregate_news
 from providers import YahooProvider
 
@@ -28,6 +29,45 @@ def news_matches_ticker(item, ticker, company_name=''):
         if len(x) >= 5 and x not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}
     ]
     return bool(tokens and any(token in title for token in tokens))
+
+
+def _issuer_company_name(ticker):
+    """Resolve the issuer name from the canonical stock registry.
+
+    ``extra_api`` is intentionally only a compatibility shim now, so product
+    routes must not depend on private helpers that used to live there. The
+    database-backed stock registry also automatically follows universe
+    expansions such as DVD/AKER without duplicating ticker/name maps here.
+    """
+    ticker = str(ticker or '').strip().upper().replace('.OL', '')
+    if not ticker:
+        return ''
+    conn = None
+    try:
+        conn = connect()
+        row = conn.execute(
+            'SELECT name FROM stocks WHERE ticker=? ORDER BY active DESC LIMIT 1',
+            (ticker,),
+        ).fetchone()
+        if row:
+            try:
+                name = row['name']
+            except (KeyError, TypeError, IndexError):
+                name = row[0]
+            name = str(name or '').strip()
+            if name:
+                return name
+    except Exception:
+        # News remains available during early startup or a transient DB issue;
+        # ticker-only matching is deliberately safer than inventing an issuer.
+        pass
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return ticker
 
 
 def _yahoo_news(provider, ticker, company, limit):
@@ -83,13 +123,13 @@ def install_routes(app):
     provider = YahooProvider()
 
     def base_news(ticker, limit=20):
-        company = extra_api._company_name(ticker.upper())
+        company = _issuer_company_name(ticker)
         return _yahoo_news(provider, ticker, company, limit)
 
     @app.get('/api/news/{ticker}')
     def stock_news(ticker: str, limit: int = 20):
         ticker = ticker.upper()
-        company = extra_api._company_name(ticker)
+        company = _issuer_company_name(ticker)
         return aggregate_news(base_news, ticker, company, limit)
 
     @app.get('/api/news/{ticker}/summary')
