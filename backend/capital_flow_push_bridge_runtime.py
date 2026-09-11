@@ -36,7 +36,7 @@ def install():
             try:
                 rows = conn.execute(
                     "SELECT id,fingerprint,ticker,instrument_name,event_type,direction,actor,value_nok,event_at,first_seen_at,evidence_level "
-                    "FROM capital_flow_events WHERE alert_eligible=1 AND first_seen_at>? ORDER BY first_seen_at DESC LIMIT ?",
+                    "FROM capital_flow_events WHERE alert_eligible=1 AND ticker IS NOT NULL AND TRIM(ticker)<>'' AND first_seen_at>? ORDER BY first_seen_at DESC LIMIT ?",
                     (since, push._MAX_EVENTS_PER_CYCLE),
                 ).fetchall()
             except Exception:
@@ -46,13 +46,15 @@ def install():
         for raw in rows:
             d = dict(raw)
             ticker = str(d.get("ticker") or "").upper().replace(".OL", "")
+            if not ticker:
+                continue
             name = ticker or d.get("instrument_name") or "Kapitalflyt"
             items.append({
                 "event_key": f"capital-flow:{d['fingerprint']}",
-                "ticker": ticker or None,
+                "ticker": ticker,
                 "title": f"{name} · Ny kapitalbevegelse",
                 "body": _body(d),
-                "url": f"/capital-flow?ticker={ticker}" if ticker else "/capital-flow",
+                "url": f"/capital-flow?ticker={ticker}",
                 "created_at": d.get("first_seen_at") or d.get("event_at"),
             })
         items.sort(key=lambda x: str(x.get("created_at") or ""))
