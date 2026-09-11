@@ -63,12 +63,23 @@ class PostgresConnection:
 
     def commit(self): self._connection.commit()
     def rollback(self): self._connection.rollback()
+
+    def _reset_for_pool(self):
+        from psycopg.pq import TransactionStatus
+
+        status = self._connection.info.transaction_status
+        if status in (TransactionStatus.INTRANS, TransactionStatus.INERROR):
+            self._connection.rollback()
+
     def close(self):
         if self._closed:
             return
         self._closed = True
         if self._pool is not None:
-            self._pool.putconn(self._connection)
+            try:
+                self._reset_for_pool()
+            finally:
+                self._pool.putconn(self._connection)
         else:
             self._connection.close()
 
