@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import capital_flow_runtime as c
 
@@ -24,6 +25,36 @@ def test_irrelevant_news_is_not_capital_flow():
     assert c._classify_news({"title": "Company reports quarterly revenue growth"}) is None
 
 
+def test_news_derived_flow_requires_explicit_ticker_link():
+    feed = {
+        "items": [
+            {
+                "ticker": None,
+                "title": "Foreign investors increase stake in unrelated market",
+                "summary": "Foreign investors increase stake",
+                "published_at": "2026-09-11T07:30:00+00:00",
+                "official": False,
+                "publisher": "Newswire",
+            },
+            {
+                "ticker": "AKER",
+                "title": "International fund increases stake in AKER",
+                "summary": "International fund increases stake in AKER",
+                "published_at": "2026-09-11T07:31:00+00:00",
+                "official": False,
+                "publisher": "Media",
+            },
+        ]
+    }
+    captured = []
+    with patch.object(c.general_news_runtime, "general_market_news", return_value=feed), patch.object(c, "_upsert", side_effect=captured.append):
+        count = c._ingest_market_news()
+    assert count == 1
+    assert len(captured) == 1
+    assert captured[0]["ticker"] == "AKER"
+    assert captured[0]["evidence_level"] == "reported"
+
+
 def test_new_active_historical_buckets():
     now = datetime.now(timezone.utc)
     assert c._bucket((now - timedelta(hours=6)).isoformat()) == "NEW"
@@ -36,6 +67,14 @@ def test_policy_is_observational_only():
     assert data["policy"]["score_effect"] == "none"
     assert data["policy"]["new_hours"] == 48
     assert data["policy"]["active_days"] == 30
+    assert data["policy"]["news_admission"] == "explicit_ticker_link_required"
+
+
+def test_capital_flow_status_does_not_claim_daily_ownership_feed():
+    data = c.status()
+    assert data["score_effect"] == "none"
+    assert data["daily_ownership_feed"] is False
+    assert "ticker_linked_media_context_reported" in data["coverage"]
 
 
 def test_capital_flow_product_contract_is_wired_everywhere():
