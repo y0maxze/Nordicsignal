@@ -61,6 +61,29 @@ def test_mobile_nav_has_single_canonical_owner():
     assert loader.count("loadScript('/mobile_nav.js'") == 1
 
 
+def test_secondary_navigation_preserves_current_page_context():
+    nav = (FRONTEND / "mobile_nav.js").read_text(encoding="utf-8")
+    shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
+    for route in ("/capital-flow", "/alerts", "/ipo-radar", "/learning", "/calendar", "/readiness", "/legal"):
+        assert route in nav
+        assert route in shell
+    assert "activeMoreRoute" in nav
+    assert "aria-current','page'" in nav
+    assert "const moreRoute=MORE_ROUTES.find" in shell
+    assert "const active=moreRoute?'':" in shell
+    assert "secondary.setAttribute('aria-current','page')" in shell
+
+
+def test_capital_flow_mobile_ownership_rows_have_explicit_layout_and_touch_targets():
+    page = (FRONTEND / "capital-flow.html").read_text(encoding="utf-8")
+    assert 'grid-template-areas:"holder delta" "kind kind"' in page
+    assert ".ownershipRow>div{grid-area:holder" in page
+    assert ".ownershipRow>span{grid-area:kind" in page
+    assert ".ownershipRow>strong{grid-area:delta" in page
+    assert ".cfBtn,.cfChip{min-height:44px}" in page
+    assert ".cfFilters{flex-wrap:nowrap;overflow-x:auto" in page
+
+
 def test_stock_tool_shell_keeps_core_tools_available():
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
     for tool in ("overview", "opportunity", "readiness", "events", "pressure", "insider", "news", "reports", "dividend", "short", "evidence"):
