@@ -30,6 +30,18 @@ def test_light_theme_keeps_blue_identity_with_readable_surfaces():
     assert "prefers-reduced-motion:reduce" in css
 
 
+def test_light_theme_covers_legacy_portfolio_surface_tokens_and_components():
+    css = read("theme_light_fix.css")
+    assert "--panel:#ffffff" in css
+    assert "--text:#0b1930" in css
+    assert "--muted:#53627b" in css
+    assert 'html[data-theme="light"] .sidebar' in css
+    assert 'html[data-theme="light"] .taxToggle' in css
+    assert 'html[data-theme="light"] .searchItem' in css
+    assert 'html[data-theme="light"] .allocBar' in css
+    assert 'html[data-theme="light"] .allocFill' in css
+
+
 def test_insider_uses_shared_theme_shell_and_mobile_contract():
     html = read("insider.html")
     for asset in ("/theme.css", "/theme_mode.js", "/ui_shell.js", "/mobile_nav.js"):
