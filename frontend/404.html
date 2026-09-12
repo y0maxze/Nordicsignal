@@ -1,21 +1,23 @@
 <!doctype html>
-<html lang="no">
+<html lang="nb">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NordicSignal · Fant ikke siden</title>
-  <style>
-    :root{--bg:#070707;--panel:#0f0f0f;--line:#2a2a2a;--text:#f5f5f5;--muted:#9b9b9b;--green:#18c984}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#070707;color:var(--text);font:15px Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-    main{width:min(680px,calc(100% - 32px));padding:36px;background:var(--panel);border:1px solid var(--line);border-radius:14px;text-align:center}h1{margin:0 0 10px;font-size:30px;letter-spacing:-.04em}.brand span{color:var(--green)}.sub{color:var(--muted);line-height:1.6}.links{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:24px}.links a{color:#fff;text-decoration:none;padding:10px 14px;border:1px solid #333;border-radius:8px;background:#151515}.links a:hover{background:#202020;border-color:#555}.code{font-size:12px;color:#777;margin-bottom:12px;letter-spacing:.08em}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#040712">
+<title>Fant ikke siden · NordicSignal</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}.errorCard{width:min(680px,100%);padding:38px;text-align:center;border:1px solid var(--line);border-radius:18px}.code{font-size:11px;font-weight:850;letter-spacing:.14em;color:var(--accent);margin-bottom:10px}.brand{margin:0 0 10px;font-size:32px}.brand span{color:var(--accent)}.sub{max-width:540px;margin:0 auto;line-height:1.65}.links{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:24px}.links a{min-height:44px;display:inline-flex;align-items:center;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--t)!important;text-decoration:none;font-weight:700}.links a:hover{background:var(--surface-3);border-color:var(--line-strong)}.themeWrap{position:fixed;right:max(14px,env(safe-area-inset-right));top:max(14px,env(safe-area-inset-top))}@media(max-width:520px){body{padding:18px}.errorCard{padding:28px 18px}.brand{font-size:28px}.links{display:grid}.links a{justify-content:center}}
+</style>
+<script src="/theme_mode.js"></script>
 </head>
 <body>
-  <main>
-    <div class="code">404</div>
-    <h1 class="brand">Nordic<span>Signal</span></h1>
-    <div class="sub">Siden finnes ikke, eller adressen er ikke lenger i bruk. Gå tilbake til dashboardet eller åpne et av hovedverktøyene.</div>
-    <div class="links"><a href="/app">Dashboard</a><a href="/stock">Stock Intelligence</a><a href="/paper">Paper Trading</a><a href="/news">News</a><a href="/history">History</a></div>
-  </main>
+<div class="themeWrap"><button class="nsThemeToggle" data-ns-theme-toggle type="button" aria-label="Bytt tema"></button></div>
+<main class="errorCard card">
+  <div class="code">404 · IKKE FUNNET</div>
+  <h1 class="brand">Nordic<span>Signal</span></h1>
+  <div class="sub">Siden finnes ikke, eller adressen er ikke lenger i bruk. Gå tilbake til dashboardet eller åpne et av hovedverktøyene.</div>
+  <div class="links"><a href="/app">Dashboard</a><a href="/stock">Stock Intelligence</a><a href="/insider">Insider Pulse</a><a href="/news">Nyheter</a><a href="/history">Kurshistorikk</a></div>
+</main>
 </body>
 </html>
