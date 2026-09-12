@@ -1,5 +1,5 @@
 const CACHE_NAME='nordicsignal-shell-v5';
-const SHELL=['/mobile','/morning','/alerts','/insider','/news','/readiness','/stock','/calendar','/history','/theme.css','/theme_light_fix.css','/theme_mode.js','/ui_shell.js','/mobile_nav.js','/history_nav_context.js','/mobile_shell.js','/access_gate.js','/manifest.webmanifest','/insider_clean_ui.js','/portfolio_dashboard.js','/analysis.js','/stock_evidence_ui.js','/event_radar_ui.js','/alerts.js','/alert_local_capture.js','/alert_nav_ui.js'];
+const SHELL=['/mobile','/morning','/alerts','/insider','/news','/readiness','/stock','/calendar','/history','/theme.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/history_nav_context.js','/mobile_shell.js','/access_gate.js','/manifest.webmanifest','/insider_clean_ui.js','/portfolio_dashboard.js','/analysis.js','/stock_evidence_ui.js','/event_radar_ui.js','/alerts.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).catch(()=>null));
