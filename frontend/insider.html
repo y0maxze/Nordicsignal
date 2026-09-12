@@ -1,18 +1,27 @@
 <!doctype html>
-<html lang="no">
+<html lang="nb">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>NordicSignal · Insider Pulse</title>
+<meta name="theme-color" content="#040712">
+<title>Insider Pulse · NordicSignal</title>
+<link rel="stylesheet" href="/theme.css">
 <style>
-:root{--bg:#070707;--p:#101010;--p2:#161616;--line:#292929;--t:#f4f4f4;--m:#939393;--g:#35d49a;--y:#e7c16b;--r:#fb7185}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.main{max-width:1320px;margin:0 auto;padding:34px 24px 105px}.pageHead{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin:10px 0 4px}.pageHead h1{font-size:30px;margin:0 0 5px}.sub,.small{color:var(--m);font-size:11px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 14px}.card,.section{background:var(--p);border:1px solid var(--line);border-radius:12px}.card{padding:14px}.label{color:var(--m);font-size:10px}.value{font-size:23px;font-weight:900;margin:6px 0 2px}.g{color:var(--g)}.r{color:var(--r)}.y{color:var(--y)}.section{padding:16px;margin-bottom:14px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}.controls{display:flex;gap:7px;flex-wrap:wrap}.btn{border:1px solid #303030;background:var(--p2);color:#eee;border-radius:9px;padding:8px 11px;font-weight:750;cursor:pointer}.btn.active{background:#eee;color:#090909;border-color:#eee}.notice{padding:12px;border:1px solid var(--line);border-radius:9px;background:#0b0b0b;color:var(--m)}a{color:#d8d8d8}.nsGlobalHome{top:18px!important;left:18px!important}@media(max-width:900px){.main{padding:20px 14px 96px}.pageHead{margin-top:4px}.pageHead h1{font-size:26px}.cards{grid-template-columns:1fr 1fr}.toolbar{align-items:flex-start;flex-direction:column}.controls{width:100%}.controls .btn{flex:1}}@media(max-width:390px){.value{font-size:20px}}
+*{box-sizing:border-box}body{margin:0}.app{min-height:100vh}.side{position:fixed;inset:0 auto 0 0}.main{min-height:100vh}.wrap{max-width:1320px;margin:0 auto;padding:34px 24px 110px}.pageHead{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin:10px 0 4px}.pageHead h1{font-size:30px;margin:0 0 5px}.sub,.small{color:var(--m);font-size:11px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 14px}.card,.section{border:1px solid var(--line);border-radius:14px}.card{padding:14px}.label{color:var(--m);font-size:10px}.value{font-size:23px;font-weight:900;margin:6px 0 2px}.section{padding:16px;margin-bottom:14px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}.controls{display:flex;gap:7px;flex-wrap:wrap}.btn{min-height:44px;padding:9px 12px;cursor:pointer}.notice{padding:12px;border:1px solid var(--line);border-radius:11px;color:var(--m)}.nsMobileNav{display:none}@media(max-width:900px){.wrap{padding:20px 14px calc(100px + env(safe-area-inset-bottom))}.pageHead{margin-top:4px}.pageHead h1{font-size:26px}.cards{grid-template-columns:1fr 1fr}.toolbar{align-items:flex-start;flex-direction:column}.controls{width:100%;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.controls .btn{flex:0 0 auto}.nsMobileNav{display:grid}}@media(max-width:390px){.value{font-size:20px}}
 </style>
+<script src="/theme_mode.js"></script>
 </head>
 <body>
-<main class="main">
-  <header class="pageHead"><div><h1 id="pageTitle">Insider Pulse</h1><div id="pageSub" class="sub">Hele Oslo Børs · verifiserte primærinnsidehandler og offisielle meldinger</div></div></header>
-  <div id="appview"><div class="notice">Laster Insider Pulse…</div></div>
-</main>
+<div class="app">
+  <aside class="side"><div class="logo">Nordic<span>Signal</span></div><nav></nav></aside>
+  <main class="main"><div class="wrap">
+    <header class="pageHead"><div><div class="small">OFFISIELL INNSIDEDATA</div><h1 id="pageTitle">Insider Pulse</h1><div id="pageSub" class="sub">Hele Oslo Børs · verifiserte primærinnsidehandler og offisielle meldinger</div></div></header>
+    <div id="appview" aria-live="polite"><div class="notice">Laster Insider Pulse…</div></div>
+  </div></main>
+</div>
+<nav id="nsMobileNav" class="nsMobileNav" aria-label="Mobilnavigasjon"></nav>
+<script src="/ui_shell.js"></script>
+<script src="/mobile_nav.js"></script>
 <script>
 const appview=document.getElementById('appview');
 function setTitle(a,b){document.getElementById('pageTitle').textContent=a;document.getElementById('pageSub').textContent=b}
