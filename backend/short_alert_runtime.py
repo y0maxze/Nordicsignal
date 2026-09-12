@@ -2,6 +2,8 @@
 
 from statistics import mean
 
+from database import connect
+
 
 def _to_percent(value):
     if value is None:
@@ -15,6 +17,42 @@ def _to_percent(value):
         return float(text)
     except ValueError:
         return None
+
+
+def _issuer_company_name(ticker):
+    """Resolve issuer name from the canonical stock registry.
+
+    Market Pressure must not depend on private helpers from ``extra_api``.
+    Falling back to the normalized ticker is safer than inventing an issuer
+    when the registry is unavailable during startup or a transient DB issue.
+    """
+    ticker=str(ticker or '').strip().upper().replace('.OL','')
+    if not ticker:
+        return ''
+    conn=None
+    try:
+        conn=connect()
+        row=conn.execute(
+            'SELECT name FROM stocks WHERE ticker=? ORDER BY active DESC LIMIT 1',
+            (ticker,),
+        ).fetchone()
+        if row:
+            try:
+                name=row['name']
+            except (KeyError,TypeError,IndexError):
+                name=row[0]
+            name=str(name or '').strip()
+            if name:
+                return name
+    except Exception:
+        pass
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return ticker
 
 
 def _short_change_from_cache(provider, result):
@@ -102,7 +140,7 @@ def install():
 
         @app.get('/api/market-pressure/{ticker}')
         def market_pressure(ticker:str):
-            ticker=ticker.upper(); company=extra_api._company_name(ticker)
+            ticker=ticker.upper(); company=_issuer_company_name(ticker)
             try:
                 short=regulatory.short(ticker,company)
             except Exception as exc:
