@@ -5,12 +5,15 @@ html[data-theme="light"]{
   --bg:#eef5ff!important;
   --p:#ffffff!important;
   --p2:#f4f8ff!important;
+  --panel:#ffffff!important;
   --surface:#ffffff!important;
   --surface-2:#f5f8ff!important;
   --surface-3:#eaf2ff!important;
   --glass:rgba(255,255,255,.94)!important;
   --t:#0b1930!important;
+  --text:#0b1930!important;
   --m:#53627b!important;
+  --muted:#53627b!important;
   --line:rgba(33,76,145,.17)!important;
   --line-strong:rgba(24,92,183,.34)!important;
   --accent:#126fda!important;
@@ -20,8 +23,11 @@ html[data-theme="light"]{
   --cyan:#087fa3!important;
   --violet:#5d4fc7!important;
   --g:#087456!important;
+  --green:#087456!important;
   --y:#805900!important;
+  --yellow:#805900!important;
   --r:#b72f49!important;
+  --red:#b72f49!important;
   --shadow:0 14px 40px rgba(31,70,125,.10),0 0 0 1px rgba(38,91,171,.035)!important;
   --glow:0 0 26px rgba(18,111,218,.10)!important;
 }
@@ -30,23 +36,37 @@ html[data-theme="light"] body:before{background:radial-gradient(circle at 15% 8%
 html[data-theme="light"] body:after{opacity:.32!important;background-image:linear-gradient(rgba(40,94,170,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(40,94,170,.055) 1px,transparent 1px)!important}
 html[data-theme="light"] a{color:#0c5fb9!important}
 html[data-theme="light"] a:hover{color:#084a91!important}
-html[data-theme="light"] .side{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(242,247,255,.97))!important;box-shadow:16px 0 42px rgba(34,70,121,.07)!important}
-html[data-theme="light"] nav a{color:#53627b!important}
-html[data-theme="light"] nav a:hover{background:linear-gradient(90deg,rgba(18,111,218,.085),rgba(72,95,216,.045))!important;color:#0b1930!important}
-html[data-theme="light"] nav a.active{background:linear-gradient(100deg,rgba(18,111,218,.14),rgba(72,95,216,.085))!important;color:#0a4283!important;border-color:rgba(18,111,218,.24)!important;box-shadow:inset 2px 0 0 #126fda,0 8px 22px rgba(18,111,218,.07)!important}
-html[data-theme="light"] .card,html[data-theme="light"] .section,html[data-theme="light"] .metric,html[data-theme="light"] .notice,html[data-theme="light"] .pressureAlert,html[data-theme="light"] .insiderBehavior{background:linear-gradient(180deg,#fff,#f8fbff)!important;border-color:var(--line)!important;color:var(--t)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .side,html[data-theme="light"] .sidebar{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(242,247,255,.97))!important;border-color:var(--line)!important;box-shadow:16px 0 42px rgba(34,70,121,.07)!important}
+html[data-theme="light"] .brand,html[data-theme="light"] .ticker,html[data-theme="light"] .allocChoice{color:#0b1930!important}
+html[data-theme="light"] nav a,html[data-theme="light"] .nav a{color:#53627b!important}
+html[data-theme="light"] nav a:hover,html[data-theme="light"] .nav a:hover{background:linear-gradient(90deg,rgba(18,111,218,.085),rgba(72,95,216,.045))!important;color:#0b1930!important;border-color:var(--line)!important}
+html[data-theme="light"] nav a.active,html[data-theme="light"] .nav a.active{background:linear-gradient(100deg,rgba(18,111,218,.14),rgba(72,95,216,.085))!important;color:#0a4283!important;border-color:rgba(18,111,218,.24)!important;box-shadow:inset 2px 0 0 #126fda,0 8px 22px rgba(18,111,218,.07)!important}
+html[data-theme="light"] .card,html[data-theme="light"] .section,html[data-theme="light"] .metric,html[data-theme="light"] .notice,html[data-theme="light"] .empty,html[data-theme="light"] .pressureAlert,html[data-theme="light"] .insiderBehavior,html[data-theme="light"] .taxbox,html[data-theme="light"] .selectedInstrument{background:linear-gradient(180deg,#fff,#f8fbff)!important;border-color:var(--line)!important;color:var(--t)!important;box-shadow:var(--shadow)!important}
 html[data-theme="light"] .cards>.card:hover{background:linear-gradient(180deg,#fff,#f1f6ff)!important;border-color:var(--line-strong)!important;box-shadow:0 18px 42px rgba(31,70,125,.13),var(--glow)!important}
 html[data-theme="light"] .hero .metric{background:#f5f8ff!important}
 html[data-theme="light"] .hero:after{background:radial-gradient(circle,rgba(18,111,218,.12),rgba(72,95,216,.035) 48%,transparent 70%)!important}
-html[data-theme="light"] .top h1,html[data-theme="light"] .top h2{background:none!important;-webkit-background-clip:initial!important;background-clip:initial!important;color:#0b1930!important}
+html[data-theme="light"] .top h1,html[data-theme="light"] .top h2{background:none!important;-webkit-background-clip:initial!important;background-clip:initial!important;color:#0b1930!important;-webkit-text-fill-color:#0b1930!important}
 html[data-theme="light"] .search,html[data-theme="light"] .input,html[data-theme="light"] .wideinput,html[data-theme="light"] .form input,html[data-theme="light"] .form select,html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:#fff!important;border-color:var(--line)!important;color:#0b1930!important;box-shadow:inset 0 1px 0 rgba(12,62,125,.025)!important}
 html[data-theme="light"] input::placeholder,html[data-theme="light"] textarea::placeholder{color:#71809a!important;opacity:1}
 html[data-theme="light"] .btn,html[data-theme="light"] .tab,html[data-theme="light"] .nsThemeToggle,html[data-theme="light"] .nsMoreToggle{background:linear-gradient(180deg,#fff,#edf4ff)!important;border-color:var(--line)!important;color:#173253!important;box-shadow:0 3px 10px rgba(32,72,128,.05)!important}
 html[data-theme="light"] .btn:hover,html[data-theme="light"] .tab:hover,html[data-theme="light"] .nsThemeToggle:hover,html[data-theme="light"] .nsMoreToggle:hover{background:linear-gradient(180deg,#f8fbff,#e4efff)!important;border-color:var(--line-strong)!important;color:#0b1930!important}
 html[data-theme="light"] .btn.active,html[data-theme="light"] .tab.active,html[data-theme="light"] .btn.primary{background:linear-gradient(110deg,#126fda,#405fd5)!important;color:#fff!important;border-color:rgba(18,111,218,.45)!important;box-shadow:0 9px 24px rgba(18,111,218,.18)!important}
+html[data-theme="light"] .taxToggle{background:#f5f8ff!important;border-color:var(--line)!important;color:#173253!important}
+html[data-theme="light"] .taxToggle span,html[data-theme="light"] .field label,html[data-theme="light"] .hint,html[data-theme="light"] .status,html[data-theme="light"] .small,html[data-theme="light"] .sub,html[data-theme="light"] .native,html[data-theme="light"] .searchMeta{color:#53627b!important}
+html[data-theme="light"] .switch{background:#cbd9ed!important;border-color:#aebfd8!important}
+html[data-theme="light"] .switch:after{background:#fff!important;box-shadow:0 1px 4px rgba(19,52,98,.18)!important}
+html[data-theme="light"] .taxToggle.on .switch{background:#126fda!important;border-color:#126fda!important}
+html[data-theme="light"] .taxToggle.on .switch:after{background:#fff!important}
+html[data-theme="light"] .taxToggle.on span{color:#0b1930!important}
 html[data-theme="light"] .chart{background:linear-gradient(180deg,#fff,#f4f8ff)!important;border-color:var(--line)!important}
 html[data-theme="light"] .searchResults{background:rgba(255,255,255,.98)!important;border-color:var(--line-strong)!important;box-shadow:0 22px 55px rgba(31,70,125,.16)!important}
+html[data-theme="light"] .searchItem{background:#fff!important;color:#173253!important;border-color:var(--line)!important}
+html[data-theme="light"] .searchItem:hover{background:#edf4ff!important;color:#0b1930!important}
 html[data-theme="light"] .result:hover,html[data-theme="light"] .row:not(.head):hover,html[data-theme="light"] table tbody tr:hover,html[data-theme="light"] .table tbody tr:hover{background:rgba(18,111,218,.065)!important}
+html[data-theme="light"] .table th,html[data-theme="light"] .table td,html[data-theme="light"] .cashRow,html[data-theme="light"] .taxaccount{border-color:var(--line)!important}
+html[data-theme="light"] .pill{background:#f5f8ff!important;border-color:var(--line)!important}
+html[data-theme="light"] .allocBar{background:#dce7f6!important}
+html[data-theme="light"] .allocFill{background:linear-gradient(90deg,#126fda,#485fd8)!important}
 html[data-theme="light"] .nsGlobalHome{background:#fff!important;color:#173253!important;border-color:var(--line)!important}
 html[data-theme="light"] .nsGlobalHome:hover{background:#eef5ff!important}
 html[data-theme="light"] .bar{background:rgba(31,76,139,.14)!important}
