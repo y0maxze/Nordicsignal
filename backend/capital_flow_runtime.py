@@ -18,6 +18,7 @@ import time
 import extra_api
 from database import connect, USING_POSTGRES
 import general_news_runtime
+import capital_flow_quality
 
 NEW_HOURS = 48
 ACTIVE_DAYS = 30
@@ -325,6 +326,7 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
         item["state"] = _bucket(item.get("event_at"))
         item["official"] = bool(item.get("official"))
         item["alert_eligible"] = bool(item.get("alert_eligible"))
+        item = capital_flow_quality.enrich(item)
         if wanted and wanted not in {"ALL", item["state"]}:
             continue
         items.append(item)
@@ -349,6 +351,7 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
             "verified_definition": "Official exchange/primary-insider evidence",
             "reported_definition": "Ticker-linked media/context evidence; not treated as verified holdings delta",
             "news_admission": "explicit_ticker_link_required",
+            "research_quality": "presentation-only evidence quality; no NordicSignal score effect",
         },
         "generated_at": _now(),
     }
