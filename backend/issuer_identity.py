@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from database import connect
 
-_SUFFIX = re.compile(r"\b(asa|as|plc|ltd|limited|nv|n\.v\.)\b", re.I)
+_SUFFIX = re.compile(r"\b(asa|as|plc|ltd|limited|nv|n\s+v)\b", re.I)
 _PUNCT = re.compile(r"[^a-z0-9æøå]+", re.I)
 
 
