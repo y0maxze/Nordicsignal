@@ -320,6 +320,7 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
     finally:
         conn.close()
     items = []
+    semantic = {}
     wanted = str(state or "").upper()
     for row in rows:
         item = dict(row)
@@ -329,9 +330,11 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
         item = capital_flow_quality.enrich(item)
         if wanted and wanted not in {"ALL", item["state"]}:
             continue
-        items.append(item)
-        if len(items) >= limit:
-            break
+        key = capital_flow_quality.dedupe_key(item)
+        previous = semantic.get(key)
+        if previous is None or capital_flow_quality.presentation_rank(item) > capital_flow_quality.presentation_rank(previous):
+            semantic[key] = item
+    items = sorted(semantic.values(), key=capital_flow_quality.presentation_rank, reverse=True)[:limit]
     counts = {"NEW": 0, "ACTIVE": 0, "HISTORICAL": 0}
     conn = connect()
     try:
@@ -352,6 +355,7 @@ def list_events(limit=100, state=None, event_type=None, ticker=None, evidence=No
             "reported_definition": "Ticker-linked media/context evidence; not treated as verified holdings delta",
             "news_admission": "explicit_ticker_link_required",
             "research_quality": "presentation-only evidence quality; no NordicSignal score effect",
+            "dedupe": "semantic presentation dedupe; strongest evidence retained",
         },
         "generated_at": _now(),
     }
