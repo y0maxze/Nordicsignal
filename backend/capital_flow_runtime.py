@@ -19,6 +19,7 @@ import extra_api
 from database import connect, USING_POSTGRES
 import general_news_runtime
 import capital_flow_quality
+import issuer_identity
 
 NEW_HOURS = 48
 ACTIVE_DAYS = 30
@@ -126,6 +127,31 @@ def _upsert(event):
         cutoff = (_now_dt() - timedelta(days=RETENTION_DAYS)).isoformat()
         conn.execute("DELETE FROM capital_flow_events WHERE event_at<?", (cutoff,))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def _resolve_verified_official_issuers():
+    """Link only uniquely exact official issuer names to the canonical registry."""
+    conn = connect()
+    resolved = 0
+    try:
+        rows = conn.execute(
+            "SELECT id,instrument_name FROM capital_flow_events "
+            "WHERE official=1 AND evidence_level='verified' "
+            "AND (ticker IS NULL OR TRIM(ticker)='') AND instrument_name IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            match = issuer_identity.resolve_exact_name(row["instrument_name"])
+            if not match:
+                continue
+            conn.execute(
+                "UPDATE capital_flow_events SET ticker=? WHERE id=? AND (ticker IS NULL OR TRIM(ticker)='')",
+                (match["ticker"], row["id"]),
+            )
+            resolved += 1
+        conn.commit()
+        return resolved
     finally:
         conn.close()
 
@@ -274,6 +300,7 @@ def scan_once():
         return {"status": "busy"}
     try:
         _ensure_schema()
+        resolved = _resolve_verified_official_issuers()
         cleaned = _cleanup_unlinked_reported_events()
         insiders = _ingest_insider_history()
         news = _ingest_market_news()
@@ -282,6 +309,7 @@ def scan_once():
             "insider_events_seen": insiders,
             "ownership_news_seen": news,
             "unlinked_reported_removed": cleaned,
+            "official_issuers_resolved": resolved,
             "generated_at": _now(),
         }
     finally:
