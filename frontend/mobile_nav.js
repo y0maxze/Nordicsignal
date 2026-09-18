@@ -1,5 +1,5 @@
 (function(){
-  const MORE_ROUTES=['/capital-flow','/alerts','/ipo-radar','/learning','/calendar','/readiness','/legal'];
+  const MORE_ROUTES=['/capital-flow','/alerts','/ipo-radar','/history','/calendar','/readiness','/legal'];
   const isMobile=()=>window.matchMedia('(max-width:900px)').matches;
 
   function activeKey(){
@@ -51,7 +51,7 @@
     let menu=document.getElementById('nsMobileMoreMenu');
     if(!menu){menu=document.createElement('div');menu.id='nsMobileMoreMenu';menu.className='nsMobileMoreMenu';document.body.appendChild(menu)}
     menu.className='nsMobileMoreMenu';menu.hidden=true;
-    menu.innerHTML='<a href="/capital-flow">Kapitalflyt</a><a href="/alerts">Varsler</a><a href="/ipo-radar">IPO Radar</a><a href="/learning">Historikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/legal">Vilkår & risiko</a>';
+    menu.innerHTML='<a href="/capital-flow">Kapitalflyt</a><a href="/alerts">Varsler</a><a href="/ipo-radar">IPO Radar</a><a href="/history">Kurshistorikk</a><a href="/calendar">Kalender</a><a href="/readiness">Sjekkliste</a><a href="/legal">Vilkår & risiko</a>';
     if(moreRoute){
       const active=menu.querySelector(`a[href="${moreRoute}"]`);
       if(active){active.classList.add('active');active.setAttribute('aria-current','page')}

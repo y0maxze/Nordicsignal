@@ -13,6 +13,7 @@
   const fmtMoney=value=>{const n=Number(value);if(!Number.isFinite(n))return null;if(Math.abs(n)>=1e9)return `${(n/1e9).toFixed(2)} mrd. kr`;if(Math.abs(n)>=1e6)return `${(n/1e6).toFixed(2)} mill. kr`;return `${new Intl.NumberFormat('nb-NO',{maximumFractionDigits:0}).format(n)} kr`};
   const typeLabel=k=>({PRIMARY_INSIDER:'Primærinnsider',INSTITUTIONAL_FLOW:'Fond/institusjon',LARGE_HOLDING:'Flagging/stor eier',FOREIGN_OWNERSHIP:'Utenlandsk eierskap',BLOCK_TRADE:'Blokkhandel',OWNERSHIP_CHANGE:'Eierendring'})[k]||k||'Kapitalflyt';
   const stateLabel=k=>({NEW:'NYTT',ACTIVE:'PÅGÅENDE',HISTORICAL:'HISTORISK'})[k]||k;
+  const qualityLabel=k=>({HIGH:'STERK KILDE',MEDIUM:'GOD KILDE',CONTEXT:'KONTEKST'})[k]||'KONTEKST';
 
   function selected(root,key,value){root.querySelectorAll('.cfChip').forEach(el=>el.classList.toggle('active',el.dataset[key]===value))}
   function render(){
@@ -27,7 +28,7 @@
       const shares=fmtNum(x.shares),price=fmtNum(x.price),money=fmtMoney(x.value_nok);
       const detail=[x.actor,shares?`${shares} aksjer`:null,price?`${price} kr/aksje`:null,money].filter(Boolean).join(' · ');
       const source=x.source_url?`<a class="cfSourceLink" href="${esc(x.source_url)}" target="_blank" rel="noopener noreferrer">${esc(x.source||'Kilde')}</a>`:esc(x.source||'Kilde');
-      return `<article class="cfPanel cfItem"><div><div class="cfTop"><span class="cfBadge ${String(x.state||'').toLowerCase()}">${stateLabel(x.state)}</span><span class="cfBadge ${esc(x.evidence_level)}">${evidence}</span><span class="cfBadge">${esc(typeLabel(x.event_type))}</span>${x.ticker?`<a class="cfTicker" href="/stock?ticker=${encodeURIComponent(x.ticker)}">${esc(x.ticker)}</a>`:''}</div><div class="cfTitle">${esc(x.title)}</div><div class="cfSummary">${esc(detail||x.summary||'Kapital-/eierendring registrert.')}</div><div class="cfMeta"><span>${fmtDate(x.event_at)}</span><span>${source}</span>${x.instrument_name?`<span>${esc(x.instrument_name)}</span>`:''}</div></div><div class="cfDirection ${direction}">${dtext}</div></article>`
+      return `<article class="cfPanel cfItem"><div><div class="cfTop"><span class="cfBadge ${String(x.state||'').toLowerCase()}">${stateLabel(x.state)}</span><span class="cfBadge ${esc(x.evidence_level)}">${evidence}</span><span class="cfBadge quality ${String(x.quality_band||"CONTEXT").toLowerCase()}">${qualityLabel(x.quality_band)}${Number.isFinite(Number(x.research_quality))?` · ${esc(x.research_quality)}`:""}</span><span class="cfBadge">${esc(typeLabel(x.event_type))}</span>${x.ticker?`<a class="cfTicker" href="/stock?ticker=${encodeURIComponent(x.ticker)}">${esc(x.ticker)}</a>`:''}</div><div class="cfTitle">${esc(x.title)}</div><div class="cfSummary">${esc(detail||x.summary||'Kapital-/eierendring registrert.')}</div><div class="cfMeta"><span>${fmtDate(x.event_at)}</span><span>${source}</span>${x.instrument_name?`<span>${esc(x.instrument_name)}</span>`:''}</div></div><div class="cfDirection ${direction}">${dtext}</div></article>`
     }).join('');
   }
 
