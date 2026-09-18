@@ -64,7 +64,7 @@ def test_mobile_nav_has_single_canonical_owner():
 def test_secondary_navigation_preserves_current_page_context():
     nav = (FRONTEND / "mobile_nav.js").read_text(encoding="utf-8")
     shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
-    for route in ("/capital-flow", "/alerts", "/ipo-radar", "/learning", "/calendar", "/readiness", "/legal"):
+    for route in ("/capital-flow", "/alerts", "/ipo-radar", "/history", "/calendar", "/readiness", "/legal"):
         assert route in nav
         assert route in shell
     assert "activeMoreRoute" in nav
