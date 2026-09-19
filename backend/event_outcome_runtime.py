@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 import event_evidence_runtime as evidence
 import portfolio_benchmark_runtime as benchmarks
+import smart_capital_research
 from database import connect
 from providers import YahooProvider
 
@@ -231,6 +232,12 @@ def build_event_evidence(ticker="", settle=True, provider=None):
             settled = 0
     samples = evidence_samples(ticker=ticker)
     result = evidence.summarize_samples(samples)
+    train, holdout = smart_capital_research.holdout_split(samples)
+    result["smart_capital_research"] = {
+        "full_sample": smart_capital_research.summarize(samples),
+        "development_sample": smart_capital_research.summarize(train),
+        "chronological_holdout": smart_capital_research.summarize(holdout),
+    }
     result.update({
         "ticker": str(ticker or "").strip().upper().replace(".OL", "") or None,
         "settled_now": settled,
