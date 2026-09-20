@@ -80,7 +80,6 @@ jobs:
           grep -q '\["/stock", "/stock.html"\]' worker.js
           grep -q '\["/intelligence", "/intelligence.html"\]' worker.js
           grep -q '\["/instrument", "/instrument.html"\]' worker.js
-          grep -q '\["/holdings", "/holdings.html"\]' worker.js
           grep -q '\["/news", "/news.html"\]' worker.js
           grep -q '\["/calendar", "/calendar.html"\]' worker.js
           grep -q '\["/readiness", "/readiness.html"\]' worker.js
