@@ -15,9 +15,9 @@ def test_brand_config_is_single_runtime_source_for_shell_branding():
     worker = read(ROOT / "worker.js")
 
     assert "NORDICSIGNAL_BRAND" in brand
-    assert "name:'NordicSignal'" in brand
-    assert "label:'NORDICSIGNAL'" in brand
-    assert "mark:'/nordicsignal-brand.svg'" in brand
+    assert "name:'Aksjer'" in brand
+    assert "label:'AKSJER'" in brand
+    assert "mark:'/aksjer-mark.svg'" in brand
     assert "window.NORDICSIGNAL_BRAND" in shell
     assert "BRAND.label" in shell
     assert "BRAND.name" in shell
@@ -30,7 +30,7 @@ def test_brand_config_is_single_runtime_source_for_shell_branding():
 
 def test_worker_bootstraps_theme_shell_and_mobile_nav_for_legacy_routes():
     worker = read(ROOT / "worker.js")
-    assert '["/holdings", "/holdings.html"]' in worker
+    assert '["/morning", "/morning.html"]' in worker
     assert 'ensureSharedScript(html, "/theme_mode.js")' in worker
     assert 'ensureSharedScript(html, "/ui_shell.js")' in worker
     assert 'ensureSharedScript(html, "/mobile_nav.js")' in worker
@@ -54,5 +54,5 @@ def test_holdings_legacy_source_is_served_through_worker_theme_bootstrap():
     holdings = read(FRONTEND / "holdings.html")
     worker = read(ROOT / "worker.js")
     assert 'href="/theme.css"' in holdings
-    assert '["/holdings", "/holdings.html"]' in worker
+    assert '["/morning", "/morning.html"]' in worker
     assert 'ensureSharedScript(html, "/theme_mode.js")' in worker
