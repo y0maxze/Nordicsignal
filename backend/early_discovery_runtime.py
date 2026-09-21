@@ -75,7 +75,7 @@ def latest(limit=100, labels=None):
 @app.get("/api/early-discovery")
 def early_discovery_latest(limit:int=Query(100,ge=1,le=200), state:str|None=None):
     labels=[x.strip().upper() for x in (state or "").split(",") if x.strip()]
-    return {"items":latest(limit,labels),"count":len(latest(limit,labels)),"model_version":research.VERSION,"score_effect":0,"policy":"research_watchlist_only_no_production_signal_effect"}
+    items=latest(limit,labels)\n    return {"items":items,"count":len(items),"model_version":research.VERSION,"score_effect":0,"policy":"research_watchlist_only_no_production_signal_effect"}
 
 def install():
     _ensure_schema()
