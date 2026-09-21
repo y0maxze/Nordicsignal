@@ -15,7 +15,7 @@ def test_shared_ui_assets_exist_and_are_cached():
     assert "nordicsignal-theme" in theme
     assert "data-theme" in (FRONTEND / "theme.css").read_text(encoding="utf-8")
     assert "Analyser valgt aksje" in shell
-    assert "Hjem" in mobile_nav and "Før børs" in mobile_nav and "Signaler" in mobile_nav and "Portefølje" in mobile_nav and "Søk" in mobile_nav
+    assert "Marked" in mobile_nav and "Før børs" in mobile_nav and "Portefølje" not in mobile_nav
     assert "/morning" in sw
     assert "/theme_mode.js" in sw and "/ui_shell.js" in sw and "/mobile_nav.js" in sw
     assert "loadScript('/theme_mode.js'" in loader
@@ -52,7 +52,7 @@ def test_mobile_nav_has_single_canonical_owner():
     assert "position:fixed!important" in nav
     assert "bottom:0!important" in nav
     assert "env(safe-area-inset-bottom)" in nav
-    assert "nsMobileMoreToggle" in nav
+    assert "nsMobileMoreToggle" not in nav
     assert "installMobileNav" not in shell
     assert "nsMobileMoreMenu" not in shell
     mobile_pos = loader.index("loadScript('/mobile_nav.js'")
@@ -61,17 +61,11 @@ def test_mobile_nav_has_single_canonical_owner():
     assert loader.count("loadScript('/mobile_nav.js'") == 1
 
 
-def test_secondary_navigation_preserves_current_page_context():
+def test_private_mobile_navigation_stays_minimal():
     nav = (FRONTEND / "mobile_nav.js").read_text(encoding="utf-8")
-    shell = (FRONTEND / "ui_shell.js").read_text(encoding="utf-8")
-    for route in ("/capital-flow", "/alerts", "/ipo-radar", "/history", "/calendar", "/readiness", "/legal"):
-        assert route in nav
-        assert route in shell
-    assert "activeMoreRoute" in nav
-    assert "aria-current','page'" in nav
-    assert "const moreRoute=MORE_ROUTES.find" in shell
-    assert "const active=moreRoute?'':" in shell
-    assert "secondary.setAttribute('aria-current','page')" in shell
+    assert "/app" in nav and "/morning" in nav
+    for route in ("/capital-flow", "/alerts", "/ipo-radar", "/history", "/calendar", "/readiness", "/legal", "/holdings"):
+        assert route not in nav
 
 
 def test_capital_flow_mobile_ownership_rows_have_explicit_layout_and_touch_targets():

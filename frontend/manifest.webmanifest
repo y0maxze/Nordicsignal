@@ -1,18 +1,27 @@
 {
-  "name": "NordicSignal",
-  "short_name": "NordicSignal",
-  "description": "Nordic market intelligence, insider activity, investment checks and verified market events.",
-  "start_url": "/mobile",
+  "name": "Aksjer",
+  "short_name": "Aksjer",
+  "description": "Privat markedsanalyse for Oslo-aksjer.",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#070707",
-  "theme_color": "#070707",
+  "background_color": "#040712",
+  "theme_color": "#040712",
   "lang": "no",
-  "categories": ["finance", "business"],
+  "categories": [
+    "finance"
+  ],
   "shortcuts": [
-    {"name":"Insider Pulse","short_name":"Insider","url":"/insider"},
-    {"name":"Investment Check","short_name":"Investment","url":"/readiness"},
-    {"name":"Nyheter","short_name":"Nyheter","url":"/news"}
+    {
+      "name": "Marked",
+      "short_name": "Marked",
+      "url": "/app"
+    },
+    {
+      "name": "Før børs",
+      "short_name": "Før børs",
+      "url": "/morning"
+    }
   ]
 }

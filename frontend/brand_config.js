@@ -3,10 +3,10 @@
 (function(root){
   if(root.NORDICSIGNAL_BRAND)return;
   root.NORDICSIGNAL_BRAND=Object.freeze({
-    name:'NordicSignal',
-    label:'NORDICSIGNAL',
-    appleTitle:'NordicSignal',
-    mark:'/nordicsignal-brand.svg',
+    name:'Aksjer',
+    label:'AKSJER',
+    appleTitle:'Aksjer',
+    mark:'/aksjer-mark.svg',
     accent:'#19a7ff',
     themeDark:'#040712',
     themeLight:'#eef5ff'
