@@ -50,7 +50,7 @@ def test_mobile_nav_has_single_canonical_owner():
     loader = (FRONTEND / "alert_nav_ui.js").read_text(encoding="utf-8")
     assert "function mount()" in nav
     assert "position:fixed!important" in nav
-    assert "bottom:0!important" in nav
+    assert "bottom:max(8px,env(safe-area-inset-bottom))!important" in nav
     assert "env(safe-area-inset-bottom)" in nav
     assert "nsMobileMoreToggle" not in nav
     assert "installMobileNav" not in shell
