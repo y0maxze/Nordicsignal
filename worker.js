@@ -64,7 +64,7 @@ const GLOBAL_HOME_UI = `<a class="nsGlobalHome" href="/app" aria-label="Til ${BR
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_readiness.js"></script><script src="/stock_evidence_ui.js"></script><script src="/stock_opportunity_ui.js"></script>';
 const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_smart_money_ui.js"></script><script src="/learning_temporal_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_failure_streak_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
 const MOBILE_SHELL = '<script src="/alert_local_capture.js"></script><script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script><script src="/alert_nav_ui.js"></script>';
-const ACCESS_GATE = '<script src="/access_gate.js"></script>';
+const ACCESS_GATE = '';
 const SECURITY_HEADERS = {
   "x-content-type-options":"nosniff",
   "referrer-policy":"strict-origin-when-cross-origin",
@@ -126,9 +126,6 @@ function enhanceHtml(html, pathname) {
   html = ensureSharedScript(html, "/mobile_nav.js");
   if (!html.includes('src="/mobile_shell.js"')) {
     html = html.replace("</body>", `${MOBILE_SHELL}</body>`);
-  }
-  if (pathname !== "/legal.html" && !html.includes('src="/access_gate.js"')) {
-    html = html.replace("</body>", `${ACCESS_GATE}</body>`);
   }
   return html;
 }
