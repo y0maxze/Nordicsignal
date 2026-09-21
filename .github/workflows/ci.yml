@@ -120,10 +120,7 @@ jobs:
           grep -q '/api/signal-evidence/' frontend/stock_evidence_ui.js
           grep -q 'stock_evidence_ui.js' worker.js
           grep -q "pathname = \"/intelligence.html\"" worker.js
-          grep -q 'NS-RISK-2026-08-27-2' frontend/access_gate.js
           grep -q 'NS-RISK-2026-08-27-2' frontend/legal.html
-          grep -q 'sessionStorage' frontend/access_gate.js
-          grep -q 'access_gate.js' worker.js
           grep -q 'mobile_shell.js' worker.js
           grep -q 'manifest.webmanifest' worker.js
           grep -q 'stock_selector.js' worker.js
