@@ -44,9 +44,9 @@ def test_worker_keeps_refresh_auth_forwarding_intact():
     assert 'if (url.pathname.startsWith("/api/")) return proxyApi(request, url, env);' in worker
 
 
-def test_pwa_caches_brand_config_without_bumping_cache_contract():
+def test_pwa_caches_brand_config_in_current_cache_contract():
     sw = read(FRONTEND / "sw.js")
-    assert "const CACHE_NAME='nordicsignal-shell-v5'" in sw
+    assert "const CACHE_NAME='aksjer-shell-v6'" in sw
     assert "'/brand_config.js'" in sw
 
 
