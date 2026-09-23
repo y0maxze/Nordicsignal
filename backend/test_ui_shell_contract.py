@@ -101,3 +101,17 @@ def test_theme_is_visual_only():
     combined = theme + shell
     for forbidden in ("/api/refresh", "score=", "threshold", "EARLY_OPPORTUNITY_HIGH"):
         assert forbidden not in combined
+
+
+def test_market_command_center_contract():
+    page = (ROOT / 'frontend' / 'index.html').read_text(encoding='utf-8')
+    assert 'Markedsrangering' in page
+    assert 'Alle</button>' in page and 'Early</button>' in page and 'Opportunity</button>' in page
+    assert 'Nye/IPO</button>' in page and 'Eier/Insider</button>' in page
+    assert 'Rel. styrke' in page and 'Volum' in page and 'Trend' in page
+    assert '/api/early-discovery?limit=100' in page
+    assert '/api/opportunity/' in page
+    assert '/api/ipo-radar?limit=50' in page
+    assert 'rangering er analysegrunnlag, ikke kjøpssignal' in page
+    for retired in ('Min oversikt','Min beholdning','Porteføljeverdi','Administrer beholdning'):
+        assert retired not in page
