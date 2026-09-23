@@ -115,3 +115,13 @@ def test_market_command_center_contract():
     assert 'rangering er analysegrunnlag, ikke kjøpssignal' in page
     for retired in ('Min oversikt','Min beholdning','Porteføljeverdi','Administrer beholdning'):
         assert retired not in page
+
+def test_stock_decision_chain_contract():
+    page = (ROOT / 'frontend' / 'stock.html').read_text(encoding='utf-8')
+    for label in ('Aksjer Score','Markedsrangering','Opportunity','Early Discovery','Hvorfor følge denne?','Hva skjer nå?'):
+        assert label in page
+    assert '/api/opportunity/' in page
+    assert 'Ingen handling ennå' in page
+    assert 'UI legger ikke til nye signalregler' in page
+    assert 'Viser bare forhold som finnes i lastede systemdata' in page
+    assert 'Ikke verifisert' in page
