@@ -74,7 +74,7 @@ jobs:
           test ! -e backend/paper_history_runtime.py
           grep -q 'startCommand: uvicorn api_entrypoint:app' render.yaml
           grep -q 'uvicorn api_entrypoint:app' DEPLOY.md
-          grep -q '\["/mobile", "/mobile.html"\]' worker.js
+          grep -q '\["/mobile", "/index.html"\]' worker.js
           grep -q '\["/morning", "/morning.html"\]' worker.js
           grep -q '\["/insider", "/insider.html"\]' worker.js
           grep -q '\["/stock", "/stock.html"\]' worker.js

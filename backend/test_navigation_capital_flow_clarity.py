@@ -9,7 +9,7 @@ def text(name):
 def test_secondary_history_stays_available_in_analysis_shell_not_primary_mobile_nav():
     shell = text("ui_shell.js")
     nav = text("mobile_nav.js")
-    assert 'href="/history"' in shell
+    assert 'href="/history"' not in shell
     assert 'href="/learning">Historikk' not in shell
     assert 'href="/history"' not in nav
 

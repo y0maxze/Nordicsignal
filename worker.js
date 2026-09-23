@@ -11,8 +11,8 @@ const ASSET_ROUTES = new Map([
   ["/app/", "/index.html"],
   ["/dashboard", "/index.html"],
   ["/dashboard/", "/index.html"],
-  ["/mobile", "/mobile.html"],
-  ["/mobile/", "/mobile.html"],
+  ["/mobile", "/index.html"],
+  ["/mobile/", "/index.html"],
   ["/morning", "/morning.html"],
   ["/morning/", "/morning.html"],
   ["/alerts", "/alerts.html"],
@@ -54,6 +54,8 @@ const ASSET_ROUTES = new Map([
 const REMOVED_PRODUCT_ROUTES = new Set([
   "/paper", "/paper/", "/paper-trading", "/paper-trading/",
   "/development", "/development/",
+  "/holdings", "/holdings/", "/frontend/holdings.html",
+  "/portfolio", "/portfolio/",
 ]);
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
