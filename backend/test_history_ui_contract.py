@@ -46,10 +46,10 @@ def test_history_mobile_nav_context_marks_more_route():
     assert "aria-current','page'" in context
 
 
-def test_history_surface_is_cached_and_worker_route_remains_wired():
+def test_history_surface_worker_route_remains_wired_without_primary_precache():
     sw = (FRONTEND / "sw.js").read_text(encoding="utf-8")
     worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-    assert "'/history'" in sw
-    assert "'/history_nav_context.js'" in sw
+    assert "'/history'" not in sw
+    assert "'/history_nav_context.js'" not in sw
     assert '["/history", "/history.html"]' in worker
     assert '["/history/", "/history.html"]' in worker

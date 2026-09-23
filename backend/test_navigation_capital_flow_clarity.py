@@ -21,8 +21,8 @@ def test_capital_flow_exposes_research_quality_without_signal_claim():
     assert "Kildekvalitet er kun et transparent forsknings-/presentasjonsmål" in html
     assert "uten at dette påvirker NordicSignal-score" in html
 
-def test_capital_flow_is_available_offline_with_its_runtime():
+def test_capital_flow_stays_available_without_primary_precache():
     sw = text("sw.js")
-    assert "'/capital-flow'" in sw
-    assert "'/capital-flow.js'" in sw
-    assert "nordicsignal-shell-v5" in sw
+    assert "'/capital-flow'" not in sw
+    assert "'/capital-flow.js'" not in sw
+    assert "aksjer-shell-v6" in sw

@@ -16,7 +16,8 @@ def test_shared_ui_assets_exist_and_are_cached():
     assert "data-theme" in (FRONTEND / "theme.css").read_text(encoding="utf-8")
     assert "Analyser valgt aksje" in shell
     assert "Marked" in mobile_nav and "Før børs" in mobile_nav and "Portefølje" not in mobile_nav
-    assert "/morning" in sw
+    assert "/app" in sw and "/morning" in sw
+    assert "access_gate.js" not in sw and "portfolio_dashboard.js" not in sw
     assert "/theme_mode.js" in sw and "/ui_shell.js" in sw and "/mobile_nav.js" in sw
     assert "loadScript('/theme_mode.js'" in loader
     assert "loadScript('/mobile_nav.js'" in loader
