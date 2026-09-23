@@ -51,7 +51,12 @@ const ASSET_ROUTES = new Map([
   ["/frontend/", "/index.html"],
 ]);
 
-const REMOVED_PRODUCT_ROUTES = new Set([\n  "/paper", "/paper/", "/paper-trading", "/paper-trading/",\n  "/development", "/development/",\n  "/holdings", "/holdings/", "/frontend/holdings.html",\n  "/portfolio", "/portfolio/",\n]);
+const REMOVED_PRODUCT_ROUTES = new Set([
+  "/paper", "/paper/", "/paper-trading", "/paper-trading/",
+  "/development", "/development/",
+  "/holdings", "/holdings/", "/frontend/holdings.html",
+  "/portfolio", "/portfolio/",
+]);
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
 const BRAND_CONFIG = '<script src="/brand_config.js"></script>';
