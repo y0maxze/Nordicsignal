@@ -193,3 +193,23 @@ not be reported as substitutes for these checks.
   that flow. No production scoring or notification thresholds changed.
 - Regression test executes the actual client with an old stored preference,
   denied registration, unconfigured delivery and successful registration.
+
+## Finance navigation and presentation — 2026-09-24
+
+- Canonical Market, Morning, Stock and Alerts share finance_shell.css/js:
+  neutral light/dark surfaces, compact numeric hierarchy, a sticky branded header,
+  native disclosure menu, visible alerts/theme controls, persistent table density,
+  and stock section links that keep the continuous analysis visible.
+- Primary navigation remains Market and Morning; legacy portfolio/readiness
+  routes are not added to the menu. The shell makes no API requests. Existing
+  data-status, ownership limitations and research/score separation are preserved.
+- finance_shell.js owns the canonical header; ui_shell.js skips its legacy
+  injection on these pages. The Worker-injected old home badge is removed.
+- Mobile retains a single-row two-link bottom nav, safe-area spacing, 44px
+  controls and constrained grid columns. Offline assets advance to shell v9.
+- Four DOM integration tests exercise actual scripts: unique navigation, Escape
+  and outside-click dismissal, density persistence, both theme directions, and
+  stock anchors matching actual analysis sections. All 577 backend tests passed
+  with four existing startup deprecations. Visual production QA remains limited
+  by the separate Cloudflare Access session; local cloud-browser preview could
+  not connect. Do not equate DOM tests with a visual desktop/mobile check.

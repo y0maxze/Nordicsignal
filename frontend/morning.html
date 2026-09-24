@@ -9,6 +9,7 @@
 .pill.normal{color:var(--m)!important;background:var(--surface-2)!important;border-color:var(--line)!important}.rowTop>div{min-width:0;overflow-wrap:anywhere}.pill{flex-shrink:0}.main{min-width:0}#meta{padding-bottom:24px}
 </style>
 <script src="/theme_mode.js"></script>
+<link rel="stylesheet" href="/finance_shell.css">
 </head>
 <body>
 <div class="app"><aside class="side"><div class="logo">AKSJER</div><nav></nav></aside><main class="main"><div class="wrap">
@@ -34,4 +35,4 @@ async function load(force=false){$('summary').innerHTML='<div class="empty">Last
 
 $('refresh').onclick=()=>load(true);load();
 </script>
-</body></html>
+<script src="/finance_shell.js"></script></body></html>

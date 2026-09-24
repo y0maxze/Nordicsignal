@@ -51,7 +51,7 @@ def test_oslo_holiday_and_auction_boundary():
 
 def test_stock_required_sections_and_data_states_execute():
     page=(ROOT/'frontend/stock.html').read_text()
-    script=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',page,re.S)[-1]
+    script=[source for source in re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',page,re.S) if source.strip()][-1]
     script=script[:script.rfind('load().catch')]
     program=r"""
 const vm=require('node:vm'),assert=require('node:assert/strict');
@@ -97,7 +97,7 @@ assert.ok(page.includes('/mobile_shell.js'));assert.ok(!page.includes('/alert_na
 
 def test_market_filters_preserve_rank_and_missing_values():
     page=(ROOT/'frontend/index.html').read_text()
-    script=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',page,re.S)[-1].replace('init();','')
+    script=[source for source in re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',page,re.S) if source.strip()][-1].replace('init();','')
     program="""
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const ctx={URLSearchParams,location:{},search:{addEventListener(){}},document:{},console};vm.createContext(ctx);vm.runInContext(SCRIPT,ctx);
