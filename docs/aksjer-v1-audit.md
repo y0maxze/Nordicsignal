@@ -96,3 +96,38 @@ Remaining test debt: background Opportunity market-context backfill can outlive 
 SQLite monkeypatch fixture and report a missing test table in an intermittent thread
 warning. Isolate/disable asynchronous research jobs in fixtures before stress-running
 the suite; do not change production model behavior to suppress a test warning.
+
+## Access activation follow-up (2026-09-24)
+
+The owner enabled Zero Trust Free and Worker-level Access on `nordicsignal`, scope
+**All traffic**, with the **Cloudflare account members** allow policy. This allows
+account members, not necessarily only one person; membership must stay restricted.
+An anonymous browser opening `/app` reached the tenant
+`lucky-darkness-5204.cloudflareaccess.com` login page. The owner confirmed that
+signing in opens the app. This supersedes the earlier Cloudflare-not-configured
+finding. Direct Render reads were still public when inspected; the existing
+shared secret is configured. This PR sets the documented private-mode configuration
+and requires anonymous Render API reads to return 401 in production verification.
+Apply the same non-secret setting to the existing Render service after the exact
+PR head passes all three gates and is merged; verify its redeploy before closing
+that finding. The public `/api/health` remains available for health checks.
+
+Actual Render start command was corrected to `uvicorn api_entrypoint:app --host
+0.0.0.0 --port $PORT`. Deploy `dep-daqg4u0u01pc738245jg` was verified live on
+`c0b1071087cc47555c9c44fcb614470546184c15`. This supersedes the earlier entrypoint
+mismatch. PR #110 passed all gates on `321e14c19777d79df63ed2be090d395fc93794b3`;
+main CI passed 570 tests and Cloudflare deploy passed on the c0b1071 merge commit.
+
+Anonymous production checks now validate the exact Access tenant redirect on pages,
+assets and APIs, plus direct-backend denial. They do **not** treat a login-page 200
+as app availability. Reports explicitly say authenticated content checks were not
+run when no Access session is available. The previous content assertions are kept
+as `run_content_checks` for an authenticated verification integration; they are not
+executed by this anonymous workflow. Authenticated deployment QA remains a separate
+requirement and must not be reported complete from this boundary check alone.
+
+Remaining: authenticated browser QA after backend lockdown, mobile visual review,
+Access-aware push/write enrollment, and the concrete data/startup debts above. The
+Worker continues to deny browser writes and personal legacy API reads; do not relax
+that containment merely because an Access configuration exists. Existing scheduler
+requests use the internal secret directly and do not traverse the browser login.
