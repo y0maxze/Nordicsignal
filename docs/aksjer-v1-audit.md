@@ -175,3 +175,21 @@ Remaining concrete limitations and next steps:
 The full Definition of Done is not certified while authenticated desktop/PWA and
 push verification remain outstanding. Automated tests and deployment checks must
 not be reported as substitutes for these checks.
+
+## Push client regression audit — 2026-09-24
+
+- Removed the mobile shell's legacy holdings/insider polling fallback. A saved
+  alert preference no longer starts personal-data reads when opening the inbox.
+- Registration now requires an HTTP success, a valid success response and
+  delivery_ready=true before presenting registration as successful. Permission
+  alone and a browser subscription do not prove server registration.
+- Registration confirmation is intentionally session-local until a secure
+  per-subscription server-status route is available. Reloading never asserts
+  active push based solely on a local preference. API and service-worker waits
+  are bounded. Failed tests clear the session confirmation.
+- Browser write proxy remains closed. The canonical inbox still does not expose
+  activation: verified Access identity, subscription ownership/endpoint safety,
+  server configuration and actual phone delivery remain required before enabling
+  that flow. No production scoring or notification thresholds changed.
+- Regression test executes the actual client with an old stored preference,
+  denied registration, unconfigured delivery and successful registration.

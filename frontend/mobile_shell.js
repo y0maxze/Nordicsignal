@@ -3,8 +3,7 @@
   const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent||'');
   const isMobile=()=>window.matchMedia('(max-width:900px)').matches;
   const ALERT_ENABLED='ns-mobile-alerts-v1';
-  const ALERT_SEEN='ns-mobile-alert-seen-v1';
-  let deferredInstallPrompt=null,alertTimer=null;
+  let deferredInstallPrompt=null,confirmedEndpoint=null;
 
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event});
 
@@ -35,25 +34,11 @@
     // Keep this runtime focused on install/push behavior.
   }
 
-  async function getJson(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw Error(path+' '+r.status);return r.json()}
-  function alertId(x){return [x.kind||x.type||'event',x.ticker||x.company||'',x.occurred_at||x.trade_date||x.latest_date||'',x.url||x.title||x.signal_label||''].join('|').toLowerCase()}
-  async function collectAlerts(){
-    const out=[];
-    const results=await Promise.allSettled([getJson('/api/holdings/events?limit=24'),getJson('/api/insider-market?limit=50&days=7')]);
-    const holdings=results[0].status==='fulfilled'?(results[0].value.items||[]):[];
-    holdings.filter(x=>x.importance==='high'||x.kind==='report'||x.kind==='insider').forEach(x=>out.push({id:alertId(x),title:`${x.ticker||'Beholdning'} · ${x.title||'Viktig hendelse'}`,body:x.brief||x.title||'Ny hendelse i beholdningen',url:x.url||'/mobile'}));
-    const market=results[1].status==='fulfilled'?results[1].value:{};
-    (market.pulses||[]).filter(p=>p.flags?.includes('cluster_buying')||p.flags?.includes('large_buy')||p.flags?.includes('repeated_buying')||p.tone==='negative').slice(0,15).forEach(p=>out.push({id:alertId(p),title:`${p.company||p.ticker||'Insider'} · ${p.signal_label||'Insideraktivitet'}`,body:`${p.buy_count||0} kjøp · ${p.sell_count||0} salg${(p.actors||[]).length?' · '+p.actors.slice(0,2).join(', '):''}`,url:'/insider'}));
-    return out;
-  }
-  function readSeen(){try{return new Set(JSON.parse(localStorage.getItem(ALERT_SEEN)||'[]'))}catch{return new Set()}}
-  function writeSeen(set){localStorage.setItem(ALERT_SEEN,JSON.stringify([...set].slice(-160)))}
-  async function showAlert(item){try{const reg=await navigator.serviceWorker.ready;await reg.showNotification(item.title,{body:item.body,tag:item.id,data:{url:item.url||'/mobile'}})}catch{try{new Notification(item.title,{body:item.body,tag:item.id})}catch{}}}
-  async function pollAlerts({baseline=false}={}){
-    if(localStorage.getItem(ALERT_ENABLED)!=='1'||typeof Notification==='undefined'||Notification.permission!=='granted')return;
-    let items=[];try{items=await collectAlerts()}catch{return}
-    const seen=readSeen();if(baseline||seen.size===0){items.forEach(x=>seen.add(x.id));writeSeen(seen);return}
-    const fresh=items.filter(x=>!seen.has(x.id));fresh.slice(0,4).forEach(x=>{seen.add(x.id);showAlert(x)});items.forEach(x=>seen.add(x.id));writeSeen(seen);
+  async function getJson(path){const r=await fetch(path,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error('Data utilgjengelig');return r.json()}
+  async function serviceWorkerReady(){
+    let timer;
+    try{return await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Service worker utilgjengelig')),15000)})])}
+    finally{clearTimeout(timer)}
   }
 
   function base64Key(value){
@@ -63,17 +48,20 @@
     if(!('PushManager' in window)||!('serviceWorker' in navigator))return {ready:false,reason:'unsupported'};
     let keyInfo;try{keyInfo=await getJson('/api/push/public-key')}catch{return {ready:false,reason:'backend_unavailable'}}
     if(!keyInfo.configured||!keyInfo.public_key)return {ready:false,reason:'not_configured'};
-    const reg=await navigator.serviceWorker.ready;
+    const reg=await serviceWorkerReady();
     let sub=await reg.pushManager.getSubscription();
     if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64Key(keyInfo.public_key)});
     const json=sub.toJSON();
-    const response=await fetch('/api/push/subscribe',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:json.endpoint,keys:json.keys,user_agent:navigator.userAgent})});
-    if(!response.ok)throw Error('push subscribe '+response.status);
+    const response=await fetch('/api/push/subscribe',{method:'POST',cache:'no-store',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:json.endpoint,keys:json.keys,user_agent:navigator.userAgent})});
+    if(!response.ok||response.redirected)throw Error('Registrering av push mislyktes');
+    const result=await response.json();
+    if(result.status!=='ok'||result.delivery_ready!==true)return {ready:false,reason:'not_configured'};
+    confirmedEndpoint=sub.endpoint;
     return {ready:true,subscription:sub};
   }
   async function currentPushState(){
     if(!('serviceWorker' in navigator)||!('PushManager' in window))return {active:false,configured:false};
-    try{const [reg,status]=await Promise.all([navigator.serviceWorker.ready,getJson('/api/push/status')]),sub=await reg.pushManager.getSubscription();return {active:!!sub&&!!status.delivery_ready,configured:!!status.delivery_ready,subscription:sub,status}}catch{return {active:false,configured:false}}
+    try{const [reg,status]=await Promise.all([serviceWorkerReady(),getJson('/api/push/status')]),sub=await reg.pushManager.getSubscription();return {active:!!sub&&sub.endpoint===confirmedEndpoint&&status.delivery_ready===true,configured:!!status.delivery_ready,subscription:sub,status}}catch{return {active:false,configured:false}}
   }
 
   function setAlertUi(text,enabled){const s=document.getElementById('alertStatus'),b=document.getElementById('nsEnableAlerts');if(s&&text)s.textContent=text;if(b){b.textContent=enabled?'Varsler på':'Aktiver';b.classList.toggle('primary',!enabled)}}
@@ -87,26 +75,37 @@
     const button=document.getElementById('nsTestPush');if(button){button.disabled=true;button.textContent='Sender…'}
     try{
       const state=await currentPushState();
-      if(!state.subscription||!state.configured)throw Error('Bakgrunnspush er ikke aktivert på denne enheten ennå.');
-      const response=await fetch('/api/push/test',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:state.subscription.endpoint})});
+      if(!state.active)throw Error('Bakgrunnspush er ikke aktivert på denne enheten ennå.');
+      const response=await fetch('/api/push/test',{method:'POST',cache:'no-store',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:state.subscription.endpoint})});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok)throw Error(data.detail||('HTTP '+response.status));
-      setAlertUi('Testpush er sendt. Lukk/minimer PWA-en og kontroller at Aksjer-varslet vises.',true);
-    }catch(error){setAlertUi('Testpush feilet: '+String(error.message||error),true)}
+      if(!response.ok||response.redirected||data.status!=='ok')throw Error('Push-test ble ikke bekreftet av serveren');
+      setAlertUi('Push-tjenesten har akseptert testen. Kontroller på telefonen om varslet kom fram.',true);
+    }catch(error){confirmedEndpoint=null;setPushTestVisible(false);setAlertUi('Testpush feilet: '+String(error.message||error),false)}
     finally{if(button){button.disabled=false;button.textContent='Test push'}}
   }
   async function enableAlerts(){
-    if(!('Notification' in window)||!('serviceWorker' in navigator)){setAlertUi('Denne nettleseren støtter ikke Aksjer-varsler.',false);return}
-    let permission=Notification.permission;if(permission!=='granted')permission=await Notification.requestPermission();
-    if(permission!=='granted'){localStorage.removeItem(ALERT_ENABLED);setPushTestVisible(false);setAlertUi('Varsler er ikke tillatt. Du kan endre dette i iPhone/nettleserinnstillinger.',false);return}
-    localStorage.setItem(ALERT_ENABLED,'1');await pollAlerts({baseline:true});
-    let push={ready:false};try{push=await registerRealPush()}catch(error){console.warn('Web Push subscription failed',error)}
-    setPushTestVisible(!!push.ready);
-    setAlertUi(push.ready?'Ekte bakgrunnspush er aktivert. Bruk «Test push» for å kontrollere faktisk levering.':'Varsler er aktivert. Push-nøkler er ikke konfigurert på serveren ennå, så appen bruker foreløpig lokal polling når den kjører.',true);startAlertPolling();
+    if(isIOS()&&!isStandalone()){setAlertUi('Legg Aksjer til på Hjem-skjerm i Safari og åpne appen der for å aktivere push.',false);return}
+    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){setAlertUi('Denne nettleseren støtter ikke Aksjer-varsler.',false);return}
+    const button=document.getElementById('nsEnableAlerts');if(button)button.disabled=true;
+    confirmedEndpoint=null;localStorage.removeItem(ALERT_ENABLED);setPushTestVisible(false);
+    try{
+      let permission=Notification.permission;if(permission!=='granted')permission=await Notification.requestPermission();
+      if(permission!=='granted'){setAlertUi('Varsler er ikke tillatt. Endre tillatelsen i nettleserinnstillingene.',false);return}
+      const push=await registerRealPush();
+      if(!push.ready){setAlertUi('Push er ikke aktivert. Serveroppsettet eller nettleserstøtten er ikke klart.',false);return}
+      localStorage.setItem(ALERT_ENABLED,'1');setPushTestVisible(true);
+      setAlertUi('Push-abonnement er registrert. Bruk «Test push» og bekreft mottak på telefonen.',true);
+    }catch{setAlertUi('Push kunne ikke registreres. Kontroller tilkobling og innlogging, og prøv igjen.',false)}
+    finally{if(button)button.disabled=false}
   }
-  function startAlertPolling(){if(alertTimer)clearInterval(alertTimer);if(localStorage.getItem(ALERT_ENABLED)!=='1')return;alertTimer=setInterval(()=>pollAlerts(),120000)}
-  async function bindAlertButton(){const b=document.getElementById('nsEnableAlerts');if(b)b.onclick=enableAlerts;const on=localStorage.getItem(ALERT_ENABLED)==='1'&&typeof Notification!=='undefined'&&Notification.permission==='granted';if(on){const push=await currentPushState();setPushTestVisible(push.active);setAlertUi(push.active?'Bakgrunnspush er aktiv på denne enheten. Bruk «Test push» for leveringstest.':'Varsler er på. Lokal polling brukes til VAPID-push er konfigurert.',true);pollAlerts({baseline:false});startAlertPolling()}else setPushTestVisible(false)}
+  async function bindAlertButton(){
+    const button=document.getElementById('nsEnableAlerts');
+    // A saved legacy preference must never start portfolio requests or polling.
+    if(!button)return;
+    button.onclick=enableAlerts;setPushTestVisible(false);
+    setAlertUi('Push er ikke bekreftet registrert i denne økten. Aktiver for å registrere og teste.',false);
+  }
 
-  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,pollAlerts,registerRealPush,currentPushState,testRealPush}}
+  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,registerRealPush,currentPushState,testRealPush}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
