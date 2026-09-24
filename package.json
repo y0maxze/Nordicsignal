@@ -1,0 +1,6 @@
+{
+  "name": "aksjer-ui-checks",
+  "private": true,
+  "scripts": { "test:ui": "node --test frontend/tests/finance_shell.test.cjs" },
+  "devDependencies": { "jsdom": "26.1.0" }
+}

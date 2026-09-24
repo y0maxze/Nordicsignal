@@ -1,0 +1,142 @@
+/* Aksjer financial workspace: neutral surfaces, precise hierarchy, readable data. */
+html.aksjerFinance{
+ --bg:#111418!important;--p:#191e24!important;--p2:#20262d!important;
+ --surface:#191e24!important;--surface-2:#20262d!important;--surface-3:#272f38!important;
+ --glass:#191e24!important;--t:#edf0f3!important;--m:#a6b0bb!important;
+ --line:#333c46!important;--line-strong:#526170!important;--b:#78b8ff!important;
+ --accent:#78b8ff!important;--g:#66d3a3!important;--r:#ff8795!important;--y:#e5c16a!important;
+ --shadow:none!important;--glow:none!important;
+ scroll-padding-top:88px;
+}
+html.aksjerFinance[data-theme="light"]{
+ --bg:#f3f4f5!important;--p:#fff!important;--p2:#f6f7f8!important;
+ --surface:#fff!important;--surface-2:#f6f7f8!important;--surface-3:#e9edf1!important;
+ --glass:#fff!important;--t:#19232e!important;--m:#596572!important;
+ --line:#dce1e6!important;--line-strong:#a9b6c3!important;--b:#125fbd!important;
+ --accent:#125fbd!important;--g:#087749!important;--r:#bc3349!important;--y:#866100!important;
+}
+html.aksjerFinance body{background:var(--bg)!important;font-size:14px;line-height:1.5}
+html.aksjerFinance body:before,html.aksjerFinance body:after{display:none!important}
+html.aksjerFinance .side{display:none!important}
+html.aksjerFinance .app{display:block;min-height:0}
+html.aksjerFinance .app>.main{margin:0 auto!important;max-width:1440px;width:100%;padding:28px 32px 100px;min-height:0}
+html.aksjerFinance .main>.wrap{max-width:none;padding:0!important}
+html.aksjerFinance body>main.wrap,html.aksjerFinance .alertPage{max-width:1280px;margin:0 auto;padding:28px 32px 100px!important}
+html.aksjerFinance a:hover{color:var(--b)!important}
+html.aksjerFinance .top{gap:20px!important;margin-bottom:24px;align-items:center!important}
+html.aksjerFinance .top h1{font-size:30px!important;margin:0 0 6px;line-height:1.2}
+html.aksjerFinance .top h1,html.aksjerFinance .top h2{background:none!important;color:var(--t)!important;-webkit-text-fill-color:var(--t)!important}
+html.aksjerFinance h2{font-size:18px;line-height:1.35;margin:0 0 14px;letter-spacing:-.025em}
+html.aksjerFinance .sub,html.aksjerFinance .muted{font-size:12px;line-height:1.5}
+html.aksjerFinance .card,html.aksjerFinance .section,html.aksjerFinance .metric,html.aksjerFinance .notice,html.aksjerFinance .chart,html.aksjerFinance .alertCard{
+ background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:8px!important;
+ box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+html.aksjerFinance .card,html.aksjerFinance .section{padding:20px}
+html.aksjerFinance .hero:after{display:none!important}
+html.aksjerFinance .metric,html.aksjerFinance .decision{background:var(--surface-2)!important;border:1px solid var(--line);border-radius:6px!important;padding:12px;min-width:0}
+html.aksjerFinance .metric b{font-size:20px;line-height:1.35;font-variant-numeric:tabular-nums}
+html.aksjerFinance .notice{color:var(--m);font-size:12px;line-height:1.6;padding:12px 14px;border-left:3px solid var(--line-strong)!important}
+html.aksjerFinance .btn,html.aksjerFinance .tab,html.aksjerFinance .nsThemeToggle{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:6px!important;color:var(--t)!important;box-shadow:none!important;min-height:44px;transform:none!important}
+html.aksjerFinance .btn:hover,html.aksjerFinance .tab:hover{background:var(--surface-2)!important}
+html.aksjerFinance .btn.active,html.aksjerFinance .tab.active,html.aksjerFinance .btn.primary{background:var(--t)!important;color:var(--bg)!important;border-color:var(--t)!important}
+html.aksjerFinance input,html.aksjerFinance select{font:inherit}
+html.aksjerFinance .search,html.aksjerFinance #nsIntelInput{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:6px!important;min-height:44px;color:var(--t)!important;padding:10px 14px;box-shadow:none!important}
+html.aksjerFinance .search{width:340px}
+html.aksjerFinance .searchResults,html.aksjerFinance .nsIntelResults{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:6px;box-shadow:0 8px 24px #0002!important}
+html.aksjerFinance .result,html.aksjerFinance .nsIntelResult{min-height:44px;background:var(--surface)!important;color:var(--t)!important}
+html.aksjerFinance .nsIntelResult span{color:var(--m)!important;font-size:12px}
+html.aksjerFinance #nsIntelSwitch{max-width:420px;margin:0 0 20px}
+html.aksjerFinance .marketMeta{gap:6px!important;padding:0 0 14px;border-bottom:1px solid var(--line);margin:14px 0 20px}
+html.aksjerFinance .filter{font-size:13px;padding:8px 14px!important;border-radius:5px!important}
+html.aksjerFinance .marketTable{padding:0!important;overflow-x:auto}
+html.aksjerFinance .marketTable>.toolbar{padding:18px 20px;margin:0!important;border-bottom:1px solid var(--line)}
+html.aksjerFinance .marketTable .toolbar h2{margin-bottom:4px}
+html.aksjerFinance .row{padding:13px 18px;gap:12px;min-height:56px;font-size:13px;font-variant-numeric:tabular-nums;min-width:1050px;grid-template-columns:28px minmax(165px,1.5fr) 86px 70px 50px 85px 78px 86px minmax(125px,1fr)}
+html.aksjerFinance .row.head{background:var(--surface-2);min-height:40px;padding-top:8px;padding-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+html.aksjerFinance .row:not(.head):hover{background:var(--surface-2)!important}
+html.aksjerFinance .row>.stock{color:var(--t)!important;font-weight:650}
+html.aksjerFinance .row>.stock .sub{font-size:11px;font-weight:400}
+html.aksjerFinance .row>*:nth-child(n+3):nth-child(-n+8){text-align:right}
+html.aksjerFinance .row>*:nth-child(9){padding-left:8px}
+html.aksjerFinance[data-density="compact"] .row:not(.head){padding-top:7px;padding-bottom:7px;min-height:44px}
+html.aksjerFinance .price{font-size:34px;line-height:1.2;font-variant-numeric:tabular-nums}
+html.aksjerFinance .decisionGrid{gap:10px}
+html.aksjerFinance .decision b{font-size:20px;font-variant-numeric:tabular-nums}
+html.aksjerFinance .decision span{font-size:11px}
+html.aksjerFinance .hero>.metrics{grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line);padding-top:14px}
+html.aksjerFinance .hero>.metrics .metric{border:0!important;background:transparent!important;padding:4px 8px}
+html.aksjerFinance #content{display:grid;gap:16px}
+html.aksjerFinance #content>.card{margin:0!important}
+html.aksjerFinance .sectionTitle{margin:24px 0 14px}
+html.aksjerFinance .sectionTitle h2{margin-bottom:3px}
+html.aksjerFinance .eventRow{padding:18px 0}
+html.aksjerFinance .ticker{font-weight:650;font-size:16px}
+html.aksjerFinance #summary{color:var(--m);font-size:13px}
+html.aksjerFinance .alertList{gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+html.aksjerFinance .alertCard{border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;padding:18px 20px}
+html.aksjerFinance .alertCard:last-child{border-bottom:0!important}
+html.aksjerFinance :focus-visible{outline:2px solid var(--b)!important;outline-offset:3px}
+/* One consistent header, with native keyboard-accessible disclosure navigation. */
+#aksjerHeader{position:sticky;top:0;z-index:1000;background:var(--surface);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.aksjerHeaderInner{display:flex;align-items:center;gap:32px;max-width:1440px;min-height:68px;margin:auto;padding:0 32px}
+.aksjerBrand{display:inline-flex;align-items:center;gap:9px;color:var(--t)!important;font-size:21px;font-weight:750;letter-spacing:-.04em;text-decoration:none;min-height:44px;flex-shrink:0}
+html.aksjerFinance #aksjerHeader nav{display:flex;gap:4px}
+html.aksjerFinance #aksjerHeader nav a{margin:0;border:0!important;border-radius:0!important;padding:22px 16px!important;background:none!important;box-shadow:none!important;transform:none!important;font-size:14px;min-height:44px;color:var(--m)!important}
+html.aksjerFinance #aksjerHeader nav a[aria-current="page"]{color:var(--t)!important;box-shadow:inset 0 -3px var(--b)!important;font-weight:700}
+.aksjerActions{display:flex;align-items:center;gap:8px;margin-left:auto}
+#aksjerAlerts,#aksjerMenu>summary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;min-width:44px;padding:0 12px;text-decoration:none;font-size:13px;font-weight:600;color:var(--t)!important;border-radius:6px}
+#aksjerAlerts:hover,#aksjerMenu>summary:hover{background:var(--surface-2)}
+#aksjerMenu{position:relative}
+#aksjerMenu>summary{cursor:pointer;list-style:none;border:1px solid var(--line)}
+#aksjerMenu>summary::-webkit-details-marker{display:none}
+.aksjerMenuPanel{position:absolute;right:0;top:calc(100% + 12px);width:320px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 170px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:0 12px 32px #0003}
+.aksjerMenuLabel{margin:4px 0 8px;color:var(--m);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+html.aksjerFinance #aksjerMenu nav{display:grid;margin-bottom:18px}
+html.aksjerFinance #aksjerMenu nav a{padding:10px 12px!important;border-radius:5px!important;color:var(--t)!important;font-weight:650}
+html.aksjerFinance #aksjerMenu nav a:hover{background:var(--surface-2)!important}
+#aksjerMenu nav a span{display:block;color:var(--m);font-weight:400;font-size:12px}
+#aksjerDensity{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px 12px;min-height:44px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;color:var(--t);font:inherit;cursor:pointer}
+#aksjerDensity span{font-size:12px;color:var(--b);font-weight:700}
+.aksjerDataInfo{margin-top:16px;border-top:1px solid var(--line);padding-top:8px;color:var(--m);font-size:12px}
+.aksjerDataInfo summary{cursor:pointer;min-height:44px;line-height:44px;color:var(--t);font-size:13px}
+html.aksjerFinance .aksjerStockSections{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin:0 0 20px;scrollbar-width:thin}
+html.aksjerFinance .aksjerStockSections a{padding:12px 14px!important;min-height:44px;flex-shrink:0;margin:0;background:none!important;border:0!important;border-radius:0!important;transform:none!important;font-size:13px;color:var(--m)!important}
+html.aksjerFinance .aksjerStockSections a:hover{color:var(--t)!important;box-shadow:inset 0 -2px var(--b)}
+@media(max-width:900px){
+ .aksjerHeaderInner{padding:0 16px;min-height:60px;gap:12px}
+ html.aksjerFinance #aksjerHeader .aksjerPrimary{display:none}
+ html.aksjerFinance .app>.main,html.aksjerFinance body>main.wrap,html.aksjerFinance .alertPage{padding:22px 16px calc(90px + env(safe-area-inset-bottom))!important}
+ html.aksjerFinance .top h1{font-size:26px!important}
+ html.aksjerFinance .nsMobileNav{left:0!important;right:0!important;bottom:0!important;border-radius:0!important;padding:4px 12px max(4px,env(safe-area-inset-bottom))!important;border:0!important;border-top:1px solid var(--line)!important;background:var(--surface)!important}
+ html.aksjerFinance .nsMobileNav a{font-size:13px!important;border-radius:0!important;margin:0!important;background:none!important;box-shadow:none!important;transform:none!important}
+ html.aksjerFinance .nsMobileNav a.active{color:var(--t)!important;box-shadow:inset 0 2px var(--b)!important;border-radius:0!important;background:var(--surface-2)!important}
+ html.aksjerFinance .hero>.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:550px){
+ .aksjerHeaderInner{padding:0 12px;gap:6px}.aksjerBrand{font-size:19px;gap:7px}.aksjerBrand img{width:24px;height:24px}.aksjerActions{gap:4px}#aksjerAlerts span{display:none}#aksjerMenu>summary{padding:0 10px}
+ html.aksjerFinance .main>.top{display:flex;flex-wrap:wrap;gap:16px!important}
+ html.aksjerFinance .main>.top>.searchbox{width:100%;flex:1 0 100%}
+ html.aksjerFinance .search{width:100%;font-size:16px}
+ html.aksjerFinance .card,html.aksjerFinance .section{padding:16px}
+ html.aksjerFinance .marketTable>.toolbar{padding:14px 12px}
+ html.aksjerFinance .marketTable .toolbar h2{font-size:17px}
+ html.aksjerFinance .marketTable .toolbar .sub{font-size:11px}
+ html.aksjerFinance .row{min-width:0;grid-template-columns:20px minmax(0,1fr) 62px 55px 32px;gap:6px;padding:12px 10px;font-size:12px;min-height:56px}
+ html.aksjerFinance .row>*{min-width:0}.aksjerFinance .row .stock{overflow-wrap:anywhere}
+ html.aksjerFinance .row>*:nth-child(n+6){display:none}
+ html.aksjerFinance .row.head{font-size:10px}
+ html.aksjerFinance .row>.stock .sub{font-size:10px}
+ html.aksjerFinance .marketMeta{flex-wrap:nowrap;overflow-x:auto;gap:6px!important}
+ html.aksjerFinance .filter{flex-shrink:0;font-size:12px;padding:8px 12px!important}
+ html.aksjerFinance .price{font-size:28px}
+ html.aksjerFinance body>main.wrap>.top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px!important}
+ html.aksjerFinance .decision b{font-size:17px}
+ html.aksjerFinance .decision span{font-size:10px}
+ html.aksjerFinance .hero>.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ html.aksjerFinance .metric b{font-size:19px;overflow-wrap:anywhere}
+ html.aksjerFinance #nsIntelInput{font-size:16px}
+}
+
+html.aksjerFinance body>main.wrap>.top>div:nth-child(2){text-align:right}
+@media(max-width:550px){html.aksjerFinance body>main.wrap>.top>div:nth-child(2){text-align:left}}

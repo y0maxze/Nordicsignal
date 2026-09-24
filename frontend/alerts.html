@@ -2,10 +2,11 @@
 <html lang="no"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Varsler · Aksjer</title><link rel="stylesheet" href="/theme.css"><script src="/theme_mode.js"></script>
 <style>
 body{margin:0}.alertPage{max-width:900px;margin:auto;padding:24px 16px calc(110px + env(safe-area-inset-bottom))}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{margin:0}p{line-height:1.5}.muted,.time{color:var(--m)}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0}.btn{min-height:44px;padding:10px 14px;background:var(--surface-2);color:var(--t);border:1px solid var(--line);border-radius:10px;cursor:pointer}.alertList{display:grid;gap:12px}.alertCard{display:block;text-decoration:none;color:var(--t);padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);overflow-wrap:anywhere}.alertCard h2{font-size:18px;margin:8px 0}.alertCard p{margin:8px 0}.time{font-size:12px}.notice{padding:14px;border:1px solid var(--line);border-radius:12px}.alertCard:focus-visible,.btn:focus-visible{outline:2px solid var(--b);outline-offset:3px}
-</style></head><body><main class="alertPage">
+</style><link rel="stylesheet" href="/finance_shell.css">
+</head><body><main class="alertPage">
 <header class="top"><h1>Varsler</h1></header>
 <p class="muted">Siste registrerte signalhendelser: scoreendringer, trend/aktivitet og Opportunity. Hendelsene er historikk, ikke nødvendigvis aktive kjøpssignaler.</p>
 <div class="notice">Push til telefonen er ikke aktivert i denne versjonen. Dette er signaloversikten i appen, ikke en kvittering for leverte push-varsler.</div>
 <div class="toolbar"><span id="summary" role="status">Laster…</span><button id="refreshAlerts" class="btn" type="button">Oppdater</button></div>
 <section id="alertList" class="alertList" aria-label="Signalhendelser"></section>
-</main><script src="/ui_shell.js"></script><script src="/alerts.js"></script></body></html>
+</main><script src="/ui_shell.js"></script><script src="/alerts.js"></script><script src="/finance_shell.js"></script></body></html>

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_calendar_cannot_turn_failed_opportunity_into_no_action():
     page = (ROOT / 'frontend/stock.html').read_text()
-    script = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', page, re.S)[-1]
+    script = [source for source in re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', page, re.S) if source.strip()][-1]
     script = script[:script.rfind('load().catch')]
     program = r'''
 const vm=require('node:vm'),assert=require('node:assert/strict');
