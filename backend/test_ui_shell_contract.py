@@ -141,3 +141,40 @@ def test_stock_changed_since_last_contract():
     assert 'previous_label' in page
     assert 'for lite data' in evidence
     assert 'får aldri sterk grønn markering' in evidence
+
+def test_v1_canonical_stock_and_morning_contract():
+    worker = (ROOT / 'worker.js').read_text(encoding='utf-8')
+    market = (ROOT / 'frontend' / 'index.html').read_text(encoding='utf-8')
+    stock = (ROOT / 'frontend' / 'stock.html').read_text(encoding='utf-8')
+    morning = (ROOT / 'frontend' / 'morning.html').read_text(encoding='utf-8')
+    extras = worker.split("const STOCK_EXTRAS =",1)[1].split(";",1)[0]
+    assert 'stock_opportunity_ui.js' not in extras
+    assert 'stock_readiness.js' not in extras
+    assert "showStock(" not in market
+    assert "openStock(" in market
+    for state in ('LIVE','FORSINKET','LAGRET','UTILGJENGELIG'):
+        assert state in stock
+    assert "(d.summary||[]).slice(0,8)" in morning
+    assert "(d.must_know||[]).slice(0,8)" in morning
+
+
+def test_market_navigation_executes_canonical_route():
+    """Execute the actual script so duplicate declarations cannot shadow routing."""
+    import json
+    import re
+    import subprocess
+    market = (ROOT / 'frontend' / 'index.html').read_text(encoding='utf-8')
+    script = re.search(r'<script>(.*?)</script>', market, re.S).group(1)
+    script = re.sub(r'\binit\(\);', '', script)
+    harness = """
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const ctx = {location: {href: ''}, nav: {addEventListener(){}}, search: {addEventListener(){}}};
+vm.createContext(ctx);
+vm.runInContext(SCRIPT, ctx);
+vm.runInContext("openStock('EQNR')", ctx);
+assert.equal(ctx.location.href, '/stock?ticker=EQNR');
+vm.runInContext("openStock('A&B')", ctx);
+assert.equal(ctx.location.href, '/stock?ticker=A%26B');
+""".replace('SCRIPT', json.dumps(script))
+    subprocess.run(['node', '-e', harness], check=True, capture_output=True, text=True)
