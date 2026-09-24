@@ -143,7 +143,7 @@ def test_stock_changed_since_last_contract():
     assert 'får aldri sterk grønn markering' in evidence
 
 def test_v1_canonical_stock_and_morning_contract():
-    worker = (ROOT.parent / 'worker.js').read_text(encoding='utf-8')
+    worker = (ROOT.parent.parent / 'worker.js').read_text(encoding='utf-8')
     market = (ROOT / 'frontend' / 'index.html').read_text(encoding='utf-8')
     stock = (ROOT / 'frontend' / 'stock.html').read_text(encoding='utf-8')
     morning = (ROOT / 'frontend' / 'morning.html').read_text(encoding='utf-8')
