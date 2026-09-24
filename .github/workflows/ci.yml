@@ -119,7 +119,7 @@ jobs:
           grep -q 'mobile_shell.js' worker.js
           grep -q 'manifest.webmanifest' worker.js
           grep -q 'stock_selector.js' worker.js
-          grep -q 'stock_readiness.js' worker.js
+          if grep -q 'stock_readiness.js' worker.js; then echo 'Canonical stock page must not inject legacy Investment Check UI'; exit 1; fi
           grep -q 'theme.css' worker.js
           grep -q 'stock_extras.js' worker.js
           grep -q 'Market Pressure' frontend/stock_extras.js
@@ -174,4 +174,5 @@ jobs:
           grep -q "'/morning'" frontend/sw.js
           grep -q "data-tab='pressure'\|data-tab=\"pressure\"\|dataset.tab='pressure'" frontend/stock_extras.js
           grep -q 'data-tab="readiness"' frontend/stock_readiness.js
+          if grep -q 'stock_opportunity_ui.js' worker.js; then echo 'Canonical stock page must not inject duplicate Opportunity UI'; exit 1; fi
           if grep -q "holdings.html?search=" frontend/dashboard_enhancements.js; then echo 'Global search must open instrument intelligence, not Holdings'; exit 1; fi
