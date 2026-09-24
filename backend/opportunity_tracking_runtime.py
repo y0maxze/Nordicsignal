@@ -340,6 +340,39 @@ def _maybe_schedule_scan():
     return "scheduled"
 
 
+def opportunity_timeline(ticker, limit=30):
+    ticker=str(ticker or "").upper().replace(".OL","")
+    limit=max(1,min(100,int(limit)))
+    if not ticker:
+        return {"ticker":"","items":[],"count":0}
+    conn=connect()
+    try:
+        rows=[dict(x) for x in conn.execute(
+            "SELECT * FROM opportunity_events WHERE ticker=? ORDER BY observed_at DESC,id DESC LIMIT ?",
+            (ticker,limit)).fetchall()]
+        ids=[x["id"] for x in rows]
+        returns=[]
+        if ids:
+            placeholders=",".join("?" for _ in ids)
+            returns=[dict(x) for x in conn.execute(
+                f"SELECT * FROM opportunity_forward_returns WHERE event_id IN ({placeholders}) ORDER BY horizon_days",ids).fetchall()]
+    finally:
+        conn.close()
+    by_event={}
+    for row in returns:
+        by_event.setdefault(row["event_id"],[]).append({
+            "horizon_days":row.get("horizon_days"),"target_date":row.get("target_date"),
+            "return_pct":row.get("return_pct"),"settled_at":row.get("settled_at")})
+    items=[]
+    for row in rows:
+        items.append({
+            "id":row.get("id"),"ticker":row.get("ticker"),"previous_label":row.get("previous_label"),
+            "label":row.get("label"),"score":row.get("score"),"observed_at":row.get("observed_at"),
+            "reversal_score":row.get("reversal_score"),"volume_ratio":row.get("volume_ratio"),
+            "insider_label":row.get("insider_label"),"forward_returns":by_event.get(row.get("id"),[])})
+    return {"ticker":ticker,"items":items,"count":len(items),"horizons":list(HORIZONS),
+            "policy":"informational_only_pending_forward_validation"}
+
 def opportunity_performance(limit=100):
     limit = max(1, min(int(limit or 100), 500))
     conn = connect()
@@ -422,6 +455,10 @@ def install():
 
     def patched_install(app):
         original_install(app)
+
+        @app.get("/api/opportunity-timeline/{ticker}")
+        def opportunity_timeline_route(ticker: str, limit: int = 30):
+            return opportunity_timeline(ticker, limit)
 
         @app.get("/api/opportunity-performance")
         def opportunity_performance_route(limit: int = 100):
