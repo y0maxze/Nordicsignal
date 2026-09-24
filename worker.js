@@ -151,7 +151,7 @@ async function proxyApi(request, url, env) {
     // Never allow the public proxy to act as an unauthenticated write-token relay.
     // Scheduled jobs use the backend directly with the existing secret.
     const mutates = !['GET','HEAD','OPTIONS'].includes(request.method) || url.pathname === '/api/refresh' || url.pathname.endsWith('/refresh') || url.searchParams.get('refresh') === 'true';
-    if (/^\/api\/(holdings|portfolio|watchlist|purchases|alerts|notifications)(\/|$)/.test(url.pathname)) return json({status:'error',code:'PRIVATE_READ_ACCESS_REQUIRED'},403);
+    if (/^\/api\/(holdings|portfolio|watchlist|purchases|alerts|notifications|dashboard-home)(\/|$)/.test(url.pathname)) return json({status:'error',code:'PRIVATE_READ_ACCESS_REQUIRED'},403);
     if (mutates) return json({status:'error',code:'PRIVATE_WRITE_ACCESS_REQUIRED',message:'Private authenticated write access is required'},403);
     const headers = new Headers(request.headers);
     headers.delete('x-nordicsignal-internal-token');

@@ -52,7 +52,7 @@ def run():
             require(isinstance(d.get('items'),list) and len(d['items'])>0,'Market real universe available')
             require(all(x.get('data_status') in {'LIVE','FORSINKET','LAGRET','UTILGJENGELIG'} for x in d.get('items',[])),'Market truthful data states')
         if path=='/api/early-discovery' and isinstance(d,dict):require(d.get('score_effect')==0,'Early Discovery zero score effect')
-    for origin,path,expected in [(FRONTEND,'/api/holdings',403),(FRONTEND,'/api/refresh',403),(BACKEND,'/api/holdings',401),(BACKEND,'/api/refresh',401)]:
+    for origin,path,expected in [(FRONTEND,'/api/dashboard-home?phase=core',403),(FRONTEND,'/api/holdings',403),(FRONTEND,'/api/refresh',403),(BACKEND,'/api/holdings',401),(BACKEND,'/api/refresh',401)]:
         status,_,_,_=fetch(origin,path)
         require(status==expected,('Worker' if origin==FRONTEND else 'Backend')+path+' unauthenticated denied')
     for path in ['/manifest.webmanifest','/sw.js','/stock_analysis.js']:

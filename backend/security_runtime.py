@@ -211,7 +211,7 @@ def install():
                         )
                     auth_mode = "shared_secret"
 
-                is_private_read = bool(re.match(r"^/api/(holdings|portfolio|watchlist|purchases|alerts|notifications)(/|$)", path))
+                is_private_read = bool(re.match(r"^/api/(holdings|portfolio|watchlist|purchases|alerts|notifications|dashboard-home)(/|$)", path))
                 if is_write or is_refresh or is_private_read or request.query_params.get("refresh") == "true":
                     auth_ok, write_auth_mode = _auth_ok(request)
                     auth_mode = "shared_secret" if auth_mode == "shared_secret" else write_auth_mode

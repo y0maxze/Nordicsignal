@@ -37,9 +37,19 @@ def canonical_issuer(company=None, title=None, ticker=None):
         # bonds/instruments separated by commas. The first token is the issuer.
         candidate = _collapse(company_text.split(",", 1)[0]) if company_text else ""
 
+    # A common name fragment is not issuer evidence (e.g. Kongsberg Maritime
+    # must not resolve to Kongsberg Gruppen). Ignore a prior fuzzy ticker when
+    # a source company name is available; retain only a unique exact alias.
+    def identity(value):
+        value = insider_market_v2_runtime._norm(value)
+        return re.sub(r"\s+(?:asa|as|ab|plc|ltd|limited)$", "", value).strip()
+
     resolved_ticker = str(ticker or "").upper().replace(".OL", "").strip() or None
-    if not resolved_ticker and candidate:
-        resolved_ticker = insider_market_v2_runtime._ticker_for_company(candidate)
+    if candidate:
+        target = identity(candidate)
+        matches = {symbol for symbol, (name, aliases) in insider_runtime.ISSUERS.items()
+                   if target and any(identity(alias) == target for alias in (name, *aliases))}
+        resolved_ticker = next(iter(matches)) if len(matches) == 1 else None
 
     if resolved_ticker in insider_runtime.ISSUERS:
         candidate = insider_runtime.ISSUERS[resolved_ticker][0]
@@ -64,8 +74,7 @@ def install():
                 item.get("ticker"),
             )
             item["company"] = company
-            if ticker:
-                item["ticker"] = ticker
+            item["ticker"] = ticker
             cleaned.append(item)
         return cleaned
 

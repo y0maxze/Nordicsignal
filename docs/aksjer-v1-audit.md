@@ -82,3 +82,17 @@ three pre-merge mandatory gates. It does not certify authentication or mobile
 visual behavior.
 
 Full backend suite after startup fix: 567 passed, four startup deprecation warnings.
+
+
+Additional production findings in the follow-up: Market now prefers a newer dated
+price observation over an older quote; search excludes unsupported funds and foreign
+instruments from the Oslo stock route; the legacy dashboard aggregation route is
+protected as personal data. General news issuer cleanup now requires a unique exact
+normalized company alias, preventing Kongsberg Maritime from being linked to KOG.
+Private-mode authorization runs before HTTP-cache hits, covered by the real middleware
+chain in a regression test.
+
+Remaining test debt: background Opportunity market-context backfill can outlive a
+SQLite monkeypatch fixture and report a missing test table in an intermittent thread
+warning. Isolate/disable asynchronous research jobs in fixtures before stress-running
+the suite; do not change production model behavior to suppress a test warning.
