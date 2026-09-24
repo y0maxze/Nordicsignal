@@ -74,7 +74,7 @@ assert.equal(vm.runInContext('stockList([{ticker:"EQNR"}]).length',ctx),1);
 def test_morning_brief_caps_total_and_deduplicates():
     page=(ROOT/'frontend/morning.html').read_text()
     fn=page[page.index('function briefPoints'):page.index('async function load(force')]
-    script="const assert=require('node:assert/strict');const pct=v=>v+'%';"+fn+";const result=briefPoints({must_know:Array.from({length:15},(_,i)=>({url:'https://example.test/'+i,title:'event'})),overnight_news:[{official:true,url:'https://example.test/0'}]});assert.equal(result.length,8);assert.equal(new Set(result.map(x=>x.url)).size,8);"
+    script="const assert=require('node:assert/strict');const pct=v=>v+'%';"+fn+";const result=briefPoints({must_know:Array.from({length:15},(_,i)=>({url:'https://example.test/'+i,title:'event'})),overnight_news:[{official:true,url:'https://example.test/0'}]});assert.equal(result.length,8);assert.equal(new Set(result.map(x=>x.url)).size,8);const observed=briefPoints({notable_markets:[{label:'Brent',change_pct:1.72,market_time:'2026-09-24T11:52:00Z'}],overnight_news:[{official:true,url:'https://example.test/rate',title:'Interest Adjustment'}]});assert.equal(observed.length,1);assert.equal(observed[0].source_context,'market');"
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
 
 
@@ -123,3 +123,11 @@ def test_market_prefers_newer_dated_observation_over_old_quote(monkeypatch):
     assert row['change_pct'] is None
     assert row['quote_as_of']=='2026-09-24'
     assert row['data_status']=='LAGRET'
+
+
+def test_morning_status_and_compact_financial_values():
+    page=(ROOT/'frontend/morning.html').read_text()
+    labels=page[page.index('function riskLabel'):page.index('function rowAttrs')]
+    analysis=(ROOT/'frontend/stock_analysis.js').read_text()
+    script="const assert=require('node:assert/strict');const num=v=>v==null?'—':Number(v).toLocaleString('nb-NO');"+labels+analysis+";assert.equal(riskLabel('normal',{source_context:'market'}),'OBSERVERT');assert.equal(riskLabel('normal',{source_context:'radar'}),'PUBLISERT');assert.equal(riskLabel('normal',{}),'KOMMENDE');assert.equal(compactAmount(105828000000),'105,83 mrd.');assert.equal(compactAmount(-5977000000),'−5,98 mrd.');assert.equal(compactAmount(null),'—');assert.equal(compactAmount(0),'0');"
+    subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
