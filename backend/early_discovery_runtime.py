@@ -53,6 +53,25 @@ def record(ticker, result, observed_at=None):
         return {"stored":bool(getattr(cur,"rowcount",0)),"ticker":ticker,"market_date":market_date,"label":result.get("label"),"score_effect":0}
     finally: conn.close()
 
+def history(ticker, limit=30):
+    ticker=str(ticker or "").upper().replace(".OL","")
+    limit=max(1,min(100,int(limit)))
+    if not ticker: return []
+    conn=connect()
+    try:
+        rows=[dict(x) for x in conn.execute(
+          "SELECT * FROM early_discovery_observations WHERE ticker=? ORDER BY market_date DESC,id DESC LIMIT ?",
+          (ticker,limit)).fetchall()]
+    finally: conn.close()
+    out=[]
+    for row in rows:
+        row["components"]=json.loads(row.get("components") or "{}")
+        row["reasons"]=json.loads(row.get("reasons") or "[]")
+        row["score_effect"]=0
+        row["policy"]="research_watchlist_only_no_production_signal_effect"
+        out.append(row)
+    return out
+
 def latest(limit=100, labels=None):
     limit=max(1,min(200,int(limit)))
     wanted={str(x).upper() for x in (labels or []) if x}
@@ -71,6 +90,11 @@ def latest(limit=100, labels=None):
         row["policy"]="research_watchlist_only_no_production_signal_effect"
         out.append(row)
     return out
+
+@app.get("/api/early-discovery/{ticker}/history")
+def early_discovery_history(ticker:str, limit:int=Query(30,ge=1,le=100)):
+    items=history(ticker,limit)
+    return {"ticker":str(ticker or "").upper().replace(".OL",""),"items":items,"count":len(items),"model_version":research.VERSION,"score_effect":0,"policy":"research_watchlist_only_no_production_signal_effect"}
 
 @app.get("/api/early-discovery")
 def early_discovery_latest(limit:int=Query(100,ge=1,le=200), state:str|None=None):
