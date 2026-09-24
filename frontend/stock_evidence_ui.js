@@ -15,14 +15,14 @@
   function metric(h,label){
     const x=h||{},n=Number(x.directional_n??x.n??0),rate=x.directional_hit_rate_pct;
     const cls=n<20?'nsEvidenceWarn':rate>=60?'nsEvidenceGood':rate<45?'nsEvidenceBad':'nsEvidenceWarn';
-    return `<div class="nsEvidenceMetric"><span>${esc(label)}</span><b class="${cls}">${hit(rate)} treff</b><div class="nsEvidenceMeta">Median ${pct(x.median_return_pct)} · N=${esc(n)} · ${esc(sampleLabel(n))}</div></div>`;
+    return `<div class="nsEvidenceMetric"><span>${esc(label)}</span><b class="${cls}">${hit(rate)} treff</b><div class="nsEvidenceMeta">Snitt ${pct(x.mean_return_pct)} · Median ${pct(x.median_return_pct)} · N=${esc(n)} · ${esc(sampleLabel(n))}</div></div>`;
   }
 
   function render(d){
     const root=document.getElementById('nsSignalEvidence');if(!root)return;
     const sum=d?.summary||{},overall=sum.overall||{},h=overall.horizons||{},groups=sum.by_event||[];
     const maturity=sum.maturity==='useful_history'?'Mer historikk':sum.maturity==='early'?'Tidlig historikk':'Lite datagrunnlag';
-    root.innerHTML=`<div class="nsEvidenceHead"><div><h2 style="margin:0">Aksjer signal-evidens · ${esc(ticker)}</h2><div class="muted">Historisk replay av samme trend-/aktivitetsregler som brukes i Latest Signals.</div></div><button class="btn" id="nsEvidenceRefresh">Oppdater historikk</button></div><div class="notice" style="margin-top:12px"><b>${esc(maturity)} · ${esc(sum.sample_count||0)} signalhendelser</b><br>Treffrate betyr at kursretningen etter signalet samsvarte med signalretningen. N under 20 vises som «for lite data» og får aldri sterk grønn markering. Dette er backtest, ikke garanti for fremtidig avkastning.</div><div class="nsEvidenceGrid">${metric(h['5'],'5 børsdager')}${metric(h['20'],'20 børsdager')}${metric(h['60'],'60 børsdager')}</div>${groups.length?`<div class="tablewrap"><table class="nsEvidenceTable"><thead><tr><th>Signaltype</th><th>N</th><th>5d treff</th><th>20d treff</th><th>60d treff</th><th>20d median</th></tr></thead><tbody>${groups.slice(0,8).map(g=>{const gh=g.horizons||{};return `<tr><td><b>${esc(g.event)}</b><div class="muted">${esc(sampleLabel(g.sample_count))}</div></td><td>${esc(g.sample_count)}</td><td>${hit(gh['5']?.directional_hit_rate_pct)} · N=${esc(gh['5']?.directional_n??0)}</td><td>${hit(gh['20']?.directional_hit_rate_pct)} · N=${esc(gh['20']?.directional_n??0)}</td><td>${hit(gh['60']?.directional_hit_rate_pct)} · N=${esc(gh['60']?.directional_n??0)}</td><td>${pct(gh['20']?.median_return_pct)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div class="muted" style="margin-top:10px">Periode: siste ${esc(d.period_years)} år · Kilde: ${esc(d.source)} · ${esc(d.method)}</div>`;
+    root.innerHTML=`<div class="nsEvidenceHead"><div><h2 style="margin:0">Aksjer signal-evidens · ${esc(ticker)}</h2><div class="muted">Historisk replay av samme trend-/aktivitetsregler som brukes i Latest Signals.</div></div><button class="btn" id="nsEvidenceRefresh">Oppdater historikk</button></div><div class="notice" style="margin-top:12px"><b>${esc(maturity)} · ${esc(sum.sample_count||0)} signalhendelser</b><br>Treffrate betyr at kursretningen etter signalet samsvarte med signalretningen. N under 20 vises som «for lite data» og får aldri sterk grønn markering. Dette er historisk replay av aksjeavkastning, ikke benchmark-justert excess. Dette er backtest, ikke garanti for fremtidig avkastning.</div><div class="nsEvidenceGrid">${metric(h['5'],'5 børsdager')}${metric(h['20'],'20 børsdager')}${metric(h['60'],'60 børsdager')}</div>${groups.length?`<div class="tablewrap"><table class="nsEvidenceTable"><thead><tr><th>Signaltype</th><th>N</th><th>5d treff</th><th>20d treff</th><th>60d treff</th><th>20d median</th></tr></thead><tbody>${groups.slice(0,8).map(g=>{const gh=g.horizons||{};return `<tr><td><b>${esc(g.event)}</b><div class="muted">${esc(sampleLabel(g.sample_count))}</div></td><td>${esc(g.sample_count)}</td><td>${hit(gh['5']?.directional_hit_rate_pct)} · N=${esc(gh['5']?.directional_n??0)}</td><td>${hit(gh['20']?.directional_hit_rate_pct)} · N=${esc(gh['20']?.directional_n??0)}</td><td>${hit(gh['60']?.directional_hit_rate_pct)} · N=${esc(gh['60']?.directional_n??0)}</td><td>${pct(gh['20']?.median_return_pct)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div class="muted" style="margin-top:10px">Periode: siste ${esc(d.period_years)} år · Kilde: ${esc(d.source)} · ${esc(d.method)}</div>`;
     const b=document.getElementById('nsEvidenceRefresh');if(b)b.onclick=()=>load(true);
   }
 
@@ -30,16 +30,15 @@
     const root=document.getElementById('nsSignalEvidence');if(!root||!ticker)return;
     root.innerHTML='<div class="notice">Beregner historisk signal-evidens…</div>';
     try{
-      const r=await fetch('/api/signal-evidence/'+encodeURIComponent(ticker)+'?years=2'+(refresh?'&refresh=true':''),{cache:'no-store'}),d=await r.json().catch(()=>({}));
+      const r=await fetch('/api/signal-evidence/'+encodeURIComponent(ticker)+'?years=2'+'',{cache:'no-store'}),d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.detail||('HTTP '+r.status));render(d);
     }catch(e){root.innerHTML=`<div class="notice">Signal-evidens er midlertidig utilgjengelig: ${esc(e.message)}</div>`}
   }
 
   function attach(){
-    if(!ticker||typeof window.backtest!=='function'||window.backtest.__nsEvidenceWrapped)return;
-    styles();const original=window.backtest;
-    function wrapped(){const result=original.apply(this,arguments);setTimeout(()=>{const c=document.getElementById('content');if(!c)return;if(!document.getElementById('nsSignalEvidence'))c.insertAdjacentHTML('afterbegin','<section id="nsSignalEvidence" class="card nsEvidence"><div class="notice">Laster signal-evidens…</div></section>');load(false)},0);return result}
-    wrapped.__nsEvidenceWrapped=true;window.backtest=wrapped;
+    const root=document.getElementById('nsSignalEvidence');if(!root||root.dataset.loaded)return;
+    root.dataset.loaded='1';styles();
+    if('IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();load(false)}},{rootMargin:'300px'});observer.observe(root)}else load(false);
   }
-  attach();setTimeout(attach,150);
+  attach();
 })();

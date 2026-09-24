@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import hashlib
 import hmac
 import os
+import re
 import threading
 import time
 import uuid
@@ -105,7 +106,7 @@ def _supplied_token(request):
 
 def _auth_ok(request):
     if not WRITE_TOKEN:
-        return True, "same_origin_guard"
+        return False, "secret_missing"
     return hmac.compare_digest(_supplied_token(request), WRITE_TOKEN), "shared_secret"
 
 
@@ -155,7 +156,7 @@ def security_status():
     return {
         "status": "ok",
         "authentication": "external_access_configured" if PRIVATE_MODE else "external_access_not_configured",
-        "write_protection": "shared_secret" if WRITE_TOKEN else "same_origin_guard",
+        "write_protection": "shared_secret" if WRITE_TOKEN else "disabled_secret_missing",
         "backend_read_protection": "shared_secret" if direct_locked else "public_until_private_mode",
         "shared_secret_configured": bool(WRITE_TOKEN),
         "private_mode": bool(PRIVATE_MODE),
@@ -210,7 +211,8 @@ def install():
                         )
                     auth_mode = "shared_secret"
 
-                if is_write or is_refresh:
+                is_private_read = bool(re.match(r"^/api/(holdings|portfolio|watchlist|purchases|alerts|notifications)(/|$)", path))
+                if is_write or is_refresh or is_private_read or request.query_params.get("refresh") == "true":
                     auth_ok, write_auth_mode = _auth_ok(request)
                     auth_mode = "shared_secret" if auth_mode == "shared_secret" else write_auth_mode
                     if not auth_ok:

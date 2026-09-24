@@ -25,4 +25,4 @@ def test_capital_flow_stays_available_without_primary_precache():
     sw = text("sw.js")
     assert "'/capital-flow'" not in sw
     assert "'/capital-flow.js'" not in sw
-    assert "aksjer-shell-v6" in sw
+    assert "aksjer-shell-v7" in sw

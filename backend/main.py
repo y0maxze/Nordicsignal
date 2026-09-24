@@ -17,7 +17,7 @@ except Exception:
     _nordicsignal_runtime_patch = None
 
 app = FastAPI(title="NordicSignal API", version="3.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=list(__import__("security_runtime").ALLOWED_ORIGINS), allow_credentials=False, allow_methods=["GET", "POST", "DELETE", "PATCH", "OPTIONS"], allow_headers=["content-type", "authorization", "x-nordicsignal-internal-token"])
 extra_api.install(app)
 
 UNIVERSE = [("LSG", "Lerøy Seafood", "Seafood"), ("MPCC", "MPC Container Ships", "Shipping"), ("ELO", "Elopak", "Packaging"), ("PEXIP", "Pexip", "Technology"), ("XPLRA", "Xplora Technologies", "Technology"), ("EQNR", "Equinor", "Energy"), ("DNB", "DNB", "Financials"), ("NHY", "Norsk Hydro", "Materials"), ("YAR", "Yara International", "Chemicals"), ("MOWI", "Mowi", "Seafood"), ("SALM", "SalMar", "Seafood"), ("GJF", "Gjensidige Forsikring", "Financials"), ("TEL", "Telenor", "Telecom"), ("ORK", "Orkla", "Consumer"), ("TOM", "Tomra Systems", "Industrials"), ("KOG", "Kongsberg Gruppen", "Industrials"), ("NAS", "Norwegian Air Shuttle", "Airlines"), ("AKRBP", "Aker BP", "Energy"), ("AKSO", "Aker Solutions", "Energy"), ("SUBC", "Subsea 7", "Energy"), ("BWLPG", "BW LPG", "Shipping"), ("HAUTO", "Höegh Autoliners", "Shipping"), ("CMBTO", "CMB.TECH", "Shipping"), ("VAR", "Vår Energi", "Energy")]
@@ -165,7 +165,7 @@ def startup():
 @app.get("/api/health")
 def health(): return {"status": "ok", "service": "NordicSignal API", "version": "3.0.0", "providers": ["Yahoo Finance", "Finanstilsynet SSR", "Euronext Oslo Børs"], "score_policy": "coverage-aware live score"}
 
-@app.get("/api/refresh")
+@app.post("/api/refresh")
 def refresh(all: bool = True): return {"status": "ok", "results": refresh_all(include_insider=True) if all else refresh_all(limit=8, include_insider=True)}
 
 @app.get("/api/verification")
@@ -264,3 +264,9 @@ def add_watchlist(ticker: str):
 @app.delete("/api/watchlist/{ticker}")
 def remove_watchlist(ticker: str):
     conn = connect(); conn.execute("DELETE FROM watchlist WHERE ticker=?", (ticker.upper(),)); conn.commit(); conn.close(); return {"status": "ok", "ticker": ticker.upper()}
+
+
+@app.get('/api/market-snapshot')
+def market_snapshot():
+    from market_snapshot import snapshot
+    return snapshot(stocks()['items'])

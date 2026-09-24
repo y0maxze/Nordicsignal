@@ -7,7 +7,7 @@ def test_previous_close_handles_monday_morning():
     now = datetime(2026, 9, 7, 6, 0, tzinfo=timezone.utc)  # Monday 08:00 Oslo
     close = brief._previous_oslo_close(now)
     assert close.weekday() == 4
-    assert close.hour == 16 and close.minute == 20
+    assert close.hour == 16 and close.minute == 25
     assert close.date().isoformat() == "2026-09-04"
 
 

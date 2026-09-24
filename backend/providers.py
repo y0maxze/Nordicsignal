@@ -140,16 +140,11 @@ class YahooProvider(MarketDataProvider):
         data = self._get(f"{self.BASE}/v8/finance/chart/{symbol}", {"range": "5d", "interval": "1d"})
         result = data["chart"]["result"][0]
         meta = result.get("meta", {})
-        price = meta.get("regularMarketPrice") or meta.get("previousClose")
-        previous = meta.get("previousClose")
-        change = ((price - previous) / previous * 100) if price is not None and previous else None
+        from quote_snapshot import quote_snapshot
         volumes = result.get("indicators", {}).get("quote", [{}])[0].get("volume") or []
-        return {
-            "ticker": ticker.upper(), "symbol": symbol, "price": price, "previous_close": previous,
-            "change_pct": change, "volume": volumes[-1] if volumes else None,
-            "currency": meta.get("currency"), "exchange": meta.get("exchangeName"),
-            "source": "Yahoo Finance", "captured_at": datetime.now(timezone.utc).isoformat(),
-        }
+        return {**quote_snapshot(result), "ticker":ticker.upper(), "symbol":symbol,
+                "volume":volumes[-1] if volumes else None, "currency":meta.get("currency"),
+                "exchange":meta.get("exchangeName"), "source":"Yahoo Finance"}
 
     def historical(self, ticker, period="1y"):
         ranges = {"now": ("1d", "5m"), "1d": ("1d", "5m"), "1w": ("5d", "1h"), "1m": ("1mo", "1d"), "3m": ("3mo", "1d"), "6m": ("6mo", "1d"), "1y": ("1y", "1d"), "5y": ("5y", "1wk"), "10y": ("10y", "1mo"), "max": ("max", "1mo")}

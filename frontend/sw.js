@@ -1,5 +1,5 @@
-const CACHE_NAME='aksjer-shell-v6';
-const SHELL=['/app','/morning','/stock','/theme.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_readiness.js','/stock_evidence_ui.js','/stock_opportunity_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
+const CACHE_NAME='aksjer-shell-v7';
+const SHELL=['/app','/morning','/stock','/theme.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_analysis.js','/stock_evidence_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).catch(()=>null));
@@ -24,7 +24,7 @@ self.addEventListener('fetch',event=>{
       return response;
     }catch(error){
       const cached=await caches.match(request);if(cached)return cached;
-      if(request.mode==='navigate'){const app=await caches.match('/app');if(app)return app}
+      if(request.mode==='navigate')return new Response('<!doctype html><html lang="no"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aksjer · Frakoblet</title><h1>Du er frakoblet</h1><p>Denne siden er ikke tilgjengelig uten nett. Ingen markedsdata er bekreftet oppdatert.</p><a href="/app">Åpne lagret Marked</a></html>',{headers:{'content-type':'text/html; charset=utf-8'}});
       throw error;
     }
   })());
@@ -40,7 +40,7 @@ self.addEventListener('push',event=>{
 
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
-  const target=(event.notification.data&&event.notification.data.url)||'/app';
+  const candidate=new URL((event.notification.data&&event.notification.data.url)||'/app',self.location.origin);const target=candidate.origin===self.location.origin?candidate.href:'/app';
   event.waitUntil((async()=>{
     const list=await clients.matchAll({type:'window',includeUncontrolled:true});
     for(const client of list){try{const url=new URL(client.url);if(url.origin===self.location.origin){await client.focus();if('navigate' in client)await client.navigate(target);return}}catch{}}

@@ -30,7 +30,7 @@ async function triggerOpportunityScan(env) {
 
 async function triggerMarketRefresh(env) {
   const response = await fetch(`${API_ORIGIN}${REFRESH_PATH}`, {
-    method: "GET",
+    method: "POST",
     headers: internalHeaders(env),
   });
   if (!response.ok && response.status !== 429) {
