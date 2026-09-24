@@ -53,7 +53,7 @@ def test_stock_required_sections_and_data_states_execute():
     page=(ROOT/'frontend/stock.html').read_text()
     script=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',page,re.S)[-1]
     script=script[:script.rfind('load().catch')]
-    program="""
+    program=r"""
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const elements=new Map();const ctx={URLSearchParams,location:{search:'?ticker=EQNR'},document:{getElementById(id){if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:''});return elements.get(id)}},window:{}};
 vm.createContext(ctx);vm.runInContext(SCRIPT,ctx);vm.runInContext("render('overview')",ctx);
@@ -61,6 +61,11 @@ for(const id of ['signalTimeline','nsSignalEvidence','chartSection','ownershipSe
 assert.equal(vm.runInContext('dataState({price:100})',ctx),'LAGRET');
 assert.equal(vm.runInContext('dataState({price:null})',ctx),'UTILGJENGELIG');
 assert.equal(vm.runInContext('fmtPct(null)',ctx),'—');
+assert.match(vm.runInContext('osloTime("2026-09-24T11:37:20+00:00")',ctx),/24\.09\.2026.*13:37/);
+assert.match(vm.runInContext('osloTime("2026-01-24T11:37:20Z")',ctx),/24\.01\.2026.*12:37/);
+assert.equal(vm.runInContext('osloTime("2026-09-24T11:37:20")',ctx),'Tidssone ukjent');
+assert.equal(vm.runInContext('osloTime(null)',ctx),'Tidspunkt ukjent');
+assert.equal(vm.runInContext('osloTime("invalidZ")',ctx),'Tidspunkt ukjent');
 assert.equal(vm.runInContext('stockList([{ticker:"EQNR"}]).length',ctx),1);
 """.replace('SCRIPT',json.dumps(script))
     subprocess.run(['node','-e',program],check=True,capture_output=True,text=True)
