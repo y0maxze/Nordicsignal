@@ -127,7 +127,7 @@ function enhanceHtml(html, pathname) {
   html = ensureSharedScript(html, "/ui_shell.js");
   html = ensureSharedScript(html, "/mobile_nav.js");
   if (!html.includes('src="/mobile_shell.js"')) {
-    html = html.replace("</body>", `${['/index.html','/stock.html','/morning.html'].includes(pathname)?'<script src="/mobile_shell.js"></script>':MOBILE_SHELL}</body>`);
+    html = html.replace("</body>", `${['/index.html','/stock.html','/morning.html','/alerts.html'].includes(pathname)?'<script src="/mobile_shell.js"></script>':MOBILE_SHELL}</body>`);
   }
   return html;
 }
