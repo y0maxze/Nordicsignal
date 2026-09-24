@@ -80,7 +80,7 @@ import assert from 'node:assert/strict';
 import worker from WORKER;
 let calls=0;globalThis.fetch=async()=>{calls++;return new Response('{}')};
 const env={NORDICSIGNAL_WRITE_TOKEN:'test-only',ASSETS:{fetch:async()=>new Response('<html><head></head><body></body></html>',{headers:{'content-type':'text/html'}})}};
-for(const [path,method] of [['/api/refresh','POST'],['/api/watchlist','GET'],['/api/holdings','GET'],['/api/push/test','POST'],['/api/opportunity/EQNR?refresh=true','GET']]){
+for(const [path,method] of [['/api/refresh','POST'],['/api/watchlist','GET'],['/api/holdings','GET'],['/api/dashboard-home?phase=core','GET'],['/api/push/test','POST'],['/api/opportunity/EQNR?refresh=true','GET']]){
  const response=await worker.fetch(new Request('https://example.test'+path,{method}),env);assert.equal(response.status,403,path);
 }
 assert.equal(calls,0);
@@ -99,7 +99,22 @@ const ctx={URLSearchParams,location:{},search:{addEventListener(){}},document:{}
 vm.runInContext('universe=[{ticker:"EQNR",name:"Equinor",score:90,market_rank:1,insider_coverage:false},{ticker:"DNB",name:"DNB",score:70,market_rank:2,insider_coverage:true}];marketFilter="owner"',ctx);
 assert.equal(vm.runInContext('filteredMarket().length',ctx),1);
 assert.ok(vm.runInContext('rows(filteredMarket())',ctx).includes('class="rank">2</span>'));
+assert.equal(vm.runInContext('supportedStock({symbol:"EQNRX",quote_type:"MUTUALFUND"})',ctx),false);
+assert.equal(vm.runInContext('supportedStock({symbol:"EQNR.OL",quote_type:"EQUITY"})',ctx),true);
 assert.equal(vm.runInContext('priceText({price:null})',ctx),'—');
 assert.equal(vm.runInContext('relativeText({relative_strength:null})',ctx),'—');
 """.replace('SCRIPT',json.dumps(script))
     subprocess.run(['node','-e',program],check=True,capture_output=True,text=True)
+
+
+def test_market_prefers_newer_dated_observation_over_old_quote(monkeypatch):
+    def rows(sql):
+        if 'quotes' in sql:
+            return [{'ticker':'EQNR','price':200,'change_pct':2,'captured_at':'2026-09-10T10:00:00Z'}]
+        return [{'ticker':'EQNR','payload':json.dumps({'reversal':{'metrics':{'close':300,'close_date':'2026-09-24'}}})}]
+    monkeypatch.setattr(market,'read_rows',rows)
+    row=market.snapshot([{'ticker':'EQNR','score':69}])['items'][0]
+    assert row['price']==300
+    assert row['change_pct'] is None
+    assert row['quote_as_of']=='2026-09-24'
+    assert row['data_status']=='LAGRET'

@@ -50,3 +50,49 @@ sections, missing-value handling, fixed ranks, morning dedup/cap and Worker toke
 Frontend inline and external JavaScript plus both Workers are syntax checked.
 Remote gates, post-merge deploy verification, visual desktop/mobile and final production
 recheck must be recorded before this checkpoint can be considered complete.
+
+
+## Follow-up after PR #109
+
+PR #109 passed all three gates on `5e34f23f83d8822c991c14070e8d12ab646f9dae`,
+merged with expected head into `1cebea8422ed010c0d7efd9e787b614ef2aff27d`.
+Main CI and Cloudflare deploy succeeded on that SHA; Render deploy
+`dep-daqfr77f3r2c739b2l2g` was verified live on the same commit. Actual Stock
+showed EQNR delayed quote with real market time, 26-stock ranking, research-only
+ownership state and a continuous analysis. Browser console showed no application
+JavaScript errors (browser-extension metadata errors excluded).
+
+The next audit found and repairs an eager `import main` in
+`early_discovery_runtime.py` that could create the FastAPI app before subsequent
+runtime route wrappers were installed. The runtime now participates in the same
+idempotent extra_api.install chain as the other integrations. A fresh-process
+regression test requires the affected routes exactly once.
+
+Presentation findings: undated IR landing-page links must not be called new
+announcements; valuation ratios with unverified currency alignment must not be
+presented as validated multiples; dividend totals need duplicate-event validation.
+These values are suppressed or labelled in presentation. **The existing valuation
+scoring implementation in providers.py/main.py also needs a separate point-in-time
+currency audit before any production score change. No score rule was changed.**
+
+A read-only post-deployment check now verifies actual production routes, source
+HTML, research policy, API availability, personal-read protection and PWA assets.
+The report is uploaded by the Cloudflare workflow. This is independent of the
+three pre-merge mandatory gates. It does not certify authentication or mobile
+visual behavior.
+
+Full backend suite after startup fix: 567 passed, four startup deprecation warnings.
+
+
+Additional production findings in the follow-up: Market now prefers a newer dated
+price observation over an older quote; search excludes unsupported funds and foreign
+instruments from the Oslo stock route; the legacy dashboard aggregation route is
+protected as personal data. General news issuer cleanup now requires a unique exact
+normalized company alias, preventing Kongsberg Maritime from being linked to KOG.
+Private-mode authorization runs before HTTP-cache hits, covered by the real middleware
+chain in a regression test.
+
+Remaining test debt: background Opportunity market-context backfill can outlive a
+SQLite monkeypatch fixture and report a missing test table in an intermittent thread
+warning. Isolate/disable asynchronous research jobs in fixtures before stress-running
+the suite; do not change production model behavior to suppress a test warning.

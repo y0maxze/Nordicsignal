@@ -128,6 +128,12 @@ def install():
                     _clear()
                 return response
 
+            # Cache middleware is outside the security middleware. Never return a
+            # cached market response before private-mode authentication runs.
+            import security_runtime
+            if security_runtime.PRIVATE_MODE and path not in security_runtime._PUBLIC_API_PATHS and not security_runtime._backend_proxy_auth_ok(request):
+                return await call_next(request)
+
             ttl = _ttl_for(path)
             refresh = str(request.query_params.get("refresh", "")).lower() in {"1", "true", "yes"}
             if ttl <= 0 or refresh:

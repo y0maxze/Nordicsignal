@@ -51,3 +51,9 @@ class InsiderCompanyCleanupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_related_issuer_does_not_inherit_fuzzy_ticker():
+    ticker, company = cleanup.canonical_issuer('Kongsberg Maritime ASA', 'Flagging i Kongsberg Maritime ASA', 'KOG')
+    assert ticker is None
+    assert company == 'Kongsberg Maritime ASA'

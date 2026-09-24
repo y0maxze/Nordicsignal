@@ -32,3 +32,16 @@ def test_history_is_point_in_time_and_research_only():
     assert rows[0]["market_date"]=="2026-09-18"
     assert rows[0]["score_effect"]==0
     assert rows[0]["policy"]=="research_watchlist_only_no_production_signal_effect"
+
+
+def test_runtime_does_not_eagerly_import_main_and_skip_later_routes(tmp_path):
+    import os
+    from pathlib import Path
+    import subprocess
+    env={**os.environ,'NORDICSIGNAL_DB_PATH':str(tmp_path/'startup.db')}
+    result=subprocess.run([__import__('sys').executable,'-c',
+        'import main; paths=[getattr(r,"path","") for r in main.app.routes]; '
+        'required=["/api/early-discovery","/api/early-discovery/{ticker}/history","/api/opportunity-timeline/{ticker}","/api/security-status"]; '
+        'assert all(paths.count(p)==1 for p in required), {p:paths.count(p) for p in required}'],
+        cwd=Path(__file__).parent,env=env,capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stderr

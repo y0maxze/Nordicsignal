@@ -39,10 +39,15 @@ def snapshot(stocks):
         metrics = reversal.get('metrics') or {}
         insider = payload.get('insider_signal_v2') or {}
         quote = quotes.get(row['ticker']) or {}
-        row.update(price=quote.get('price') or metrics.get('close'),
-                   change_pct=quote.get('change_pct'),
-                   quote_as_of=quote.get('captured_at') or metrics.get('close_date'),
-                   data_status='LAGRET' if quote.get('price') or metrics.get('close') else 'UTILGJENGELIG',
+        # An old saved quote must not mask a newer dated price observation.
+        quote_day = str(quote.get('captured_at') or '')[:10]
+        close_day = str(metrics.get('close_date') or '')[:10]
+        use_quote = quote.get('price') is not None and (not close_day or quote_day >= close_day)
+        price = quote.get('price') if use_quote else metrics.get('close')
+        row.update(price=price,
+                   change_pct=quote.get('change_pct') if use_quote else None,
+                   quote_as_of=quote.get('captured_at') if use_quote else metrics.get('close_date'),
+                   data_status='LAGRET' if price is not None else 'UTILGJENGELIG',
                    trend=reversal.get('regime'), volume_ratio=metrics.get('raw_volume_ratio'),
                    relative_strength=None, opportunity=payload.get('opportunity'),
                    opportunity_observed_at=saved.get('observed_at'),
