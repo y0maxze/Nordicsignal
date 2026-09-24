@@ -23,3 +23,12 @@ def test_latest_is_research_only():
     assert row["policy"]=="research_watchlist_only_no_production_signal_effect"
     assert isinstance(row["components"],dict)
     assert isinstance(row["reasons"],list)
+
+def test_history_is_point_in_time_and_research_only():
+    rt._ensure_schema()
+    rt.record("ZZEARLYHIST",sample("WATCH",55),observed_at="2026-09-18T12:00:00+00:00")
+    rows=rt.history("ZZEARLYHIST",30)
+    assert rows
+    assert rows[0]["market_date"]=="2026-09-18"
+    assert rows[0]["score_effect"]==0
+    assert rows[0]["policy"]=="research_watchlist_only_no_production_signal_effect"

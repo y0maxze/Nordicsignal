@@ -125,3 +125,10 @@ def test_stock_decision_chain_contract():
     assert 'UI legger ikke til nye signalregler' in page
     assert 'Viser bare forhold som finnes i lastede systemdata' in page
     assert 'Ikke verifisert' in page
+
+def test_stock_signal_timeline_contract():
+    page = (ROOT / 'frontend' / 'stock.html').read_text(encoding='utf-8')
+    assert 'Signal-tidslinje' in page
+    assert '/api/early-discovery/' in page and '/history?limit=30' in page
+    assert '/api/opportunity-timeline/' in page
+    assert 'Ingen look-ahead-data brukes' in page
