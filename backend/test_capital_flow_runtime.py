@@ -92,7 +92,7 @@ def test_capital_flow_product_contract_is_wired_everywhere():
     assert 'href="/capital-flow"' in mobile
     assert 'data-state="NEW"' in page and 'data-state="HISTORICAL"' in page
     assert '/api/capital-flow?' in client
-    assert 'data-type="CAPITAL_FLOW"' in alerts
+    assert "Push til telefonen er ikke aktivert" in alerts  # no unsupported filter or delivery claim
     assert 'capital_flow_runtime' in sitecustomize
     assert 'capital_flow_push_bridge_runtime' in sitecustomize
 
