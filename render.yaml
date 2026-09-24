@@ -22,7 +22,7 @@ services:
       - key: NORDICSIGNAL_VAPID_SUBJECT
         value: "https://nordicsignal.8pnwk5r8f4.workers.dev"
       - key: NORDICSIGNAL_EXTERNAL_AUTH_CONFIGURED
-        value: "false"
+        value: "true"
       - key: NORDICSIGNAL_BACKUP_VERIFIED
         value: "false"
       - key: NORDICSIGNAL_LEGAL_REVIEW_CONFIRMED

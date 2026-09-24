@@ -4,6 +4,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from pathlib import Path
 
 FRONTEND = 'https://nordicsignal.8pnwk5r8f4.workers.dev'
@@ -24,7 +25,7 @@ def require(condition, name):
     print(('PASS ' if condition else 'FAIL ')+name, flush=True)
 
 
-def run():
+def run_content_checks():
     # Render and Cloudflare deploy independently; wait only for the newly introduced routes.
     for attempt in range(12):
         status, body, _, _ = fetch(FRONTEND, '/api/early-discovery')
@@ -61,7 +62,57 @@ def run():
         if path=='/sw.js':require("CACHE_NAME='aksjer-shell-v7'" in body,'PWA current shell')
 
 
-if __name__=='__main__':
-    try:run()
-    finally:Path('production-verification.json').write_text(json.dumps({'checks':checks},indent=2))
-    if not checks or not all(x['passed'] for x in checks):raise SystemExit(1)
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def fetch_boundary(origin, path):
+    # Do not follow login redirects: a login page's HTTP 200 is not app availability.
+    request = urllib.request.Request(origin + path, headers={'User-Agent': 'Aksjer-boundary-verification'})
+    opener = urllib.request.build_opener(NoRedirect())
+    try:
+        with opener.open(request, timeout=35) as response:
+            return response.status, dict(response.headers)
+    except urllib.error.HTTPError as error:
+        return error.code, dict(error.headers)
+
+
+def is_access_login(status, headers):
+    location = headers.get('Location', headers.get('location', ''))
+    target = urlparse(location)
+    return (status in {302, 303, 307} and target.scheme == 'https'
+            and target.hostname == 'lucky-darkness-5204.cloudflareaccess.com'
+            and target.path.startswith('/cdn-cgi/access/login'))
+
+
+def run():
+    # Access was enabled by the owner on 2026-09-24 for this Worker, all traffic.
+    # This checks the anonymous boundary only; it must never certify authenticated UX.
+    frontend_paths = ['/app', '/morning', '/stock?ticker=EQNR', '/holdings',
+                      '/holdings.html', '/portfolio', '/frontend/holdings.html',
+                      '/mobile.html', '/api/stocks', '/api/market-snapshot',
+                      '/api/morning-brief', '/api/early-discovery', '/api/holdings',
+                      '/api/refresh', '/manifest.webmanifest', '/sw.js', '/stock_analysis.js']
+    for path in frontend_paths:
+        status, headers = fetch_boundary(FRONTEND, path)
+        require(is_access_login(status, headers), 'Worker ' + path + ' requires Access login')
+    status, _ = fetch_boundary(BACKEND, '/api/health')
+    require(status == 200, 'Backend public health available')
+    for path in ['/api/stocks', '/api/market-snapshot', '/api/morning-brief',
+                 '/api/early-discovery', '/api/security-status', '/api/holdings', '/api/refresh']:
+        status, _ = fetch_boundary(BACKEND, path)
+        require(status == 401, 'Backend ' + path + ' direct anonymous access denied')
+
+
+if __name__ == '__main__':
+    try:
+        run()
+    finally:
+        Path('production-verification.json').write_text(json.dumps({
+            'scope': 'anonymous_security_boundary',
+            'authenticated_content_verification': 'not_run_no_access_session',
+            'checks': checks,
+        }, indent=2))
+    if not checks or not all(x['passed'] for x in checks):
+        raise SystemExit(1)
