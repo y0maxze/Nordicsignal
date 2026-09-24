@@ -9,11 +9,10 @@ from datetime import datetime, timezone
 import json
 
 from fastapi import Query
-import main
+import extra_api
 from database import connect, USING_POSTGRES
 import early_discovery_research as research
 
-app = main.app
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -91,16 +90,28 @@ def latest(limit=100, labels=None):
         out.append(row)
     return out
 
-@app.get("/api/early-discovery/{ticker}/history")
 def early_discovery_history(ticker:str, limit:int=Query(30,ge=1,le=100)):
     items=history(ticker,limit)
     return {"ticker":str(ticker or "").upper().replace(".OL",""),"items":items,"count":len(items),"model_version":research.VERSION,"score_effect":0,"policy":"research_watchlist_only_no_production_signal_effect"}
 
-@app.get("/api/early-discovery")
 def early_discovery_latest(limit:int=Query(100,ge=1,le=200), state:str|None=None):
     labels=[x.strip().upper() for x in (state or "").split(",") if x.strip()]
     items=latest(limit,labels)
     return {"items":items,"count":len(items),"model_version":research.VERSION,"score_effect":0,"policy":"research_watchlist_only_no_production_signal_effect"}
 
 def install():
-    _ensure_schema()
+    if getattr(extra_api, "_early_discovery_runtime", False):
+        return
+    original_install = extra_api.install
+
+    def patched_install(app):
+        original_install(app)
+        _ensure_schema()
+        app.add_api_route("/api/early-discovery/{ticker}/history", early_discovery_history, methods=["GET"])
+        app.add_api_route("/api/early-discovery", early_discovery_latest, methods=["GET"])
+
+    extra_api.install = patched_install
+    extra_api._early_discovery_runtime = True
+
+
+install()
