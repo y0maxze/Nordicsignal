@@ -99,7 +99,10 @@ class InsiderMarketRuntimeTests(unittest.TestCase):
             text = html
 
         im2._DETAIL_CACHE.clear()
-        with patch.object(im2.news_runtime._SESSION, "get", return_value=Response()):
+        # Exercise parsing after a cache miss, independently of persistent runtime cache.
+        with patch.object(im2, "_detail_cache_get", return_value=None), \
+             patch.object(im2, "_detail_cache_put"), \
+             patch.object(im2.news_runtime._SESSION, "get", return_value=Response()):
             rows, used_network = im2._euronext_ajax_rows(announcement, allow_network=True)
         self.assertTrue(used_network)
         self.assertEqual(len(rows), 1)
