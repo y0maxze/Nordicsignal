@@ -26,10 +26,8 @@ MARKETS = (("Brent", "BZ=F", "Energi"),("WTI", "CL=F", "Energi"),("S&P 500", "^G
 
 
 def _previous_oslo_close(now=None):
-    local=(now or datetime.now(timezone.utc)).astimezone(OSLO); day=local.date(); close_today=datetime.combine(day,datetime.min.time(),OSLO).replace(hour=16,minute=20)
-    if local<=close_today: day-=timedelta(days=1)
-    while day.weekday()>=5: day-=timedelta(days=1)
-    return datetime.combine(day,datetime.min.time(),OSLO).replace(hour=16,minute=20)
+    from oslo_session import previous_close
+    return previous_close(now)
 
 
 def _parse_time(value):
@@ -40,8 +38,11 @@ def _parse_time(value):
 
 
 def _market_row(provider,label,symbol,group):
-    data=provider._get(f"{provider.BASE}/v8/finance/chart/{symbol}",{"range":"5d","interval":"1d","includePrePost":"true"}); result=((data.get("chart") or {}).get("result") or [None])[0] or {}; meta=result.get("meta") or {}; price=meta.get("regularMarketPrice"); previous=meta.get("previousClose") or meta.get("chartPreviousClose"); change=((float(price)-float(previous))/float(previous)*100.0) if price is not None and previous else None
-    return {"label":label,"symbol":symbol,"group":group,"price":price,"previous_close":previous,"change_pct":change,"currency":meta.get("currency"),"source":"Yahoo Finance","status":"live" if price is not None else "unavailable"}
+    from quote_snapshot import quote_snapshot
+    data=provider._get(f"{provider.BASE}/v8/finance/chart/{symbol}",{"range":"5d","interval":"1d","includePrePost":"true"})
+    result=((data.get("chart") or {}).get("result") or [None])[0] or {}
+    row=quote_snapshot(result)
+    return {**row,"label":label,"symbol":symbol,"group":group,"currency":(result.get('meta') or {}).get('currency'),"source":"Yahoo Finance","status":"delayed" if row['price'] is not None else "unavailable"}
 
 
 def _market_snapshot(provider):
@@ -83,23 +84,26 @@ def build_morning_brief(days=7,news_limit=12,now=None,provider=None,force=False)
     provider=provider or YahooProvider(); calendar=market_calendar_runtime.build_calendar(days=days,limit=160,holdings_only=False,today=current.astimezone(OSLO).date()); events=[]
     for raw in calendar.get("items") or []:
         item=dict(raw); item["risk"]=_risk(item); events.append(item)
-    events.sort(key=_event_sort_key); close=_previous_oslo_close(current); market_news=general_news_runtime.general_market_news(provider=provider,limit=40); overnight_news=[]; radar_events=[]
+    events.sort(key=_event_sort_key); close=_previous_oslo_close(current); market_news=general_news_runtime.general_market_news(provider=provider,limit=40); overnight_news=[]; radar_events=[]; seen_news=set()
     for raw in market_news.get("items") or []:
         published=_parse_time(raw.get("published_at"))
-        if not published or published.astimezone(OSLO)<close:continue
+        if not close or not published or published>current or published.astimezone(OSLO)<close:continue
+        identity=str(raw.get('url') or (str(raw.get('ticker'))+str(raw.get('title'))))
+        if identity in seen_news:continue
+        seen_news.add(identity)
         item=dict(raw); overnight_news.append(item)
         if item.get("official") and item.get("source_type")=="exchange":
             radar=event_radar_runtime._event(item)
             if radar:
                 radar=event_radar_runtime.enrich_materiality(radar,provider=provider); radar["risk"]=_radar_risk(radar.get("priority")); radar["source_context"]="radar"; radar_events.append(radar)
-    overnight_news=overnight_news[:news_limit]; radar_events.sort(key=lambda x:str(x.get("published_at") or ""),reverse=True); radar_rank={"high":0,"watch":1,"normal":2}; radar_events.sort(key=lambda x:radar_rank.get(x.get("priority"),9)); markets,market_errors=_market_snapshot(provider); notable_markets=[x for x in markets if isinstance(x.get("change_pct"),(int,float)) and abs(x["change_pct"])>=1.0]; urgent_events=[x for x in events if x.get("risk") in ("critical","high")]; tracked_upcoming=[x for x in events if x.get("tracked")][:12]; calendar_must=[dict(x,source_context="calendar") for x in urgent_events]; radar_must=[x for x in radar_events if x.get("risk") in ("high","watch")]; must_know=(calendar_must+radar_must)[:16]; must_know.sort(key=_must_know_sort); must_know=must_know[:10]
+    overnight_news=overnight_news[:news_limit]; radar_events.sort(key=lambda x:str(x.get("published_at") or ""),reverse=True); radar_rank={"high":0,"watch":1,"normal":2}; radar_events.sort(key=lambda x:radar_rank.get(x.get("priority"),9)); markets,market_errors=_market_snapshot(provider); notable_markets=[x for x in markets if isinstance(x.get("change_pct"),(int,float)) and abs(x["change_pct"])>=1.0]; urgent_events=[x for x in events if x.get("risk") in ("critical","high")]; tracked_upcoming=[x for x in events if x.get("tracked")][:12]; calendar_must=[dict(x,source_context="calendar") for x in urgent_events]; radar_must=[x for x in radar_events if x.get("risk") in ("high","watch")]; must_know=(calendar_must+radar_must); must_know.sort(key=_must_know_sort); must_know=must_know[:10]
     bullets=[]
     if urgent_events:bullets.append(f"{len(urgent_events)} rapport-/eventrisikoer de neste 3 dagene")
     if radar_events:bullets.append(f"{len(radar_events)} verifiserte Radar-hendelser siden forrige Oslo-close")
     elif overnight_news:bullets.append(f"{len(overnight_news)} nye markedsmeldinger siden forrige Oslo-close")
     if notable_markets:bullets.append(f"Uvanlig bevegelse i {', '.join(x['label'] for x in notable_markets[:3])}")
     if not bullets:bullets.append("Ingen tydelig høy event-risiko registrert akkurat nå")
-    value={"status":"live" if calendar.get("status")!="partial" else "partial","market":"Oslo Børs","title":"Før børs","as_of":current.isoformat(),"previous_oslo_close":close.isoformat(),"summary":bullets,"must_know":must_know,"radar_events":radar_events[:12],"upcoming":tracked_upcoming,"calendar":events[:30],"overnight_news":overnight_news,"markets":markets,"notable_markets":notable_markets,"sources":{"calendar":calendar.get("source"),"radar":"Verified Euronext / Oslo Børs announcements + measured revenue materiality where available","news":market_news.get("source"),"markets":"Yahoo Finance chart snapshots"},"errors":list(calendar.get("errors") or [])+market_errors,"policy":"Event-risk and measured materiality context only. Does not change NordicSignal scores, signals or thresholds.","generated_at":datetime.now(timezone.utc).isoformat()}
+    value={"status":"partial" if calendar.get("status")=="partial" or market_errors or not close else "ok","market":"Oslo Børs","title":"Før børs","as_of":current.isoformat(),"previous_oslo_close":close.isoformat() if close else None,"summary":bullets,"must_know":must_know,"radar_events":radar_events[:12],"upcoming":tracked_upcoming,"calendar":events[:30],"overnight_news":overnight_news,"markets":markets,"notable_markets":notable_markets,"sources":{"calendar":calendar.get("source"),"radar":"Verified Euronext / Oslo Børs announcements + measured revenue materiality where available","news":market_news.get("source"),"markets":"Yahoo Finance chart snapshots"},"errors":list(calendar.get("errors") or [])+market_errors,"policy":"Event-risk and measured materiality context only. Does not change NordicSignal scores, signals or thresholds.","generated_at":current.isoformat()}
     with _CACHE_LOCK:
         if cache_key_ok:_CACHE.update({"at":time.time(),"value":value})
     return dict(value)

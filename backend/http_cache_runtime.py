@@ -63,7 +63,7 @@ def _ttl_for(path):
         return 300
     if path.startswith(("/api/research/", "/api/fundamentals/", "/api/score-explanation/")):
         return 180
-    if path in {"/api/stocks", "/api/verification", "/api/radar", "/api/markets", "/api/health"}:
+    if path in {"/api/market-snapshot", "/api/stocks", "/api/verification", "/api/radar", "/api/markets", "/api/health"}:
         return 15
     if path.startswith("/api/stocks/"):
         return 15

@@ -55,7 +55,7 @@ const REMOVED_PRODUCT_ROUTES = new Set([
   "/paper", "/paper/", "/paper-trading", "/paper-trading/",
   "/development", "/development/",
   "/holdings", "/holdings/", "/frontend/holdings.html",
-  "/portfolio", "/portfolio/",
+  "/portfolio", "/portfolio/", "/holdings.html", "/portfolio.html", "/frontend/portfolio.html", "/mobile.html", "/frontend/mobile.html",
 ]);
 
 const THEME_LINK = '<link rel="stylesheet" href="/theme.css">';
@@ -113,7 +113,7 @@ function enhanceHtml(html, pathname) {
   if (!html.includes('rel="manifest"')) html = html.replace("</head>", `${PWA_HEAD}</head>`);
   if (pathname === "/index.html") {
     const navExtras = '<a href="/morning">Før børs</a>'; 
-    if (!html.includes('href="/stock"')) html = html.replace("</nav>", `${navExtras}</nav>`);
+    if (!html.includes('href="/morning"')) html = html.replace("</nav>", `${navExtras}</nav>`);
   } else if (pathname !== "/legal.html" && !html.includes('class="nsGlobalHome"')) {
     html = html.replace("<body>", `<body>${GLOBAL_HOME_UI}`);
   }
@@ -127,7 +127,7 @@ function enhanceHtml(html, pathname) {
   html = ensureSharedScript(html, "/ui_shell.js");
   html = ensureSharedScript(html, "/mobile_nav.js");
   if (!html.includes('src="/mobile_shell.js"')) {
-    html = html.replace("</body>", `${MOBILE_SHELL}</body>`);
+    html = html.replace("</body>", `${['/index.html','/stock.html','/morning.html'].includes(pathname)?'<script src="/mobile_shell.js"></script>':MOBILE_SHELL}</body>`);
   }
   return html;
 }
@@ -148,19 +148,25 @@ async function proxyApi(request, url, env) {
   const upstream = new URL(`${API_ORIGIN}${url.pathname}`);
   upstream.search = url.search;
   try {
+    // Never allow the public proxy to act as an unauthenticated write-token relay.
+    // Scheduled jobs use the backend directly with the existing secret.
+    const mutates = !['GET','HEAD','OPTIONS'].includes(request.method) || url.pathname === '/api/refresh' || url.pathname.endsWith('/refresh') || url.searchParams.get('refresh') === 'true';
+    if (/^\/api\/(holdings|portfolio|watchlist|purchases|alerts|notifications)(\/|$)/.test(url.pathname)) return json({status:'error',code:'PRIVATE_READ_ACCESS_REQUIRED'},403);
+    if (mutates) return json({status:'error',code:'PRIVATE_WRITE_ACCESS_REQUIRED',message:'Private authenticated write access is required'},403);
     const headers = new Headers(request.headers);
+    headers.delete('x-nordicsignal-internal-token');
     if (env && env.NORDICSIGNAL_WRITE_TOKEN) {
       headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
     }
     const forwarded = new Request(upstream.toString(), request);
     const secured = new Request(forwarded, {headers});
-    const response = await fetch(secured);
+    const response = await fetch(new Request(secured, {signal:AbortSignal.timeout(30000)}));
     const responseHeaders = applySecurityHeaders(new Headers(response.headers));
     responseHeaders.delete("access-control-allow-origin");
     responseHeaders.set("cache-control", "no-store");
     return new Response(response.body, {status:response.status, headers:responseHeaders});
   } catch (error) {
-    return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:String(error)},502);
+    return json({status:"error",code:"API_UPSTREAM_UNAVAILABLE",message:"Backend is temporarily unavailable"},502);
   }
 }
 

@@ -110,7 +110,9 @@ def test_market_command_center_contract():
     assert 'Nye/IPO</button>' in page and 'Eier/Insider</button>' in page
     assert 'Rel. styrke' in page and 'Volum' in page and 'Trend' in page
     assert '/api/early-discovery?limit=100' in page
-    assert '/api/opportunity/' in page
+    assert '/api/market-snapshot' in page
+    assert 'loadOpportunities' not in page
+    assert '/api/watchlist' not in page
     assert '/api/ipo-radar?limit=50' in page
     assert 'rangering er analysegrunnlag, ikke kjøpssignal' in page
     for retired in ('Min oversikt','Min beholdning','Porteføljeverdi','Administrer beholdning'):
@@ -154,8 +156,8 @@ def test_v1_canonical_stock_and_morning_contract():
     assert "openStock(" in market
     for state in ('LIVE','FORSINKET','LAGRET','UTILGJENGELIG'):
         assert state in stock
-    assert "(d.summary||[]).slice(0,8)" in morning
-    assert "(d.must_know||[]).slice(0,8)" in morning
+    assert "out.length<8" in morning
+    assert "briefPoints(d)" in morning
 
 
 def test_market_navigation_executes_canonical_route():

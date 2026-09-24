@@ -10,7 +10,7 @@ def _read(relative_path):
 
 def test_push_runtime_is_part_of_minimal_versioned_pwa_shell():
     sw = _read("frontend/sw.js")
-    assert "CACHE_NAME='aksjer-shell-v6'" in sw
+    assert "CACHE_NAME='aksjer-shell-v7'" in sw
     for asset in (
         "'/alert_local_capture.js'",
         "'/alert_nav_ui.js'",

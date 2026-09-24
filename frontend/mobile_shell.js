@@ -107,6 +107,6 @@
   function startAlertPolling(){if(alertTimer)clearInterval(alertTimer);if(localStorage.getItem(ALERT_ENABLED)!=='1')return;alertTimer=setInterval(()=>pollAlerts(),120000)}
   async function bindAlertButton(){const b=document.getElementById('nsEnableAlerts');if(b)b.onclick=enableAlerts;const on=localStorage.getItem(ALERT_ENABLED)==='1'&&typeof Notification!=='undefined'&&Notification.permission==='granted';if(on){const push=await currentPushState();setPushTestVisible(push.active);setAlertUi(push.active?'Bakgrunnspush er aktiv på denne enheten. Bruk «Test push» for leveringstest.':'Varsler er på. Lokal polling brukes til VAPID-push er konfigurert.',true);pollAlerts({baseline:false});startAlertPolling()}else setPushTestVisible(false)}
 
-  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,pollAlerts,registerRealPush,currentPushState,testRealPush}}
+  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,pollAlerts,registerRealPush,currentPushState,testRealPush}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
