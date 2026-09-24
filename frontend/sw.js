@@ -1,8 +1,10 @@
-const CACHE_NAME='aksjer-shell-v7';
+const CACHE_NAME='aksjer-shell-v8';
 const SHELL=['/app','/morning','/stock','/theme.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_analysis.js','/stock_evidence_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
+function cacheable(response){return response&&response.ok&&!response.redirected&&response.type!=='opaqueredirect'}
+
 self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).catch(()=>null));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache=>Promise.all(SHELL.map(async path=>{const response=await fetch(path);if(cacheable(response))await cache.put(path,response)}))).catch(()=>null));
   self.skipWaiting();
 });
 
@@ -20,7 +22,7 @@ self.addEventListener('fetch',event=>{
   event.respondWith((async()=>{
     try{
       const response=await fetch(request);
-      if(response&&response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy)).catch(()=>null)}
+      if(cacheable(response)){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy)).catch(()=>null)}
       return response;
     }catch(error){
       const cached=await caches.match(request);if(cached)return cached;

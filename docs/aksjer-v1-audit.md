@@ -131,3 +131,47 @@ Access-aware push/write enrollment, and the concrete data/startup debts above. T
 Worker continues to deny browser writes and personal legacy API reads; do not relax
 that containment merely because an Access configuration exists. Existing scheduler
 requests use the internal secret directly and do not traverse the browser login.
+
+## Stability and verification follow-up, 24 September 2026
+
+PRs 111–115 are merged. Render private mode is active; anonymous API reads return
+401 and the Worker requires Access. Main d36cfae was verified live on Render and
+Cloudflare, with 25 anonymous boundary checks passing. This supersedes the pending
+private-mode activation note above.
+
+Owner iPhone screenshots confirm Market, Morning, stock header/rank, sample-size
+presentation, compact financial cards and corrected light-mode decision contrast.
+They do not certify desktop interaction, console errors or offline PWA behavior.
+The cloud browser remains at Access sign-in; the owner's Safari login does not
+transfer to it. Cloudflare admin sign-in previously hit an anti-bot challenge.
+Do not bypass Access or request exported credentials/cookies.
+
+Opportunity showed unavailable at 14:20 Oslo and loaded at 14:21. A Render request
+log query for AKSO during 12:19–12:22 UTC returned no records: the precise incident
+cause is unknown. Code inspection identified a separate reproducible race: calendar
+completion could render an absent Opportunity as no action. The stock page now
+preserves loading/unavailable states, requires a model label and offers explicit
+retry. Execution tests cover failure, calendar rerender and successful retry.
+Production model thresholds and scoring remain unchanged.
+
+Service worker v8 rejects redirected and opaque-redirect responses in installation
+and runtime caching. Previously a successful redirected Access page could enter
+the shell cache. Activation clears the older cache. Tests execute install/fetch
+handlers and confirm API requests are not intercepted. Fresh data is never implied
+offline; actual iOS offline installation testing remains outstanding.
+
+Remaining concrete limitations and next steps:
+- Authenticated desktop/PWA checks require a working Access browser session.
+- worker.js intentionally denies browser writes and push enrollment. Define and
+  validate authenticated writes before enabling them; server push tests do not
+  certify notification delivery to the phone.
+- backend/main.py and market_coverage_runtime.py retain startup-hook deprecations;
+  migrate lifespan only with startup-order regression coverage.
+- frontend/stock_analysis.js hides ratios when currency alignment is unverified.
+  Validate the underlying valuation methodology point-in-time before changing score.
+- Benchmark excess, full daily ownership and calendar dates outside verified
+  coverage remain unavailable/unknown as documented above.
+
+The full Definition of Done is not certified while authenticated desktop/PWA and
+push verification remain outstanding. Automated tests and deployment checks must
+not be reported as substitutes for these checks.
