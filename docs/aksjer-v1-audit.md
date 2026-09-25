@@ -253,3 +253,18 @@ not be reported as substitutes for these checks.
   exposing valuations. Risk: false multiples if reused unchanged.
 - Service worker v10 adds discovery assets; API responses remain uncached and Access
   redirects are not cached. Authenticated visual/phone testing remains unverified.
+
+
+## 2026-09-25 — secondary shell and mobile scrolling audit
+
+The reported defect is the entire navigation covering content during scrolling. Mobile now uses separate header, scroll-content and navigation grid rows within the dynamic viewport. Navigation is outside the scroll area, with safe-area padding and keyboard-focusable content. This requires authenticated iPhone scroll verification; DOM contracts do not establish Safari visual correctness.
+
+Worker secondary routes now share the finance shell. Retired mobile_learning_nav, alert_nav_ui and alert_local_capture injections were removed: they appended an extra navigation row, floating alert control and unnecessary blocked API polling. The cached learning-navigation script is inert. Capital Flow light-theme ownership metrics use theme surfaces, missing numbers remain unknown, source URLs accept HTTPS only, timestamps use Oslo time and old requests cannot overwrite new selections. Its refresh control performs a read rather than requesting a protected backend refresh. Worker refresh protection covers alternate true boolean spellings accepted by the backend. Shell cache is v11. No scoring or signal policy changed.
+
+### Performance evidence — no validated Oslo outperformance claim
+
+Insider Confluence Backtest artifact 10844262496 from run 36087881243 reports `inconclusive_insufficient_publication_history`: only 3 evaluated cluster events. Raw 5D stock return: N=3, mean +0.997%, median +0.617%; 20D: N=1, -8.211%; 60D: N=0. All stronger confluence cohorts contain zero events. These are not benchmark excess returns or a validated whole-system portfolio record. Passing CI verifies execution/contracts, not investment performance.
+
+Concrete remaining methodological debt: `backend/opportunity_benchmark_evidence_runtime.py` independently selects benchmark dates and advances by row count without checking the own-return target_date. `backend/opportunity_tracking_runtime.py` settles own returns separately. Mismatched trading dates or entry conventions can bias apparent excess; require matched actual start/end sessions and prices, versioned re-settlement and out-of-sample validation before claiming alpha. IPO benchmark evidence needs the same alignment audit before presentation. Never relabel ordinary stock returns as excess.
+
+Other remaining debt: `backend/main.py` and `backend/market_coverage_runtime.py` startup decorators emit FastAPI deprecations. Migrate only with explicit startup-order and scheduler lifecycle coverage. Authenticated browser scrolling, push and offline/install lifecycle remain unverified in this environment. Historical internal pages may retain old read-refresh controls; they must not be made writable to accommodate legacy presentation.

@@ -85,7 +85,7 @@ import assert from 'node:assert/strict';
 import worker from WORKER;
 let calls=0;globalThis.fetch=async()=>{calls++;return new Response('{}')};
 const env={NORDICSIGNAL_WRITE_TOKEN:'test-only',ASSETS:{fetch:async()=>new Response('<html><head></head><body></body></html>',{headers:{'content-type':'text/html'}})}};
-for(const [path,method] of [['/api/refresh','POST'],['/api/watchlist','GET'],['/api/holdings','GET'],['/api/dashboard-home?phase=core','GET'],['/api/push/test','POST'],['/api/opportunity/EQNR?refresh=true','GET']]){
+for(const [path,method] of [['/api/refresh','POST'],['/api/watchlist','GET'],['/api/holdings','GET'],['/api/dashboard-home?phase=core','GET'],['/api/push/test','POST'],['/api/opportunity/EQNR?refresh=true','GET'],['/api/opportunity/EQNR?refresh=1','GET'],['/api/opportunity/EQNR?refresh=YES','GET'],['/api/opportunity/EQNR?refresh=false&refresh=true','GET']]){
  const response=await worker.fetch(new Request('https://example.test'+path,{method}),env);assert.equal(response.status,403,path);
 }
 assert.equal(calls,0);
