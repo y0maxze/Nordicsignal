@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "profiles": [{
+    "ticker": "PLCAN", "isin": "CY0201461213", "listing_date": "2026-07-02",
+    "market": "Euronext Growth", "reviewed_at": "2026-09-25T15:00:00+00:00",
+    "sources": {
+      "admission": {"label": "Selskapets noteringsmelding", "published_at": "2026-07-02", "url": "https://pelicanaquaplc.com/news/pelican-aqua-holding-plc-first-day-of-trading-and-publication-of-information-document/"},
+      "document": {"label": "Informasjonsdokument, 1. juli 2026", "published_at": "2026-07-01", "url": "https://storage.mfn.se/47c07476-2391-498f-81fc-b887e0515a75/pelican-aqua-holding-plc-information-document-1-july-2026-w-appendices.pdf"},
+      "presentation": {"label": "Selskapspresentasjon, juli 2026", "published_at": "2026-07-02", "url": "https://storage.mfn.se/8810cd3a-25eb-4d2e-ac02-811387e22e7e/pelican-aqua-company-presentation-july-2026.pdf"},
+      "calendar": {"label": "Selskapets finanskalender", "published_at": "2026-06-30", "url": "https://pelicanaquaplc.com/news/financial-calendar/"}
+    },
+    "sections": [
+      {"title": "Virksomhet", "text": "Brønnbåttjenester for lakseoppdrett: transport og biologisk behandling av fisk. Fire brønnbåter på 5 000 m³ er kontrahert med planlagt levering i 2029.", "source_id": "admission", "as_of": "2026-07-02"},
+      {"title": "Regnskap ved notering", "text": "Konsern, USD. Perioden 26. mars–10. juni 2026: underskudd 0,671 mill. Kontanter 59,570 mill., egenkapital 58,126 mill. og kortsiktige forpliktelser 1,444 mill. per 10. juni. Dette er historiske tall, ikke dagens likviditet. Første verftsbetaling på 51,1 mill. kom etter balansedatoen.", "source_id": "document", "locator": "s. 29–30 og 33 (PDF 32–33 og 36)", "as_of": "2026-06-10"},
+      {"title": "Kapitalinnhenting og bruk", "text": "Mai/juni-emisjonen: 40 millioner nye aksjer, brutto 60 mill. USD. Planlagt bruk: 51,1 mill. til første verftsbetaling og 8,9 mill. til øvrige selskapsformål og transaksjonskostnader. Dette beskriver ny kapital, ikke salg av eksisterende aksjer.", "source_id": "document", "locator": "kap. 9.7, s. 42–43 (PDF 45–46)", "as_of": "2026-07-01"},
+      {"title": "Lock-up", "text": "Gunnar Eliassen har en 24-måneders binding med unntak og vilkår om styreverv. En eksakt utløpsdato er ikke bekreftet her; bindingen gjelder ikke automatisk alle aksjonærer.", "source_id": "document", "locator": "kap. 9.7.4, s. 43 (PDF 46)", "as_of": "2026-07-01"},
+      {"title": "Finansieringsbehov", "text": "Selskapets juli-presentasjon forventer ny egenkapital til neste verftsavdrag; første fartøys stålskjæring er planlagt i tredje kvartal 2027. Dette er selskapets plan, ikke sikret finansiering eller en bekreftet emisjonsdato.", "source_id": "presentation", "locator": "s. 14", "as_of": "2026-07-02"}
+    ],
+    "next_event": {"date": "2027-05-28", "label": "Årsrapport 2026", "source_id": "calendar"},
+    "why_follow": ["Følg dokumentasjon på byggeframdrift, kundekontrakter og finansiering fram mot planlagt fartøyslevering i 2029."],
+    "risks": ["Utbyggingsfase: leveranser, kundekontrakter og finansiering kan endres. Nye aksjer kan gi utvanning. Dette er forskningspunkter, ikke en kjøpsvurdering."],
+    "unknowns": ["Oppdaterte regnskapstall etter den dokumenterte perioden", "Dagens verdsettelse og fullstendig finansiering av fartøyene", "Eventuelle senere aksjesalg fra eksisterende eiere", "Eksakt lock-up-utløp og eventuelle fritak"]
+  }]
+}
