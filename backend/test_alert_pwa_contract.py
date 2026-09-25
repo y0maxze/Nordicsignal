@@ -10,7 +10,7 @@ def _read(relative_path):
 
 def test_push_runtime_is_part_of_minimal_versioned_pwa_shell():
     sw = _read("frontend/sw.js")
-    assert "CACHE_NAME='aksjer-shell-v10'" in sw
+    assert "CACHE_NAME='aksjer-shell-v11'" in sw
     for asset in (
         "'/alert_local_capture.js'",
         "'/alert_nav_ui.js'",
@@ -23,5 +23,5 @@ def test_alert_routes_and_mobile_hooks_remain_wired():
     worker = _read("worker.js")
     assert '["/alerts", "/alerts.html"]' in worker
     assert '["/notifications", "/alerts.html"]' in worker
-    assert '<script src="/alert_local_capture.js"></script>' in worker
-    assert '<script src="/alert_nav_ui.js"></script>' in worker
+    assert '<script src="/alert_local_capture.js"></script>' not in worker
+    assert '<script src="/alert_nav_ui.js"></script>' not in worker

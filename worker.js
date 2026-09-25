@@ -65,7 +65,6 @@ const BRAND_STYLE = `<style id="nsBrandMarkStyle">.logo{display:inline-flex!impo
 const GLOBAL_HOME_UI = `<a class="nsGlobalHome" href="/app" aria-label="Til ${BRAND.name} dashboard" title="Til dashboard"><img src="${BRAND.mark}" alt="" width="23" height="23" style="display:block;margin-right:7px">${BRAND.label}</a>`;
 const STOCK_EXTRAS = '<script src="/stock_selector.js"></script><script src="/stock_data_bridge.js"></script><script src="/stock_extras.js"></script><script src="/stock_evidence_ui.js"></script>';
 const LEARNING_EXTRAS = '<script src="/learning_version_ui.js"></script><script src="/learning_shadow_ui.js"></script><script src="/learning_smart_money_ui.js"></script><script src="/learning_temporal_ui.js"></script><script src="/learning_scan_audit_ui.js"></script><script src="/learning_failure_streak_ui.js"></script><script src="/learning_sandbox_ui.js"></script>';
-const MOBILE_SHELL = '<script src="/alert_local_capture.js"></script><script src="/mobile_shell.js"></script><script src="/mobile_learning_nav.js"></script><script src="/alert_nav_ui.js"></script>';
 const ACCESS_GATE = '';
 const SECURITY_HEADERS = {
   "x-content-type-options":"nosniff",
@@ -123,11 +122,13 @@ function enhanceHtml(html, pathname) {
   if (pathname === "/learning.html" && !html.includes('src="/learning_version_ui.js"')) {
     html = html.replace("</body>", `${LEARNING_EXTRAS}</body>`);
   }
+  if (!html.includes('href="/finance_shell.css"')) html = html.replace("</head>", '<link rel="stylesheet" href="/finance_shell.css"></head>');
+  html = ensureSharedScript(html, "/finance_shell.js");
   html = ensureSharedScript(html, "/theme_mode.js");
   html = ensureSharedScript(html, "/ui_shell.js");
   html = ensureSharedScript(html, "/mobile_nav.js");
   if (!html.includes('src="/mobile_shell.js"')) {
-    html = html.replace("</body>", `${['/index.html','/stock.html','/morning.html','/alerts.html'].includes(pathname)?'<script src="/mobile_shell.js"></script>':MOBILE_SHELL}</body>`);
+    html = html.replace("</body>", '<script src="/mobile_shell.js"></script></body>');
   }
   return html;
 }
@@ -150,7 +151,7 @@ async function proxyApi(request, url, env) {
   try {
     // Never allow the public proxy to act as an unauthenticated write-token relay.
     // Scheduled jobs use the backend directly with the existing secret.
-    const mutates = !['GET','HEAD','OPTIONS'].includes(request.method) || url.pathname === '/api/refresh' || url.pathname.endsWith('/refresh') || url.searchParams.get('refresh') === 'true';
+    const mutates = !['GET','HEAD','OPTIONS'].includes(request.method) || url.pathname === '/api/refresh' || url.pathname.endsWith('/refresh') || url.searchParams.getAll('refresh').some(value => ['true','1','yes','on'].includes(value.toLowerCase()));
     if (/^\/api\/(holdings|portfolio|watchlist|purchases|alerts|notifications|dashboard-home)(\/|$)/.test(url.pathname)) return json({status:'error',code:'PRIVATE_READ_ACCESS_REQUIRED'},403);
     if (mutates) return json({status:'error',code:'PRIVATE_WRITE_ACCESS_REQUIRED',message:'Private authenticated write access is required'},403);
     const headers = new Headers(request.headers);

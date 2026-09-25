@@ -88,8 +88,9 @@ def test_capital_flow_product_contract_is_wired_everywhere():
 
     assert '["/capital-flow", "/capital-flow.html"]' in worker
     assert 'href="/capital-flow"' not in shell  # secondary tool, not primary navigation
-    assert "'/api/capital-flow?state=NEW&limit=40'" in mobile
-    assert 'href="/capital-flow"' in mobile
+    assert "fetch(" not in mobile
+    assert "appendChild" not in mobile
+    assert "mobile_learning_nav.js" not in worker
     assert 'data-state="NEW"' in page and 'data-state="HISTORICAL"' in page
     assert '/api/capital-flow?' in client
     assert "Push til telefonen er ikke aktivert" in alerts  # no unsupported filter or delivery claim

@@ -1,4 +1,5 @@
 (()=>{
+  if(document.querySelector('script[src="/finance_shell.js"]'))return;
   function loadScript(src,done){
     if(document.querySelector(`script[src="${src}"]`)){done&&done();return;}
     const s=document.createElement('script');s.src=src;s.defer=true;if(done)s.onload=done;document.head.appendChild(s);

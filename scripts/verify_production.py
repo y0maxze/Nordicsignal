@@ -59,7 +59,7 @@ def run_content_checks():
     for path in ['/manifest.webmanifest','/sw.js','/stock_analysis.js']:
         status,body,_,_=fetch(FRONTEND,path)
         require(status==200 and len(body)>20,path+' available')
-        if path=='/sw.js':require("CACHE_NAME='aksjer-shell-v10'" in body,'PWA current shell')
+        if path=='/sw.js':require("CACHE_NAME='aksjer-shell-v11'" in body,'PWA current shell')
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

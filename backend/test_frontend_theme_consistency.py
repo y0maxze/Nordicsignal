@@ -64,5 +64,5 @@ def test_404_uses_shared_theme_and_accessible_touch_targets():
 
 def test_service_worker_caches_contrast_layer_in_current_cache_contract():
     sw = read("sw.js")
-    assert "const CACHE_NAME='aksjer-shell-v10'" in sw
+    assert "const CACHE_NAME='aksjer-shell-v11'" in sw
     assert "'/theme_light_fix.css'" in sw

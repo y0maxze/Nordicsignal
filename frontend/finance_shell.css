@@ -21,7 +21,7 @@ html.aksjerFinance:root .side{display:none!important}
 html.aksjerFinance:root .app{display:block;min-height:0}
 html.aksjerFinance:root .app>.main{margin:0 auto!important;max-width:1440px;width:100%;padding:28px 32px 100px;min-height:0}
 html.aksjerFinance:root .main>.wrap{max-width:none;padding:0!important}
-html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root .alertPage{max-width:1280px;margin:0 auto;padding:28px 32px 100px!important}
+html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root #aksjerScrollArea>main.wrap,html.aksjerFinance:root .alertPage{max-width:1280px;margin:0 auto;padding:28px 32px 100px!important}
 html.aksjerFinance:root a:hover{color:var(--b)!important}
 html.aksjerFinance:root .top{gap:20px!important;margin-bottom:24px;align-items:center!important}
 html.aksjerFinance:root .top h1{font-size:30px!important;margin:0 0 6px;line-height:1.2}
@@ -106,7 +106,7 @@ html.aksjerFinance:root .aksjerStockSections a:hover{color:var(--t)!important;bo
 @media(max-width:900px){
  .aksjerHeaderInner{padding:0 16px;min-height:60px;gap:12px}
  html.aksjerFinance:root #aksjerHeader .aksjerPrimary{display:none}
- html.aksjerFinance:root .app>.main,html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root .alertPage{padding:22px 16px calc(90px + env(safe-area-inset-bottom))!important}
+ html.aksjerFinance:root .app>.main,html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root #aksjerScrollArea>main.wrap,html.aksjerFinance:root .alertPage{padding:22px 16px calc(90px + env(safe-area-inset-bottom))!important}
  html.aksjerFinance:root .top h1{font-size:26px!important}
  html.aksjerFinance:root .nsMobileNav{left:0!important;right:0!important;bottom:0!important;border-radius:0!important;padding:4px 12px max(4px,env(safe-area-inset-bottom))!important;border:0!important;border-top:1px solid var(--line)!important;background:var(--surface)!important}
  html.aksjerFinance:root .nsMobileNav a{font-size:13px!important;border-radius:0!important;margin:0!important;background:none!important;box-shadow:none!important;transform:none!important}
@@ -130,7 +130,7 @@ html.aksjerFinance:root .aksjerStockSections a:hover{color:var(--t)!important;bo
  html.aksjerFinance:root .marketMeta{flex-wrap:nowrap;overflow-x:auto;gap:6px!important}
  html.aksjerFinance:root .filter{flex-shrink:0;font-size:12px;padding:8px 12px!important}
  html.aksjerFinance:root .price{font-size:28px}
- html.aksjerFinance:root body>main.wrap>.top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px!important}
+ html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root #aksjerScrollArea>main.wrap>.top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px!important}
  html.aksjerFinance:root .decision b{font-size:17px}
  html.aksjerFinance:root .decision span{font-size:10px}
  html.aksjerFinance:root .hero>.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -138,5 +138,16 @@ html.aksjerFinance:root .aksjerStockSections a:hover{color:var(--t)!important;bo
  html.aksjerFinance:root #nsIntelInput{font-size:16px}
 }
 
-html.aksjerFinance:root body>main.wrap>.top>div:nth-child(2){text-align:right}
-@media(max-width:550px){html.aksjerFinance:root body>main.wrap>.top>div:nth-child(2){text-align:left}}
+html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root #aksjerScrollArea>main.wrap>.top>div:nth-child(2){text-align:right}
+@media(max-width:550px){html.aksjerFinance:root body>main.wrap,html.aksjerFinance:root #aksjerScrollArea>main.wrap>.top>div:nth-child(2){text-align:left}}
+
+/* Secondary research pages use the same opaque surfaces and readable state colours. */
+html.aksjerFinance:root .ownershipMetric{background:var(--surface-2)!important;color:var(--t)!important}
+html.aksjerFinance:root .cfPanel,html.aksjerFinance:root .cfStat{background:var(--surface)!important}
+html.aksjerFinance:root .cfTicker,html.aksjerFinance:root .cfSourceLink{color:var(--b)!important}
+html.aksjerFinance:root .cfChip.active{color:var(--t)!important;background:var(--surface-2)!important}
+html.aksjerFinance:root .cfBadge.new,html.aksjerFinance:root .cfBadge.quality.high,html.aksjerFinance:root .cfDirection.buy{color:var(--g)!important}
+html.aksjerFinance:root .cfBadge.active,html.aksjerFinance:root .cfBadge.verified,html.aksjerFinance:root .cfBadge.quality.medium{color:var(--b)!important}
+html.aksjerFinance:root .cfDirection.sell{color:var(--r)!important}
+html.aksjerFinance:root .cfSearch{font-size:16px;min-width:0;max-width:100%}
+html.aksjerFinance:root .cfFilters{max-width:100%}
