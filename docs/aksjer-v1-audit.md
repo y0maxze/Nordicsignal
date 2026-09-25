@@ -213,3 +213,43 @@ not be reported as substitutes for these checks.
   with four existing startup deprecations. Visual production QA remains limited
   by the separate Cloudflare Access session; local cloud-browser preview could
   not connect. Do not equate DOM tests with a visual desktop/mobile check.
+
+## IPO discovery workspace (September 25, 2026)
+
+- `/app?filter=ipo` now contains upcoming plans, admissions in the last 90 Oslo
+  calendar days, and admissions in the current Oslo year, independent of the scored
+  universe. Menu shortcut and canonical stock context share the same presentation.
+- Read-only `/api/ipo-radar/discovery` uses three bounded DB queries, separate short
+  connections and partial-source reporting. No provider calls, writes, per-company
+  requests, score changes or notification threshold changes on this path.
+- Euronext's public Oslo IPO table was fetched successfully (HTTP 200, 20 parsed
+  rows on page 1). Existing six-hour scheduled registry ingestion is retained.
+  Empty/challenge HTML now reports unavailable instead of claiming successful sync.
+- Upcoming plans must have an official archived payload, allowlisted Euronext HTTPS
+  source, explicit pre-listing language and a publication within 90 days. Past
+  expected dates, known completions, cancellation/postponement/transfer/bond and
+  subsequent-share language are excluded. This is deliberately incomplete coverage,
+  not a claim that no other upcoming companies exist.
+- Registry admissions are not asserted to be first-ever IPOs. Operation type remains
+  unknown when unproven; the UI warns about transfers/new share classes. An analysis
+  link appears only for an active tracked ticker; untracked companies retain their
+  source link and discovery card without fabricated score/financial information.
+- Cards explain the documented reason to follow the listing process, conditional
+  next date, risks, source observation/publication and missing diligence. Business,
+  sector, valuation, profitability, debt, use of proceeds and lock-up are unknown
+  until sourced. No automatic attractive-investment rating is introduced.
+- `backend/ipo_evidence_runtime.py`: existing benchmark measurement advances by row
+  count independently and can have differing stock/benchmark exit dates; first
+  available close need not equal listing-day close. Raw closes are not a verified
+  corporate-action-adjusted total return. Existing outcomes are therefore NOT exposed
+  by discovery as validated 5/20/60-day or excess returns. Next action: version the
+  methodology, align exact dates, verify splits/closed sessions and recompute into
+  new evidence records. Risk: misleading performance if old data is presented as
+  validated. Existing production scoring is untouched.
+- `backend/ipo_prelisting_profile_runtime.py`: legacy provider values are labelled NOK
+  without currency confirmation; EV omits cash and document extraction is not a
+  complete diligence review. This endpoint is deliberately not used by the new cards.
+  Next action: point-in-time, currency/period/issuer verified financial facts before
+  exposing valuations. Risk: false multiples if reused unchanged.
+- Service worker v10 adds discovery assets; API responses remain uncached and Access
+  redirects are not cached. Authenticated visual/phone testing remains unverified.

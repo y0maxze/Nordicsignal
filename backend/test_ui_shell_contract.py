@@ -113,7 +113,8 @@ def test_market_command_center_contract():
     assert '/api/market-snapshot' in page
     assert 'loadOpportunities' not in page
     assert '/api/watchlist' not in page
-    assert '/api/ipo-radar?limit=50' in page
+    assert 'window.AksjerIPO.load()' in page
+    assert '/api/ipo-radar/discovery' in (FRONTEND / 'ipo_discovery.js').read_text()
     assert 'rangering er analysegrunnlag, ikke kjøpssignal' in page
     for retired in ('Min oversikt','Min beholdning','Porteføljeverdi','Administrer beholdning'):
         assert retired not in page
@@ -171,7 +172,7 @@ def test_market_navigation_executes_canonical_route():
     harness = """
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-const ctx = {location: {href: ''}, nav: {addEventListener(){}}, search: {addEventListener(){}}};
+const ctx = {URLSearchParams, location: {href: ''}, nav: {addEventListener(){}}, search: {addEventListener(){}}};
 vm.createContext(ctx);
 vm.runInContext(SCRIPT, ctx);
 vm.runInContext("openStock('EQNR')", ctx);
