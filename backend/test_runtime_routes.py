@@ -18,6 +18,7 @@ class RuntimeRouteRegistrationTests(unittest.TestCase):
         )
         paths = set(json.loads(proc.stdout.strip().splitlines()[-1]))
         required = {
+            '/api/company-context/{ticker}',
             '/api/reports/{ticker}',
             '/api/dividends/{ticker}',
             '/api/intelligence/{ticker}',
