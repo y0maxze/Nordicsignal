@@ -18,7 +18,7 @@ test('shared navigation is unique, canonical and keyboard dismissible',()=>{
  assert.equal(d.querySelectorAll('#aksjerHeader').length,1);
  assert.equal(d.querySelectorAll('.nsUtilityBar,.nsGlobalHome,.top>.nsThemeToggle').length,0);
  assert.equal(d.querySelector('.aksjerPrimary [aria-current]').getAttribute('href'),'/app');
- assert.deepEqual([...d.querySelectorAll('#aksjerMenu nav a')].map(a=>a.getAttribute('href')),['/app','/morning','/alerts']);
+ assert.deepEqual([...d.querySelectorAll('#aksjerMenu nav a')].map(a=>a.getAttribute('href')),['/app','/morning','/alerts','/app?filter=ipo']);
  const menu=d.querySelector('#aksjerMenu');menu.open=true;
  d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
  assert.equal(menu.open,false);assert.equal(d.activeElement,menu.querySelector('summary'));

@@ -178,6 +178,9 @@ def sync_listings(fetch_text=None, max_pages=_MAX_PAGES):
             if page == 0:
                 return {"status": "unavailable", "inserted": 0, "seen": 0, "pages": 0}
             break
+        if page == 0 and not rows:
+            # An empty/changed/challenge page is not a successful registry refresh.
+            return {"status": "unavailable", "inserted": 0, "seen": 0, "pages": 0}
         pages_ok += 1
         added = 0
         for row in rows:
@@ -230,6 +233,11 @@ def install():
     def patched_install(app):
         original_install(app)
         _ensure_schema()
+        @app.get("/api/ipo-radar/discovery")
+        def ipo_discovery():
+            from ipo_discovery import build_discovery
+            return build_discovery()
+
         @app.get("/api/ipo-radar/listings")
         def ipo_listings(refresh: bool = False, limit: int = 100):
             return build_registry(refresh=refresh, limit=limit)
