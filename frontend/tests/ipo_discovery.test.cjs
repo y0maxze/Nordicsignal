@@ -34,3 +34,10 @@ test('actual Market filter renders IPOs outside the ranked universe with one dis
  assert.equal(calls.filter(x=>x==='/api/ipo-radar/discovery').length,1);
  assert.equal(calls.length,3);dom.window.close();
 });
+test('reviewed company facts show dates and safe document sources without extra requests',async()=>{
+ let calls=0;const profile={status:'reviewed_snapshot',reviewed_at:'2026-09-25',sources:{doc:{label:'Official document',url:'https://storage.mfn.se/document.pdf',published_at:'2026-07-01'},bad:{label:'Unsafe',url:'javascript:alert(1)'}},sections:[{title:'Virksomhet',text:'Known <facts>',as_of:'2026-07-01',source_id:'doc'},{title:'Regnskap',text:'USD, historical',as_of:'2026-06-10',source_id:'bad'}]};
+ const dom=setup(async()=>{calls++;return {ok:true,json:async()=>({...payload,items:[{...item,documented_profile:profile}]})}});
+ const root=dom.window.document.getElementById('root');await dom.window.AksjerIPO.mount(root);
+ assert.match(root.textContent,/Known <facts>/);assert.match(root.textContent,/ikke løpende selskapsdekning/);assert.match(root.textContent,/USD, historical/);
+ assert.equal(root.querySelectorAll('a[href^="javascript:"]').length,0);assert.equal(root.querySelector('.ipoDocumentLink').href,'https://storage.mfn.se/document.pdf');assert.equal(calls,1);dom.window.close();
+});

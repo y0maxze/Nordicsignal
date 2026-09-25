@@ -17,13 +17,22 @@
     })().finally(()=>{pending=null;});
     return pending;
   }
+  const documentSource=value=>{try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:null}catch{return null}};
+  function citation(s,locator='') {const url=documentSource(s?.url);return url?'<a class="ipoDocumentLink" href="'+escape(url)+'" target="_blank" rel="noopener noreferrer">'+escape(s.label)+(locator?' · '+escape(locator):'')+' ↗</a><span class="muted"> · publisert '+date(s.published_at)+'</span>':'';}
+  function profile(x) {
+    const p=x.documented_profile;if(!p||p.status!=='reviewed_snapshot')return '';
+    return '<section class="ipoProfile"><h4>Dokumenterte selskapsopplysninger</h4><p class="muted">Kildekontrollert '+date(p.reviewed_at)+' · lagret dokumentgjennomgang, ikke løpende selskapsdekning.</p>'+p.sections.map((s,i)=>{
+      const content='<p>'+escape(s.text)+'</p><p class="muted">Opplysning per '+date(s.as_of)+'</p>'+citation(p.sources[s.source_id],s.locator);
+      return i===0?'<h4>'+escape(s.title)+'</h4>'+content:'<details><summary>'+escape(s.title)+'</summary>'+content+'</details>';
+    }).join('')+'</section>';
+  }
   function card(x, stock=false) {
     const url=source(x.source_url), ticker=/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(x.ticker||'')?x.ticker:null;
     return '<article class="ipoCard"><div class="ipoCardHead"><div><span class="ipoTag">'+escape(x.display_status)+'</span><h3>'+escape(x.company)+'</h3><p class="muted">'+escape([ticker,x.market].filter(Boolean).join(' · '))+'</p></div></div>'+
       '<p><strong>'+escape(x.listing_date?'Notert '+date(x.listing_date):x.expected_listing_date?'Forventet '+date(x.expected_listing_date):'Noteringsdato ukjent')+'</strong><br><span class="muted">'+escape(x.confirmation)+'</span></p>'+
-      '<h4>Hvorfor følge med?</h4>'+list(x.why_follow||[])+
+      profile(x)+'<h4>Hvorfor følge med?</h4>'+list(x.why_follow||[])+
       '<h4>Vær oppmerksom på</h4>'+list(x.risks||[])+
-      '<p><strong>Neste hendelse</strong><br>'+escape(x.next_event)+'</p>'+
+      '<p><strong>Neste hendelse</strong><br>'+escape(x.next_event)+'</p>'+citation(x.next_event_source)+
       '<details><summary>Hva mangler i vurderingen?</summary>'+list(x.unknowns||[])+'<p>'+escape(x.monitoring_note)+'</p></details>'+
       '<p class="muted">'+escape(x.assessment)+' · score_effect=0</p>'+
       '<div class="ipoActions">'+(url?'<a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer">Offisiell kilde ↗</a>':'')+

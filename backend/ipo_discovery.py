@@ -12,6 +12,7 @@ import logging
 import re
 
 from database import connect
+from ipo_reviewed_profiles import enrich
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ def project(listings, candidates, tracked=(), now=None, source_status=None):
                     why_follow=['Dokumentert opptak til handel; følg de første rapportene og likviditeten.'],
                     risks=['Registeret alene skiller ikke nyintroduksjon fra overføring eller ny aksjeklasse.'],
                     next_event='Neste dokumenterte hendelse er ukjent.')
+        enrich(item, row, now)
         items.append(item)
     # Only current, explicit pre-listing announcements qualify. No guessed dates.
     excluded = 0

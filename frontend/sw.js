@@ -1,4 +1,4 @@
-const CACHE_NAME='aksjer-shell-v12';
+const CACHE_NAME='aksjer-shell-v13';
 const SHELL=['/app','/morning','/morning_navigation.js','/stock','/theme.css','/finance_shell.css','/finance_shell.js','/ipo_discovery.js','/ipo_discovery.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_analysis.js','/stock_evidence_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
 function cacheable(response){return response&&response.ok&&!response.redirected&&response.type!=='opaqueredirect'}
