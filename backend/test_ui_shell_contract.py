@@ -42,7 +42,9 @@ def test_morning_brief_rows_open_related_stock():
     assert "data-stock-url" in page
     assert "Trykk for å åpne aksjen" in page
     assert "data-source-link" in page
-    assert "e.target.closest('[data-source-link]')" in page
+    assert 'src="/morning_navigation.js"' in page
+    navigation = (FRONTEND / "morning_navigation.js").read_text()
+    assert "event.target.closest('a,button')" in navigation
 
 
 def test_mobile_nav_has_single_canonical_owner():

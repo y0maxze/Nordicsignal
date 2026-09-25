@@ -46,7 +46,7 @@ def test_worker_keeps_refresh_auth_forwarding_intact():
 
 def test_pwa_caches_brand_config_in_current_cache_contract():
     sw = read(FRONTEND / "sw.js")
-    assert "const CACHE_NAME='aksjer-shell-v11'" in sw
+    assert "const CACHE_NAME='aksjer-shell-v12'" in sw
     assert "'/brand_config.js'" in sw
 
 
