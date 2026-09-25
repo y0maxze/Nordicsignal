@@ -18,3 +18,5 @@ One shared official Euronext latest-feed scan flags explicit financing-document 
 - Background work uses an in-process daemon guarded per process. A process restart may interrupt a batch; next scheduler wakeup retries. For horizontal scaling use a DB lease/queue. Four-per-wakeup initial enrichment is gradual, not instantaneous.
 - Source calls inherit Yahoo timeouts/host fallback. This is separate from HTTP rendering and core scan; stalled providers can delay only the next enrichment batch.
 - No new push alerts or threshold changes. Worker Access boundary can be verified anonymously, but authenticated production content still requires a signed-in browser. Do not infer successful content rendering from a login page.
+
+Official-news issuers outside the scored/listing universe are also enrolled automatically: at most four exact name + Oslo-equity search resolutions per scan, persisted retry attempts, no fuzzy match and no scoring-universe insertion. This covers newly encountered news issuers while retaining a strict identity boundary. It cannot retroactively recover older announcements absent from the source feed.

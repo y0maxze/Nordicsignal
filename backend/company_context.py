@@ -43,7 +43,9 @@ def norm(value):
 def ensure_schema():
     c = connect()
     try:
-        c.executescript('''CREATE TABLE IF NOT EXISTS company_context_profiles (
+        c.executescript('''CREATE TABLE IF NOT EXISTS company_context_issuers (
+          identity TEXT PRIMARY KEY, company TEXT NOT NULL, ticker TEXT, source_url TEXT NOT NULL, attempted_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS company_context_profiles (
           ticker TEXT PRIMARY KEY, identity TEXT NOT NULL, payload TEXT NOT NULL,
           attempted_at TEXT NOT NULL, captured_at TEXT, status TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS company_context_events (
@@ -61,6 +63,7 @@ def universe():
     """Re-enrol every scan, including newly admitted issuers; reject collisions."""
     rows = []
     for sql in ('SELECT ticker,name AS company,sector FROM stocks WHERE active=1',
+                'SELECT ticker,company FROM company_context_issuers WHERE ticker IS NOT NULL',
                 "SELECT ticker,company,isin,listing_date FROM ipo_listings WHERE location='Oslo'"):
         c = connect()
         try:
@@ -150,12 +153,52 @@ def event_for(item, identities, at):
             'kind':'financing_document','status':'Les siste vilkår i originalmeldingen'}
 
 
+def enrol_news_issuers(items, provider, at, limit=4):
+    """Expand research coverage from official news, never the scoring universe."""
+    c=connect()
+    try:
+        previous={r['identity']:dict(r) for r in c.execute('SELECT * FROM company_context_issuers').fetchall()}
+    finally:c.close()
+    existing={r['identity'] for r in universe().values()}
+    count=0
+    for item in items:
+        name=norm(item.get('company'))
+        published=stamp(item.get('published_at'))
+        try:u=urlsplit(str(item.get('url') or ''))
+        except ValueError:continue
+        if (not name or name in existing or item.get('official') is not True or
+            u.scheme!='https' or u.hostname!='live.euronext.com' or u.username or
+            not published or not timedelta(0)<=at-published<=timedelta(days=180)):continue
+        old=previous.get(name,{})
+        if old and at-(stamp(old['attempted_at']) or at)<timedelta(days=1):continue
+        ticker=None
+        try:
+            data=provider._get(provider.BASE+'/v1/finance/search',{'q':item['company'],'quotesCount':10,'newsCount':0,'enableFuzzyQuery':'false'})
+            matches={str(q.get('symbol')) for q in data.get('quotes',[]) if q.get('quoteType')=='EQUITY' and
+                     str(q.get('symbol') or '').endswith('.OL') and
+                     norm(q.get('longname') or q.get('shortname'))==name}
+            if len(matches)==1:ticker=matches.pop().removesuffix('.OL')
+        except Exception:
+            log.warning('Company context issuer resolution unavailable')
+        c=connect()
+        try:
+            c.execute('INSERT INTO company_context_issuers(identity,company,ticker,source_url,attempted_at) VALUES(?,?,?,?,?) ON CONFLICT(identity) DO UPDATE SET ticker=excluded.ticker,attempted_at=excluded.attempted_at',
+                      (name,item['company'],ticker,item['url'],at.isoformat()))
+            c.commit()
+        finally:c.close()
+        previous[name]={'attempted_at':at.isoformat()};count+=1
+        if count>=limit:break
+
+
 def scan_once(provider=None, fetch_news=None, batch_size=4):
     if not _LOCK.acquire(blocking=False):return {'status':'busy'}
     try:
         ensure_schema()
-        rows = universe()
         at = now()
+        if provider is None:
+            from providers import YahooProvider
+            provider=YahooProvider()
+        rows = universe()
         if fetch_news is None:
             from general_news_runtime import parse_general_euronext_html
             from news_runtime import _fetch_text, EURONEXT_LATEST
@@ -166,6 +209,10 @@ def scan_once(provider=None, fetch_news=None, batch_size=4):
         events=[]
         try:
             items=fetch_news()
+            enrol_news_issuers(items,provider,at)
+            rows=universe()
+            identities=defaultdict(list)
+            for ticker,row in rows.items():identities[row['identity']].append(ticker)
             news_status='partial' if items else 'unavailable'
             events=[e for item in items if (e:=event_for(item,identities,at))]
         except Exception:
@@ -182,9 +229,6 @@ def scan_once(provider=None, fetch_news=None, batch_size=4):
         due=[r for t,r in rows.items() if t not in previous or previous[t]['identity']!=r['identity'] or
              at-(stamp(previous[t]['attempted_at']) or datetime.min.replace(tzinfo=timezone.utc))>=timedelta(hours=24)]
         due.sort(key=lambda r:previous.get(r['ticker'],{}).get('attempted_at',''))
-        if provider is None:
-            from providers import YahooProvider
-            provider=YahooProvider()
         for row in due[:batch_size]:
             data=collect_profile(row,provider)
             usable=bool(data['description'] or data['financials'])

@@ -38,3 +38,13 @@ def test_financial_dates_currency_and_invalid_values():
     facts=cc.project_financials(rows,AT);assert len(facts)==2
     assert next(f for f in facts if f['label']=='Gjeld')['value']==4
     assert next(f for f in facts if f['label']=='Nettoresultat')['currency'] is None
+
+def test_news_issuer_resolution_requires_unique_exact_oslo_equity(tmp_path,monkeypatch):
+    def connect():
+        c=sqlite3.connect(tmp_path/'names.db');c.row_factory=sqlite3.Row;return c
+    monkeypatch.setattr(cc,'connect',connect);monkeypatch.setattr(cc,'universe',lambda:{});cc.ensure_schema()
+    class Search:
+        BASE='https://example.test'
+        def _get(self,*a,**k):return {'quotes':[{'symbol':'TECH.OL','quoteType':'EQUITY','longname':'Techstep ASA'}, {'symbol':'TECH.US','quoteType':'EQUITY','longname':'Techstep ASA'}]}
+    cc.enrol_news_issuers([event()],Search(),AT)
+    c=connect();assert c.execute('SELECT ticker FROM company_context_issuers').fetchone()[0]=='TECH';c.close()
