@@ -30,7 +30,7 @@
     const url=source(x.source_url), ticker=/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(x.ticker||'')?x.ticker:null;
     return '<article class="ipoCard"><div class="ipoCardHead"><div><span class="ipoTag">'+escape(x.display_status)+'</span><h3>'+escape(x.company)+'</h3><p class="muted">'+escape([ticker,x.market].filter(Boolean).join(' · '))+'</p></div></div>'+
       '<p><strong>'+escape(x.listing_date?'Notert '+date(x.listing_date):x.expected_listing_date?'Forventet '+date(x.expected_listing_date):'Noteringsdato ukjent')+'</strong><br><span class="muted">'+escape(x.confirmation)+'</span></p>'+
-      profile(x)+'<h4>Hvorfor følge med?</h4>'+list(x.why_follow||[])+
+      profile(x)+(window.AksjerCompany?'<details><summary>Automatisk selskapsinformasjon og finansiering</summary>'+window.AksjerCompany.render(x.automatic_context)+'</details>':'')+'<h4>Hvorfor følge med?</h4>'+list(x.why_follow||[])+
       '<h4>Vær oppmerksom på</h4>'+list(x.risks||[])+
       '<p><strong>Neste hendelse</strong><br>'+escape(x.next_event)+'</p>'+citation(x.next_event_source)+
       '<details><summary>Hva mangler i vurderingen?</summary>'+list(x.unknowns||[])+'<p>'+escape(x.monitoring_note)+'</p></details>'+

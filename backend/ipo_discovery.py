@@ -152,5 +152,12 @@ def build_discovery():
         finally:
             if conn is not None:
                 conn.close()
-    return project(values['listings'], values['candidates'],
-                   {_ticker(r['ticker']) for r in values['tracked']}, source_status=status)
+    result = project(values['listings'], values['candidates'],
+                     {_ticker(r['ticker']) for r in values['tracked']}, source_status=status)
+    from company_context import read_all, context
+    snapshots = read_all()
+    for item in result['items']:
+        item['automatic_context'] = context(item['ticker'], snapshots, identity=item['company'])
+        if item['automatic_context'].get('description') and item['automatic_context'].get('sector'):
+            item['unknowns'] = [v for v in item['unknowns'] if v != 'Virksomhetsbeskrivelse og sektor']
+    return result

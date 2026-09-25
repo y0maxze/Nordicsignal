@@ -151,3 +151,10 @@ html.aksjerFinance:root .cfBadge.active,html.aksjerFinance:root .cfBadge.verifie
 html.aksjerFinance:root .cfDirection.sell{color:var(--r)!important}
 html.aksjerFinance:root .cfSearch{font-size:16px;min-width:0;max-width:100%}
 html.aksjerFinance:root .cfFilters{max-width:100%}
+
+/* Automatic company context: wrapping and accessible disclosures. */
+.companyContext {min-width:0;overflow-wrap:anywhere}
+.companyContext dt {font-weight:600;margin-top:.75rem}
+.companyContext dd {margin:0 0 .5rem}
+.companyContext summary {min-height:44px;padding:12px 0;cursor:pointer}
+.companyContext li {margin-bottom:.65rem}
