@@ -14,7 +14,10 @@ _guard=threading.Lock()
 def enqueue():
     if not _guard.acquire(blocking=False):return
     def run():
-        try:context.scan_once()
+        try:
+            context.scan_once()
+            from financing_documents import enrich_saved
+            enrich_saved(context.connect, context.now())
         except Exception:log.exception('Company context background batch failed')
         finally:_guard.release()
     threading.Thread(target=run,name='company-context',daemon=True).start()

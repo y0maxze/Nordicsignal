@@ -158,3 +158,11 @@ html.aksjerFinance:root .cfFilters{max-width:100%}
 .companyContext dd {margin:0 0 .5rem}
 .companyContext summary {min-height:44px;padding:12px 0;cursor:pointer}
 .companyContext li {margin-bottom:.65rem}
+
+.financingDocument{margin:1rem 0;padding:1rem;border:1px solid var(--border,#8993a433);border-radius:12px;min-width:0}
+.financingDocument h4{margin:.35rem 0;font-size:1rem;line-height:1.5}
+.financingType{font-weight:650;margin:0;font-size:.85rem}
+.financingTerms{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.5rem 1.25rem}
+.financingTerms>div{min-width:0;border-bottom:1px solid var(--border,#8993a433);padding-bottom:.5rem}
+.financingEvidence blockquote{margin:.5rem 0;padding-left:.75rem;border-left:3px solid currentColor;white-space:pre-wrap}
+.financingDilution{padding:.75rem 0 0;border-top:1px solid var(--border,#8993a433)}

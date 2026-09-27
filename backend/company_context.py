@@ -210,7 +210,7 @@ def event_for(item, identities, at):
         return None
     # Remove only an exact, already matched official issuer prefix.
     evidence_title = re.sub(r'^' + re.escape(str(item.get('company'))) + r'\s*[:–—-]\s*', '', title, count=1, flags=re.I)
-    return {'ticker':matches[0], 'identity':name, 'title':title, 'url':u.geturl(),
+    return {'ticker':matches[0], 'identity':name, 'company':item['company'], 'title':title, 'url':u.geturl(),
             'published_at':published.isoformat(),'observed_at':at.isoformat(),
             'kind':'financing_document', **financing_evidence(evidence_title),
             'status':'Historisk dokumentstatus; les siste vilkår i originalmeldingen'}
@@ -321,12 +321,23 @@ def read_all():
                 'attempted_at':r['attempted_at'],'status':'stale' if captured and at-captured>timedelta(days=2) else r['status']}
         for row in c.execute('SELECT payload FROM company_context_events ORDER BY observed_at DESC').fetchall():
             e=json.loads(row['payload']);d=stamp(e['published_at'])
-            if d and timedelta(0)<=at-d<=timedelta(days=180):events[e['ticker']].append(e)
+            if d and d <= at:
+                # Upgrade legacy title snapshots without network calls or status inference.
+                title=e.get('title','')
+                if e.get('company'):
+                    title=re.sub(r'^'+re.escape(e['company'])+r'\s*[:–—-]\s*','',title,count=1,flags=re.I)
+                e.update(financing_evidence(title))
+                document=e.get('document')
+                if document and stamp(document.get('captured_at')) and at-stamp(document['captured_at'])>timedelta(days=8):
+                    e['document']={**document,'status':'stale'}
+                events[e['ticker']].append(e)
         row=c.execute('SELECT * FROM company_context_state WHERE id=1').fetchone()
         state=dict(row) if row else {}
     except Exception:
         log.warning('Company context snapshots unavailable')
     finally:c.close()
+    for entries in events.values():
+        entries.sort(key=lambda e: (e['published_at'],e.get('url','')),reverse=True)
     return profiles,events,state
 
 
@@ -334,8 +345,10 @@ def context(ticker, snapshots=None, identity=None):
     profiles,events,state=snapshots if snapshots is not None else read_all()
     p=profiles.get(ticker,{})
     if identity and p.get('identity')!=norm(identity):p={}
-    event_rows=[e for e in events.get(ticker,[]) if not identity or e['identity']==norm(identity)][:8]
+    all_events=[e for e in events.get(ticker,[]) if not identity or e['identity']==norm(identity)]
+    event_rows=sorted(all_events,key=lambda e:e['published_at'],reverse=True)[:20]
     return {**p,'ticker':ticker,'status':p.get('status','collecting'),'score_effect':0,
-            'financing_documents':event_rows,'news_checked_at':state.get('checked_at'),
+            'financing_documents':event_rows,'financing_document_count':len(all_events),
+            'financing_documents_truncated':len(all_events)>len(event_rows),'news_checked_at':state.get('checked_at'),
             'news_status':state.get('status','unavailable'),
-            'coverage':'Siste tilgjengelige børsmeldinger, ikke full historikk. Ingen treff betyr ikke at emisjon eller finansieringsrisiko er utelukket.'}
+            'coverage':'Lagrede observerte børsmeldinger, ikke full historikk. Dokumenter er ikke automatisk koblet til samme emisjon. Historisk status bekrefter ikke dagens status. Ingen treff betyr ikke at emisjon eller finansieringsrisiko er utelukket.'}

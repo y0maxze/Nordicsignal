@@ -2,3 +2,29 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const script=fs.readFileSync('frontend/company_context.js','utf8');
 test('company facts escape content and preserve unknowns',()=>{const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);const html=d.window.AksjerCompany.render({score_effect:0,status:'partial',description:'<img src=x onerror=alert(1)>',financials:[{label:'Gjeld',value:12,period:'2025-12-31'}],source_url:'javascript:alert(1)',financing_documents:[]});d.window.document.body.innerHTML=html;assert.equal(d.window.document.querySelector('img'),null);assert.equal(d.window.document.querySelector('a'),null);assert.match(html,/valuta ukjent/);assert.match(html,/utelukker ikke emisjon/);assert.match(html,/ingen score-effekt/);});
 test('failed fetch is not absence of financing risk',async()=>{const d=new JSDOM('<section></section>',{runScripts:'outside-only'});d.window.eval(script);d.window.AbortSignal.timeout=()=>undefined;d.window.fetch=async()=>({ok:false});await d.window.AksjerCompany.mount(d.window.document.querySelector('section'),'TECH');assert.match(d.window.document.body.textContent,/UTILGJENGELIG/);assert.match(d.window.document.body.textContent,/sier ingenting om finansieringsrisikoen/);});
+
+test('financing shows historical evidence, source failure and explicit missing terms',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,status:'partial',financing_documents:[{title:'Example rights issue',url:'https://live.euronext.com/en/node/1',financing_type:'rights_issue',lifecycle:'open',lifecycle_evidence:'Subscription period opens for rights issue',evidence_scope:'official_title',published_at:'2026-06-01T10:00:00Z',document:{status:'unavailable'}}]});
+ const text=d.window.document.body.textContent;
+ assert.match(text,/Dokumentstatus: Åpnet/);assert.match(text,/Dagens status er ikke bekreftet/);assert.match(text,/Kilden utilgjengelig/);assert.match(text,/Utvanning: Ukjent/);assert.match(text,/TegningsfristUkjent/);
+ assert.equal(d.window.document.querySelectorAll('.financingDocument').length,1);
+});
+test('terms require evidence and do not lose qualifications or expose HTML',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const html=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{title:'Terms',lifecycle:'completed',document:{status:'partial',terms:{subscription_price:{status:'documented',value:'NOK 2 subject to approval <img src=x>',evidence:'Subscription price: NOK 2 subject to approval <img src=x>'},new_shares:{status:'documented',value:'5000000'},record_date:{status:'ambiguous',value:'2026-01-01'}}}}]});
+ d.window.document.body.innerHTML=html;
+ assert.match(d.window.document.body.textContent,/Dokumentstatus: Ukjent/);
+ assert.match(d.window.document.body.textContent,/subject to approval/);
+ assert.equal(d.window.document.querySelector('img'),null);
+ assert.doesNotMatch(d.window.document.body.textContent,/5000000|2026-01-01/);
+});
+test('dilution exposes exact inputs and limitation only for calculated data',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const html=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{dilution:{status:'calculated',percentage:'20.0000',existing_shares:4000000,new_shares:1000000,share_class:'Ordinary shares',limitation:'Dokumentscenario, ikke kurstap.'}}}],financing_documents_truncated:true,financing_document_count:25});
+ d.window.document.body.innerHTML=html;
+ assert.match(d.window.document.body.textContent,/20 % · beregnet dokumentscenario/);
+ assert.match(d.window.document.body.textContent,/1000000 \/ \(4000000 \+ 1000000\)/);
+ assert.match(d.window.document.body.textContent,/ikke kurstap/);
+ assert.match(d.window.document.body.textContent,/20 nyeste av 25/);
+});
