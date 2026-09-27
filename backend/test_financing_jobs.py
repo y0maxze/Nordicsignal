@@ -59,7 +59,7 @@ def test_expired_job_does_not_publish_and_changed_snapshot_not_claimed(db):
     e=seed(db)
     key='TECH|'+e['url']
     assert jobs.claim(db,key,AT,'wrong snapshot') is None
-    times=iter([AT,AT+timedelta(minutes=4)])
+    times=iter([AT,AT,AT+timedelta(minutes=4)])
     fd.enrich_saved(db,AT,fetch=lambda url:page(TERMS),clock=lambda:next(times))
     c=db();payload=json.loads(c.execute('SELECT payload FROM company_context_events').fetchone()[0]);c.close()
     assert 'document' not in payload
@@ -73,3 +73,15 @@ def test_health_reports_job_counts_without_payloads(db, monkeypatch):
     result=health.system_health()['financing_jobs']
     assert result=={'status':'available','states':{'running':1}}
     assert 'private-document-url' not in json.dumps(result)
+
+def test_evidence_recording_uses_completion_time(db):
+    seed(db)
+    times=iter([AT,AT+timedelta(seconds=1),AT+timedelta(seconds=20)])
+    fd.enrich_saved(db,AT,fetch=lambda url:page(TERMS),clock=lambda:next(times))
+    c=db()
+    row=c.execute('SELECT recorded_at,payload FROM company_evidence_versions ORDER BY revision DESC LIMIT 1').fetchone()
+    assert row['recorded_at']==(AT+timedelta(seconds=20)).isoformat()
+    doc=json.loads(row['payload'])['document']
+    assert doc['captured_at']==row['recorded_at']
+    assert doc['attempted_at']==(AT+timedelta(seconds=1)).isoformat()
+    c.close()

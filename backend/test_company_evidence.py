@@ -38,7 +38,7 @@ def test_repeated_capture_deduplicates_but_reversal_is_preserved(db):
 def test_source_correction_invalidates_terms_and_keeps_previous_version(db):
     c = db()
     first = cc.event_for(event(), {'techstep':['TECH']}, AT)
-    first['document'] = {'terms': {'subscription_price': {'value':'NOK 2'}}}
+    first['document'] = {'version':2,'terms': {'subscription_price': {'value':'NOK 2'}}}
     cc.save_event(c, first, AT)
     # Same feed evidence retains terms and adds no new version.
     cc.save_event(c, cc.event_for(event(), {'techstep':['TECH']}, AT), AT)
@@ -92,3 +92,21 @@ def test_history_is_bounded_and_explicit(db):
     h = evidence.history(db,'TECH','techstep')
     assert len(h['entries']) == 30 and h['truncated']
     assert h['entries'][0]['revision'] == 32
+
+
+@pytest.mark.parametrize('existing',[False,True])
+def test_late_profile_fetch_cannot_overwrite_concurrent_writer(db,monkeypatch,existing):
+    if existing: cc.scan_once(Provider(),lambda:[])
+    monkeypatch.setattr(cc,'now',lambda:AT+timedelta(days=2))
+    original=cc.collect_profile
+    def overlapping(row,provider,registry):
+        fetched=original(row,provider,registry)
+        newer={**fetched,'description':'Newer verified result'}
+        c=db()
+        c.execute('INSERT INTO company_context_profiles VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET payload=excluded.payload,attempted_at=excluded.attempted_at',
+                  ('TECH','techstep',json.dumps(newer),(AT+timedelta(days=3)).isoformat(),AT.isoformat(),'partial'))
+        c.commit();c.close()
+        return fetched
+    monkeypatch.setattr(cc,'collect_profile',overlapping)
+    cc.scan_once(Provider(),lambda:[])
+    assert cc.context('TECH')['description']=='Newer verified result'

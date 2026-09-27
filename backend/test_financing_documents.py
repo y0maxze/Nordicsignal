@@ -83,6 +83,14 @@ def test_wrapped_qualifiers_cannot_be_lost_before_a_calculation():
     assert d['dilution']['status']=='unknown'
 
 
+@pytest.mark.parametrize('qualification', ['Condition: subject to final allocation', 'Note: maximum number, subject to approval', 'https://example.test/conditions: additional restrictions'])
+def test_colon_in_unknown_continuation_never_discards_qualifications(qualification):
+    lines=[x.replace('1,000,000','1,000,000</p><p>'+qualification) for x in TERMS]
+    d=fd.collect(EVENT,AT,fetch=lambda _:page(lines))
+    assert qualification in d['terms']['new_shares']['value']
+    assert d['dilution']['status']=='unknown'
+
+
 @pytest.mark.parametrize('url', ['https://evil.test/en/node/123','https://live.euronext.com.evil.test/en/node/123','http://live.euronext.com/en/node/123','https://user:pass@live.euronext.com/en/node/123','https://live.euronext.com:444/en/node/123','https://live.euronext.com/en/node/123?redirect=evil','https://live.euronext.com/en/node/123#x','https://live.euronext.com/other'])
 def test_source_rejection_happens_before_network(url):
     calls=[]
@@ -134,3 +142,14 @@ def test_context_reports_display_limit():
     p=cc.context('TECH',({}, {'TECH':events}, {}),identity='Techstep ASA')
     assert len(p['financing_documents'])==20
     assert p['financing_document_count']==21 and p['financing_documents_truncated']
+
+def test_old_parser_evidence_is_withheld_and_not_retained_after_failure():
+    old=fd.collect(EVENT,AT,fetch=lambda _:page(TERMS))
+    old['version']=1
+    public=fd.public_document(old)
+    assert public['status']=='revalidation_required' and public['terms']=={}
+    assert public['dilution']['status']=='unknown'
+    assert old['terms'] and old['dilution']['status']=='calculated'
+    def down(url): raise RuntimeError('unavailable')
+    result=fd.collect(EVENT,AT,old,down)
+    assert result['version']==fd.VERSION and result['terms']=={} and not result['captured_at']

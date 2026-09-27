@@ -1,6 +1,6 @@
 """Bounded official-document evidence. No model, push or per-GET network work.
 
-Version 1 deliberately handles English labelled key-information notices only.
+Version 2 deliberately handles English labelled key-information notices only.
 It preserves the original field text, including qualifications; unstructured prose,
 conflicting labels and multi-offering titles are not reconciled automatically.
 """
@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import hashlib
 import re
 
-VERSION = 1
+VERSION = 2
 MAX_BYTES = 1_000_000
 LABELS = {
     'subscription_price': ('subscription price',),
@@ -122,7 +122,8 @@ def parse_terms(html, event):
             # field; too much prose will deliberately become unsupported below.
             continuation = []
             for following in lines[index + 1:]:
-                if ':' in following:
+                following_label, following_sep, _ = following.partition(':')
+                if following_sep and following_label.strip().casefold() in LABEL_MAP:
                     break
                 continuation.append(following)
             value = ' '.join([value.strip(), *continuation]).strip()
@@ -192,10 +193,18 @@ def collect(event, at, previous=None, fetch=None):
                       dilution=dilution(terms, event))
     except Exception:
         # Retain evidence only for the exact same immutable document identity.
-        if (previous.get('captured_at') and previous.get('source_url') == event['url']
+        if (previous.get('version') == VERSION and previous.get('captured_at') and previous.get('source_url') == event['url']
                 and previous.get('published_at') == event['published_at']):
             result.update(previous, status='stale', attempted_at=at.isoformat())
     return result
+
+
+def public_document(document):
+    """Outdated extraction may have lost qualifications; never display as facts."""
+    if document.get('version') == VERSION:
+        return document
+    return {**document, 'status':'revalidation_required', 'terms':{},
+            'dilution':{'status':'unknown'}, 'stored_parser_version':document.get('version')}
 
 
 def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
@@ -226,17 +235,21 @@ def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
         if not token:
             continue
         processed += 1
-        event['document'] = collect(event, at, old, fetch)
+        started = clock()
+        event['document'] = collect(event, started, old, fetch)
+        finished = clock()
+        if event['document']['status'] == 'partial' and event['document'].get('captured_at'):
+            event['document']['captured_at'] = finished.isoformat()
         c = connect()
         try:
-            if not finish(c, row['event_key'], token, event['document']['status'], clock()):
+            if not finish(c, row['event_key'], token, event['document']['status'], finished):
                 continue
             cursor = c.execute('UPDATE company_context_events SET payload=? WHERE event_key=? AND payload=?',
                       (json.dumps(event), row['event_key'], row['payload']))
             if cursor.rowcount:
                 from company_evidence import record
-                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', json.loads(row['payload']), at)
-                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', event, at)
+                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', json.loads(row['payload']), finished)
+                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', event, finished)
             else:
                 c.execute('UPDATE financing_document_jobs SET state=? WHERE event_key=?', ('superseded', row['event_key']))
             c.commit()
