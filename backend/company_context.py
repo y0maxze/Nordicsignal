@@ -109,12 +109,15 @@ def ensure_schema():
         CREATE TABLE IF NOT EXISTS company_context_events (
           event_key TEXT PRIMARY KEY, ticker TEXT NOT NULL, identity TEXT NOT NULL,
           payload TEXT NOT NULL, observed_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS company_context_events_ticker ON company_context_events(ticker,observed_at);
         CREATE TABLE IF NOT EXISTS company_context_state (
           id INTEGER PRIMARY KEY, checked_at TEXT NOT NULL, status TEXT NOT NULL);
         ''')
         evidence.ensure_schema(c)
         from financing_jobs import ensure_schema as ensure_jobs
         ensure_jobs(c)
+        from company_newsweb import ensure_schema as ensure_newsweb
+        ensure_newsweb(c)
         c.commit()
     finally:
         c.close()
@@ -388,7 +391,7 @@ def save_event(c, event, at):
     old = c.execute('SELECT * FROM company_context_events WHERE event_key=?', (key,)).fetchone()
     if old:
         previous = json.loads(old['payload'])
-        unchanged = all(previous.get(k) == event.get(k) for k in ('title','published_at','identity','company'))
+        unchanged = all(previous.get(k) == event.get(k) for k in ('title','published_at','identity','company','correction_for_message_id','corrected_by_message_id'))
         if unchanged:
             # An unchanged feed observation must not erase enriched documents.
             updated = previous
@@ -427,6 +430,9 @@ def read_all(ticker=None):
                 title=e.get('title','')
                 if e.get('company'):
                     title=re.sub(r'^'+re.escape(e['company'])+r'\s*[:–—-]\s*','',title,count=1,flags=re.I)
+                if e.get('source_type')=='newsweb_oam':
+                    prefix=re.match(r'^(.+?)(?:\s+[-–—]\s+|:\s+)(.+)$',e.get('title',''))
+                    if prefix and norm(prefix[1])==e['identity']:title=prefix[2]
                 e.update(financing_evidence(title))
                 document=e.get('document')
                 if document:
@@ -470,11 +476,16 @@ def context(ticker, snapshots=None, identity=None, before=None):
     if identity:
         try: history = evidence.history(connect, ticker, norm(identity))
         except Exception: log.warning('Company evidence history unavailable')
+    backfill={'historical_backfill':'unavailable'}
+    try:
+        from company_newsweb import coverage
+        backfill=coverage(connect)
+    except Exception:log.warning('NewsWeb coverage unavailable')
     return {**p,'ticker':ticker,'status':p.get('status','collecting'),'score_effect':0,
             'identity':norm(identity) if identity else p.get('identity'),
             'evidence_history':history,
             'financing_documents':event_rows,'financing_document_count':len(all_events),
-            'financing_coverage':{'status':'partial','historical_backfill':'not_connected',
+            'financing_coverage':{'status':'partial',**backfill,
                                   'oldest_stored_publication':min(dates).isoformat() if dates else None,
                                   'newest_stored_publication':max(dates).isoformat() if dates else None},
             'financing_documents_truncated':more,'financing_next_cursor':next_cursor,'news_checked_at':state.get('checked_at'),
