@@ -116,8 +116,10 @@ test('older document pages are lazy, retryable and deduplicated',async()=>{
 
 test('archive gaps and explicit source corrections remain visible',()=>{
  const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
- d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_coverage:{historical_backfill:'partial',queried_days:5,failed_days:2,truncated_days:1},financing_documents:[{corrected_by_message_id:456,document:{status:'partial'}}]});
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_coverage:{historical_backfill:'partial',queried_days:5,failed_days:2,truncated_days:1},financing_documents:[{corrected_by_message_id:456,correction_for_message_id:123,document:{status:'partial'}}]});
  assert.match(d.window.document.body.textContent,/5 undersøkte kalenderdager for markedet · 2 feilede · 1 avkortede/);
  assert.match(d.window.document.body.textContent,/Kilden markerer dokumentet som korrigert/);
  assert.equal(d.window.document.querySelector('a').href,'https://newsweb.oslobors.no/message/456');
+ assert.match(d.window.document.body.textContent,/denne meldingen korrigerer/);
+ assert.equal(d.window.document.querySelectorAll('a')[1].href,'https://newsweb.oslobors.no/message/123');
 });
