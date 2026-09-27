@@ -28,3 +28,13 @@ test('dilution exposes exact inputs and limitation only for calculated data',()=
  assert.match(d.window.document.body.textContent,/ikke kurstap/);
  assert.match(d.window.document.body.textContent,/20 nyeste av 25/);
 });
+test('registry activity and stale description keep separate financial provenance',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const html=d.window.AksjerCompany.render({score_effect:0,description:'Registered activity',description_kind:'registered_activity',field_sources:{description:{source:'Brønnøysundregistrene',source_url:'https://data.brreg.no/enhetsregisteret/api/enheter/977037093',status:'stale',captured_at:'2026-09-01T00:00:00Z'},financials:{source:'Yahoo Finance',source_url:'https://finance.yahoo.com/quote/TECH.OL/'}},registry:{official_name:'TECHSTEP ASA',organisation_number:'977037093'},financials:[]});
+ d.window.document.body.innerHTML=html;
+ assert.match(d.window.document.body.textContent,/Registrert aktivitet · kan avvike/);
+ assert.match(d.window.document.body.textContent,/Eldre opplysning/);
+ assert.match(d.window.document.body.textContent,/TECHSTEP ASA/);
+ assert.match(d.window.document.body.textContent,/ISIN: Ukjent/);
+ assert.equal(d.window.document.querySelectorAll('a').length,2);
+});

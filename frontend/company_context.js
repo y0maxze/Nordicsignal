@@ -21,13 +21,21 @@ function financingDocument(e){
  '<div class="financingDilution"><strong>Utvanning: '+(calculated?esc(new Intl.NumberFormat('nb-NO',{maximumFractionDigits:4}).format(Number(dilution.percentage)))+' % · beregnet dokumentscenario':'Ukjent')+'</strong>'+
  (calculated?'<p>'+esc(dilution.new_shares)+' / ('+esc(dilution.existing_shares)+' + '+esc(dilution.new_shares)+') × 100 · '+esc(dilution.share_class)+'</p><p>'+esc(dilution.limitation)+'</p>':'<p>Kan ikke beregnes uten dokumenterte og kompatible aksjetall for samme emisjon og aksjeklasse.</p>')+'</div></article>';
 }
+function provenance(meta){
+ if(!meta)return '';
+ const stale=meta.status==='stale'?'Eldre opplysning · ':'';
+ return '<p class="muted">'+esc(stale)+link(meta.source_url,meta.source||'Datakilde')+' · hentet '+esc(date(meta.captured_at))+' · siste forsøk '+esc(date(meta.attempted_at))+(meta.license?' · '+esc(meta.license):'')+'</p>';
+}
 function render(p){
  if(!p||p.score_effect!==0)return '<p>Selskapsopplysninger er utilgjengelige.</p>';
  const statuses={collecting:'Venter på automatisk innhenting',unavailable:'Kildene er utilgjengelige',partial:'Delvis dekning · lagrede opplysninger',stale:'Eldre opplysninger · må kontrolleres'};
  return '<div class="companyContext"><h3>Selskapsinformasjon</h3><p class="muted">'+esc(statuses[p.status]||'Ukjent datastatus')+' · sist hentet '+esc(date(p.captured_at))+'</p>'+
- '<p>'+esc(p.description||'Virksomhetsbeskrivelse er ikke tilgjengelig fra datakilden ennå.')+'</p><p>Sektor: '+esc(p.sector||'Ukjent')+'</p>'+
+ (p.description_kind==='registered_activity'?'<p class="muted">Registrert aktivitet · kan avvike fra konsernets samlede virksomhet.</p>':'')+
+ '<p>'+esc(p.description||'Virksomhetsbeskrivelse er ikke tilgjengelig fra datakilden ennå.')+'</p>'+provenance(p.field_sources?.description)+'<p>Sektor: '+esc(p.sector||'Ukjent')+'</p>'+
+ (p.registry?'<p>Juridisk navn: '+esc(p.registry.official_name)+' · org.nr. '+esc(p.registry.organisation_number)+'</p><p>Registrert næring: '+esc(p.registry.industry||'Ukjent')+'</p>'+provenance(p.registry):'')+
+ '<p>ISIN: '+esc(p.isin||'Ukjent')+(p.isin?' · '+link(p.isin_source_url,p.isin_source||'Kilde ukjent')+' · noteringsdato '+esc(p.isin_listing_date||'ukjent'):'')+'</p>'+
  (p.financials?.length?'<dl>'+p.financials.map(f=>'<dt>'+esc(f.label)+'</dt><dd>'+esc(number(f.value))+' '+esc(f.currency||'(valuta ukjent)')+' <span class="muted">· periode '+esc(f.period)+' · '+esc(f.period_type)+'</span></dd>').join('')+'</dl>':'<p>Regnskapstall er ikke tilgjengelige ennå.</p>')+
- link(p.source_url,'Datakilde: '+(p.source||'ukjent'))+
+ provenance(p.field_sources?.financials)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
  '<h3>Finansiering og utvanning</h3><p>Dokumenterte observasjoner · ingen bekreftelse på aktiv emisjon.</p>'+(p.financing_documents?.length?p.financing_documents.map(financingDocument).join(''):'<p>Ingen finansieringsmeldinger i innhentet materiale. Dette utelukker ikke emisjon eller kapitalbehov.</p>')+
  (p.financing_documents_truncated?'<p class="muted">Viser de 20 nyeste av '+esc(p.financing_document_count)+' lagrede dokumenter. Eldre dokumenter er bevart.</p>':'')+
  '<p class="muted">'+esc(p.coverage||'Dekning ukjent')+' Kildestatus: '+esc(p.news_status==='partial'?'delvis dekning':'utilgjengelig')+'. Siste forsøk: '+esc(date(p.news_checked_at))+'.</p>'+
