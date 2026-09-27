@@ -54,6 +54,11 @@ def test_source_correction_invalidates_terms_and_keeps_previous_version(db):
     assert h['entries'][0]['revision'] == 2
     assert 'title' in h['entries'][0]['changed_fields']
     assert evidence.history(db,'TECH','different issuer')['entries'] == []
+    old=evidence.version(db,'TECH','techstep','TECH|'+first['url'],1)
+    assert old['payload']['document']['terms']['subscription_price']['value']=='NOK 2'
+    assert evidence.version(db,'TECH','different issuer','TECH|'+first['url'],1) is None
+    assert evidence.version(db,'OTHER','techstep','TECH|'+first['url'],1) is None
+    assert evidence.version(db,'TECH','techstep','TECH|'+first['url'],1000) is None
 
 
 def test_legacy_baseline_not_backdated_and_transaction_rollback(db):

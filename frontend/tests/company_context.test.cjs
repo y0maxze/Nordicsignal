@@ -48,3 +48,48 @@ test('history distinguishes recording from publication and escapes source titles
  assert.match(d.window.document.body.textContent,/Eldre versjoner er bevart/);
  assert.match(d.window.document.body.textContent,/Dokumentvilkår eller innhentingsstatus/);
 });
+
+test('overview exposes partial coverage and missing data instead of reassuring on zero hits',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financials:[{value:1}],financing_documents:[]});
+ const t=d.window.document.querySelector('.companyOverview').textContent;
+ assert.match(t,/Finansieringsrisiko er fortsatt ukjent/);
+ assert.match(t,/Valuta eller rapporteringsperiode/);
+ assert.match(t,/Bekreftet nåværende finansieringsstatus og komplett historikk/);
+});
+test('since-last-view tracks evidence revisions only after successful rendering and by issuer',async()=>{
+ const d=new JSDOM('<section></section>',{url:'https://app.test/stock',runScripts:'outside-only'});d.window.eval(script);d.window.AbortSignal.timeout=()=>undefined;
+ const root=d.window.document.querySelector('section');
+ let p={score_effect:0,ticker:'TECH',identity:'techstep',evidence_history:{status:'available',entries:[{entity_key:'doc',revision:1}]}};
+ d.window.fetch=async()=>({ok:true,json:async()=>p});
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/Første registrerte visning/);
+ p.evidence_history.entries.push({entity_key:'doc',revision:2});
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/1 nye lagrede versjoner/);
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/0 nye lagrede versjoner/);
+ p.evidence_history={status:'unavailable'};
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/Endringer siden sist er ukjent/);
+ p.evidence_history={status:'available',entries:[{entity_key:'doc',revision:3}]};
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/1 nye lagrede versjoner/);
+ p.identity='different issuer';
+ await d.window.AksjerCompany.mount(root,'TECH');assert.match(root.textContent,/Første registrerte visning/);
+});
+test('blocked browser storage does not hide company facts',async()=>{
+ const d=new JSDOM('<section></section>',{runScripts:'outside-only'});d.window.eval(script);d.window.AbortSignal.timeout=()=>undefined;
+ d.window.fetch=async()=>({ok:true,json:async()=>({score_effect:0,ticker:'TECH',identity:'techstep',description:'Verified description',evidence_history:{status:'available',entries:[]}})});
+ await d.window.AksjerCompany.mount(d.window.document.querySelector('section'),'TECH');
+ assert.match(d.window.document.body.textContent,/Verified description/);
+ assert.match(d.window.document.body.textContent,/Besøkshistorikk kan ikke lagres/);
+});
+
+test('historical version loads on demand, preserves old evidence and does not leak unverified financials',async()=>{
+ const d=new JSDOM('<section></section>',{url:'https://app.test',runScripts:'outside-only'});d.window.eval(script);d.window.AbortSignal.timeout=()=>undefined;
+ const calls=[];
+ d.window.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>url.includes('/evidence?')?{kind:'profile',revision:1,recorded_at:'2026-09-01T00:00:00Z',payload:{description:'Older <script>alert(1)</script>',financials:[{label:'Unverified',value:987654321}]}}:{score_effect:0,ticker:'TECH',identity:'techstep',evidence_history:{status:'available',entries:[{kind:'profile',entity_key:'profile|TECH',revision:1}]}}};};
+ await d.window.AksjerCompany.mount(d.window.document.querySelector('section'),'TECH');
+ assert.equal(calls.length,1);
+ d.window.document.querySelector('[data-version-key]').click();await new Promise(r=>setImmediate(r));
+ assert.equal(calls.length,2);assert.match(calls[1],/entity_key=profile%7CTECH&revision=1/);
+ assert.match(d.window.document.body.textContent,/Historisk lagret versjon 1/);
+ assert.match(d.window.document.body.textContent,/Older/);assert.doesNotMatch(d.window.document.body.textContent,/Unverified|987654321/);
+ assert.equal(d.window.document.querySelector('script'),null);
+});

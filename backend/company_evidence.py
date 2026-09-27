@@ -49,12 +49,25 @@ def history(connect, ticker, identity, limit=30):
         entries = []
         for row in rows[:limit]:
             payload = json.loads(row['payload'])
-            entries.append({'kind': row['kind'], 'revision': row['revision'],
+            entries.append({'entity_key': row['entity_key'], 'kind': row['kind'], 'revision': row['revision'],
                             'recorded_at': row['recorded_at'],
                             'title': payload.get('title'), 'source_url': payload.get('url') or payload.get('source_url'),
                             'published_at': payload.get('published_at'),
                             'changed_fields': json.loads(row['changed_fields'])})
         return {'status': 'available', 'entries': entries, 'truncated': len(rows) > limit,
                 'coverage': 'Historikk fra aktivering av versjonslagring. Registreringstid er når denne versjonen ble lagret, ikke når markedet først kjente opplysningen. Endringer kan skyldes kildeinnhold, tolkning eller datastatus.'}
+    finally:
+        c.close()
+
+
+def version(connect, ticker, identity, entity_key, revision):
+    c = connect()
+    try:
+        row = c.execute('SELECT kind,recorded_at,payload FROM company_evidence_versions WHERE ticker=? AND identity=? AND entity_key=? AND revision=?',
+                        (ticker, identity, entity_key, revision)).fetchone()
+        if not row:
+            return None
+        return {'kind':row['kind'], 'recorded_at':row['recorded_at'],
+                'revision':revision, 'payload':json.loads(row['payload'])}
     finally:
         c.close()

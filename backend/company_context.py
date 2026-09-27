@@ -445,6 +445,7 @@ def context(ticker, snapshots=None, identity=None):
         try: history = evidence.history(connect, ticker, norm(identity))
         except Exception: log.warning('Company evidence history unavailable')
     return {**p,'ticker':ticker,'status':p.get('status','collecting'),'score_effect':0,
+            'identity':norm(identity) if identity else p.get('identity'),
             'evidence_history':history,
             'financing_documents':event_rows,'financing_document_count':len(all_events),
             'financing_documents_truncated':len(all_events)>len(event_rows),'news_checked_at':state.get('checked_at'),
