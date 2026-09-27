@@ -198,9 +198,11 @@ def collect(event, at, previous=None, fetch=None):
     return result
 
 
-def enrich_saved(connect, at, limit=2, fetch=None):
+def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
     import json
-    from company_context import stamp
+    from company_context import stamp, now
+    from financing_jobs import claim, finish
+    clock = clock or now
     c = connect()
     try:
         rows = [dict(r) for r in c.execute('SELECT * FROM company_context_events').fetchall()]
@@ -213,19 +215,31 @@ def enrich_saved(connect, at, limit=2, fetch=None):
         if old.get('status') == 'unsupported_document' and old.get('version') == VERSION:
             continue
         attempted = stamp(old.get('attempted_at'))
-        if not attempted or at - attempted >= timedelta(days=7 if old.get('captured_at') else 1):
+        if old.get('version') != VERSION or not attempted or at - attempted >= timedelta(days=7 if old.get('status') == 'partial' else 1):
             due.append((row, event, old))
     due.sort(key=lambda entry: ((entry[2].get('attempted_at') or ''), entry[1].get('published_at') or ''))
-    for row, event, old in due[:max(0, min(int(limit), 4))]:
+    processed = 0
+    for row, event, old in due:
+        if processed >= max(0, min(int(limit), 4)):
+            break
+        token = claim(connect, row['event_key'], clock(), row['payload'])
+        if not token:
+            continue
+        processed += 1
         event['document'] = collect(event, at, old, fetch)
         c = connect()
         try:
+            if not finish(c, row['event_key'], token, event['document']['status'], clock()):
+                continue
             cursor = c.execute('UPDATE company_context_events SET payload=? WHERE event_key=? AND payload=?',
                       (json.dumps(event), row['event_key'], row['payload']))
             if cursor.rowcount:
                 from company_evidence import record
                 record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', json.loads(row['payload']), at)
                 record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', event, at)
+            else:
+                c.execute('UPDATE financing_document_jobs SET state=? WHERE event_key=?', ('superseded', row['event_key']))
             c.commit()
         finally:
             c.close()
+    return {'processed': processed, 'due_observed': len(due)}
