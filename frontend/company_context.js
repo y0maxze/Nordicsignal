@@ -78,6 +78,26 @@ function bindHistory(root,p,requestKey){
   });
  }
 }
+function bindOlderDocuments(root,p,requestKey){
+ const button=root.querySelector('[data-financing-more]'),list=root.querySelector('[data-financing-list]'),status=root.querySelector('[data-financing-count]');
+ if(!button||!list)return;
+ let cursor=p.financing_next_cursor,busy=false;
+ const seen=new Set((p.financing_documents||[]).map(e=>e.url));
+ button.addEventListener('click',async()=>{
+  if(busy||!cursor)return;busy=true;button.disabled=true;button.textContent='Laster eldre dokumenter…';
+  try{
+   const r=await fetch('/api/company-context/'+encodeURIComponent(p.ticker)+'?before='+encodeURIComponent(cursor),{signal:AbortSignal.timeout(15000)});
+   if(!r.ok||r.redirected)throw Error();const page=await r.json();
+   if(!root.isConnected||root._companyRequest!==requestKey)return;
+   if(page.score_effect!==0||page.identity!==p.identity||page.ticker!==p.ticker||!Array.isArray(page.financing_documents)||page.financing_next_cursor===cursor)throw Error();
+   for(const e of page.financing_documents){if(seen.has(e.url))continue;seen.add(e.url);list.insertAdjacentHTML('beforeend',financingDocument(e));}
+   cursor=page.financing_next_cursor;button.hidden=!cursor;
+   if(status)status.textContent='Viser '+seen.size+' lagrede dokumenter. Datagrunnlaget kan endres mellom sidehentinger. Full historisk dekning er ikke bekreftet.';
+   button.textContent='Vis eldre dokumenter';
+  }catch{if(root.isConnected&&root._companyRequest===requestKey)button.textContent='Kunne ikke hente eldre dokumenter · prøv igjen';}
+  finally{busy=false;button.disabled=false;}
+ });
+}
 function render(p){
  if(!p||p.score_effect!==0)return '<p>Selskapsopplysninger er utilgjengelige.</p>';
  const statuses={collecting:'Venter på automatisk innhenting',unavailable:'Kildene er utilgjengelige',partial:'Delvis dekning · lagrede opplysninger',stale:'Eldre opplysninger · må kontrolleres'};
@@ -88,15 +108,15 @@ function render(p){
  '<p>ISIN: '+esc(p.isin||'Ukjent')+(p.isin?' · '+link(p.isin_source_url,p.isin_source||'Kilde ukjent')+' · noteringsdato '+esc(p.isin_listing_date||'ukjent'):'')+'</p>'+
  (p.financials?.length?'<dl>'+p.financials.map(f=>'<dt>'+esc(f.label)+'</dt><dd>'+esc(number(f.value))+' '+esc(f.currency||'(valuta ukjent)')+' <span class="muted">· periode '+esc(f.period)+' · '+esc(f.period_type)+'</span></dd>').join('')+'</dl>':'<p>Regnskapstall er ikke tilgjengelige ennå.</p>')+
  provenance(p.field_sources?.financials)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
- '<h3>Finansiering og utvanning</h3><p>Dokumenterte observasjoner · ingen bekreftelse på aktiv emisjon.</p>'+(p.financing_documents?.length?p.financing_documents.map(financingDocument).join(''):'<p>Ingen finansieringsmeldinger i innhentet materiale. Dette utelukker ikke emisjon eller kapitalbehov.</p>')+
- (p.financing_documents_truncated?'<p class="muted">Viser de 20 nyeste av '+esc(p.financing_document_count)+' lagrede dokumenter. Eldre dokumenter er bevart.</p>':'')+
+ '<h3>Finansiering og utvanning</h3><p>Dokumenterte observasjoner · ingen bekreftelse på aktiv emisjon.</p>'+(p.financing_coverage?'<p class="muted">Lagrede dokumenters publiseringsdatoer: '+esc(date(p.financing_coverage.oldest_stored_publication))+' – '+esc(date(p.financing_coverage.newest_stored_publication))+'. Dette er ikke sammenhengende dekning. '+(p.financing_coverage.historical_backfill==='not_connected'?'Historisk arkivinnhenting er ikke koblet til.':'')+'</p>':'')+'<div data-financing-list>'+(p.financing_documents?.length?p.financing_documents.map(financingDocument).join(''):'<p>Ingen finansieringsmeldinger i innhentet materiale. Dette utelukker ikke emisjon eller kapitalbehov.</p>')+'</div>'+
+ (p.financing_documents_truncated?'<p class="muted" data-financing-count>Viser de 20 nyeste av '+esc(p.financing_document_count)+' lagrede dokumenter. Eldre dokumenter er bevart.</p>'+(p.financing_next_cursor?'<button class="btn" type="button" data-financing-more>Vis eldre dokumenter</button>':''):'')+
  '<p class="muted">'+esc(p.coverage||'Dekning ukjent')+' Kildestatus: '+esc(p.news_status==='partial'?'delvis dekning':'utilgjengelig')+'. Siste forsøk: '+esc(date(p.news_checked_at))+'.</p>'+
  '<details><summary>Hva bør kontrolleres ved en emisjon?</summary><ul><li>Er emisjonen foreslått, vedtatt, gjennomført eller avlyst? Les siste melding.</li><li>Tegningskurs og antall nye aksjer: eierandelen kan bli redusert dersom du ikke deltar.</li><li>Rett til å delta, eks-dato og tegningsfrist må bekreftes i vilkårene.</li><li>Skal pengene finansiere vekst, drift, gjeld eller refinansiering?</li><li>En ny kontrakt er ikke det samme som kontanter nå og opphever ikke en emisjon.</li></ul><p>Eksisterende aksjer er ikke mindreverdige bare fordi de er «gamle». Rettigheter og aksjeklasse avhenger av dokumenterte vilkår.</p></details>'+
  '<p class="muted">Verdsettelse, kapitalbruk, eiersalg og lock-up må kontrolleres i siste rapport/prospekt når de ikke er dokumentert her. Forskning · ingen score-effekt.</p></div>';
 }
 async function mount(root,ticker){
  if(!root)return;const key={};root._companyRequest=key;root.innerHTML='<h2>Selskapsinformasjon og finansiering</h2><p>Laster lagrede opplysninger…</p>';
- try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(root.isConnected&&root._companyRequest===key){root.innerHTML=render(p);if(p?.score_effect===0){markVisit(root,p);bindHistory(root,p,key);}}}
+ try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(root.isConnected&&root._companyRequest===key){root.innerHTML=render(p);if(p?.score_effect===0){markVisit(root,p);bindHistory(root,p,key);bindOlderDocuments(root,p,key);}}}
  catch{if(root.isConnected&&root._companyRequest===key)root.innerHTML='<h2>Selskapsinformasjon</h2><p>UTILGJENGELIG · selskapsopplysninger kunne ikke hentes. Dette sier ingenting om finansieringsrisikoen.</p>';}
 }
 window.AksjerCompany={render,mount};

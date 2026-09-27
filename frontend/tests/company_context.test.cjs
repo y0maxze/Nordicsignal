@@ -99,3 +99,17 @@ test('outdated extraction is explicitly awaiting revalidation',()=>{
  const html=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{status:'revalidation_required',terms:{},dilution:{status:'unknown'}}}]});
  assert.match(html,/Venter på ny dokumentkontroll/);assert.match(html,/Utvanning: Ukjent/);
 });
+
+test('older document pages are lazy, retryable and deduplicated',async()=>{
+ const d=new JSDOM('<section></section>',{url:'https://app.test',runScripts:'outside-only'});d.window.eval(script);d.window.AbortSignal.timeout=()=>undefined;
+ const first={title:'First',url:'https://live.euronext.com/en/node/1'},older={title:'Older <img>',url:'https://live.euronext.com/en/node/2'};
+ const p={score_effect:0,ticker:'TECH',identity:'techstep',financing_documents:[first],financing_documents_truncated:true,financing_document_count:2,financing_next_cursor:'cursor'};
+ let calls=0,fail=true;
+ d.window.fetch=async url=>{calls++;if(!url.includes('?'))return {ok:true,json:async()=>p};return fail?{ok:false}:{ok:true,json:async()=>({...p,financing_documents:[first,older],financing_next_cursor:null})};};
+ const root=d.window.document.querySelector('section');await d.window.AksjerCompany.mount(root,'TECH');assert.equal(calls,1);
+ const button=root.querySelector('[data-financing-more]');button.click();await new Promise(r=>setImmediate(r));
+ assert.match(button.textContent,/prøv igjen/);assert.equal(root.querySelectorAll('.financingDocument').length,1);
+ fail=false;button.click();await new Promise(r=>setImmediate(r));
+ assert.equal(root.querySelectorAll('.financingDocument').length,2);assert.equal(button.hidden,true);assert.equal(root.querySelector('img'),null);
+ assert.match(root.querySelector('[data-financing-count]').textContent,/Full historisk dekning er ikke bekreftet/);
+});

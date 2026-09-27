@@ -36,12 +36,13 @@ def install():
     def patched(app):
         previous_install(app)
         @app.get('/api/company-context/{ticker}')
-        def company_context(ticker: str):
+        def company_context(ticker: str, before: str = None):
             ticker=ticker.upper().removesuffix('.OL')
             if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{0,19}',ticker):raise HTTPException(400,'Invalid ticker')
             row=context.universe().get(ticker)
             if not row:raise HTTPException(404,'Issuer identity unavailable')
-            return context.context(ticker,identity=row['company'])
+            try:return context.context(ticker,identity=row['company'],before=before)
+            except ValueError:raise HTTPException(400,'Invalid document cursor')
         @app.get('/api/company-context/{ticker}/evidence')
         def company_evidence(ticker: str, entity_key: str, revision: int):
             ticker=ticker.upper().removesuffix('.OL')
