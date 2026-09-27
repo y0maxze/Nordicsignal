@@ -26,10 +26,16 @@ function provenance(meta){
  const stale=meta.status==='stale'?'Eldre opplysning · ':'';
  return '<p class="muted">'+esc(stale)+link(meta.source_url,meta.source||'Datakilde')+' · hentet '+esc(date(meta.captured_at))+' · siste forsøk '+esc(date(meta.attempted_at))+(meta.license?' · '+esc(meta.license):'')+'</p>';
 }
+function historyPanel(h){
+ if(h?.status!=='available')return '<p class="muted">Endringshistorikk er utilgjengelig. Dette betyr ikke at opplysningene er uendret.</p>';
+ const labels={title:'Tittel',published_at:'Publiseringsdato',identity:'Selskapsidentitet',company:'Selskapsnavn',description:'Virksomhetsbeskrivelse',financials:'Regnskapstall',registry:'Registeropplysninger',document:'Dokumentvilkår eller innhentingsstatus',field_sources:'Kilder eller datastatus',source_status:'Kildestatus',sector:'Sektor',isin:'ISIN',lifecycle:'Dokumentstatus',lifecycle_evidence:'Statusbelegg'};
+ const entries=(h.entries||[]).map(e=>'<li><strong>'+(e.kind==='profile'?'Selskapsopplysninger':esc(e.title||'Finansieringsdokument'))+'</strong><p>'+esc(e.revision===1?'Første lagrede versjon':'Endret lagret versjon '+e.revision)+' · registrert '+esc(date(e.recorded_at))+'</p>'+(e.revision>1?'<p>Endrede felt: '+esc([...new Set((e.changed_fields||[]).map(k=>labels[k]||'Øvrige opplysninger eller tolkning'))].join(', '))+'</p>':'')+(e.published_at?'<p>Dokument publisert '+esc(date(e.published_at))+'</p>':'')+link(e.source_url,'Åpne kilden')+'</li>').join('');
+ return '<details class="companyHistory"><summary>Hva har endret seg i datagrunnlaget?</summary><p>'+esc(h.coverage)+'</p>'+(entries?'<ol>'+entries+'</ol>':'<p>Ingen versjoner er lagret ennå.</p>')+(h.truncated?'<p>Viser de 30 nyeste versjonene. Eldre versjoner er bevart.</p>':'')+'</details>';
+}
 function render(p){
  if(!p||p.score_effect!==0)return '<p>Selskapsopplysninger er utilgjengelige.</p>';
  const statuses={collecting:'Venter på automatisk innhenting',unavailable:'Kildene er utilgjengelige',partial:'Delvis dekning · lagrede opplysninger',stale:'Eldre opplysninger · må kontrolleres'};
- return '<div class="companyContext"><h3>Selskapsinformasjon</h3><p class="muted">'+esc(statuses[p.status]||'Ukjent datastatus')+' · sist hentet '+esc(date(p.captured_at))+'</p>'+
+ return '<div class="companyContext"><h3>Selskapsinformasjon</h3><p class="muted">'+esc(statuses[p.status]||'Ukjent datastatus')+' · sist hentet '+esc(date(p.captured_at))+'</p>'+historyPanel(p.evidence_history)+
  (p.description_kind==='registered_activity'?'<p class="muted">Registrert aktivitet · kan avvike fra konsernets samlede virksomhet.</p>':'')+
  '<p>'+esc(p.description||'Virksomhetsbeskrivelse er ikke tilgjengelig fra datakilden ennå.')+'</p>'+provenance(p.field_sources?.description)+'<p>Sektor: '+esc(p.sector||'Ukjent')+'</p>'+
  (p.registry?'<p>Juridisk navn: '+esc(p.registry.official_name)+' · org.nr. '+esc(p.registry.organisation_number)+'</p><p>Registrert næring: '+esc(p.registry.industry||'Ukjent')+'</p>'+provenance(p.registry):'')+

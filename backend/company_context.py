@@ -12,6 +12,7 @@ import re
 import threading
 from urllib.parse import urlsplit
 from database import connect
+import company_evidence as evidence
 
 log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
@@ -110,6 +111,7 @@ def ensure_schema():
         CREATE TABLE IF NOT EXISTS company_context_state (
           id INTEGER PRIMARY KEY, checked_at TEXT NOT NULL, status TEXT NOT NULL);
         ''')
+        evidence.ensure_schema(c)
         c.commit()
     finally:
         c.close()
@@ -343,8 +345,7 @@ def scan_once(provider=None, fetch_news=None, batch_size=4, registry=None):
         c=connect()
         try:
             for e in events:
-                c.execute('INSERT INTO company_context_events(event_key,ticker,identity,payload,observed_at) VALUES(?,?,?,?,?) ON CONFLICT(event_key) DO NOTHING',
-                          (e['ticker']+'|'+e['url'],e['ticker'],e['identity'],json.dumps(e),at.isoformat()))
+                save_event(c, e, at)
             c.execute('INSERT INTO company_context_state(id,checked_at,status) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status',(at.isoformat(),news_status))
             previous={r['ticker']:dict(r) for r in c.execute('SELECT * FROM company_context_profiles').fetchall()}
             c.commit()
@@ -366,10 +367,35 @@ def scan_once(provider=None, fetch_news=None, batch_size=4, registry=None):
             try:
                 c.execute('INSERT INTO company_context_profiles(ticker,identity,payload,attempted_at,captured_at,status) VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET identity=excluded.identity,payload=excluded.payload,attempted_at=excluded.attempted_at,captured_at=excluded.captured_at,status=excluded.status',
                           (row['ticker'],row['identity'],json.dumps(data),at.isoformat(),captured,status))
+                evidence.record(c, 'profile|'+row['ticker'], row['ticker'], row['identity'], 'profile', data, at)
                 c.commit()
             finally:c.close()
         return {'status':'ok','universe_count':len(rows),'refreshed':min(len(due),batch_size),'pending':max(0,len(due)-batch_size),'score_effect':0}
     finally:_LOCK.release()
+
+
+def save_event(c, event, at):
+    """CAS protects concurrent document enrichment; corrections invalidate terms."""
+    key = event['ticker']+'|'+event['url']
+    old = c.execute('SELECT * FROM company_context_events WHERE event_key=?', (key,)).fetchone()
+    if old:
+        previous = json.loads(old['payload'])
+        unchanged = all(previous.get(k) == event.get(k) for k in ('title','published_at','identity','company'))
+        if unchanged:
+            # An unchanged feed observation must not erase enriched documents.
+            updated = previous
+        else:
+            updated = event
+        cursor = c.execute('UPDATE company_context_events SET payload=?,identity=? WHERE event_key=? AND payload=?',
+                           (json.dumps(updated), updated['identity'], key, old['payload']))
+        if cursor.rowcount:
+            evidence.record(c, key, old['ticker'], old['identity'], 'financing_document', previous, at)
+            evidence.record(c, key, event['ticker'], updated['identity'], 'financing_document', updated, at)
+    else:
+        cursor = c.execute('INSERT INTO company_context_events(event_key,ticker,identity,payload,observed_at) VALUES(?,?,?,?,?) ON CONFLICT(event_key) DO NOTHING',
+                           (key,event['ticker'],event['identity'],json.dumps(event),at.isoformat()))
+        if cursor.rowcount:
+            evidence.record(c, key, event['ticker'],event['identity'],'financing_document',event,at)
 
 
 def read_all():
@@ -412,7 +438,12 @@ def context(ticker, snapshots=None, identity=None):
     if identity and p.get('identity')!=norm(identity):p={}
     all_events=[e for e in events.get(ticker,[]) if not identity or e['identity']==norm(identity)]
     event_rows=sorted(all_events,key=lambda e:e['published_at'],reverse=True)[:20]
+    history = {'status':'unavailable','entries':[],'truncated':False}
+    if identity:
+        try: history = evidence.history(connect, ticker, norm(identity))
+        except Exception: log.warning('Company evidence history unavailable')
     return {**p,'ticker':ticker,'status':p.get('status','collecting'),'score_effect':0,
+            'evidence_history':history,
             'financing_documents':event_rows,'financing_document_count':len(all_events),
             'financing_documents_truncated':len(all_events)>len(event_rows),'news_checked_at':state.get('checked_at'),
             'news_status':state.get('status','unavailable'),
