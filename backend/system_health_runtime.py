@@ -81,6 +81,12 @@ def system_health():
     if not database_ok:
         warnings.append("Database connectivity check failed.")
 
+    try:
+        from financing_jobs import summary
+        financing_jobs = {'status': 'available', 'states': summary(connect)}
+    except Exception:
+        financing_jobs = {'status': 'unavailable', 'states': {}}
+
     return {
         "status": "ok" if database_ok and USING_POSTGRES else "warning" if database_ok else "error",
         "storage_backend": "postgres" if USING_POSTGRES else "sqlite",
@@ -88,6 +94,7 @@ def system_health():
         "database_ok": database_ok,
         "counts": counts,
         "latest": latest,
+        "financing_jobs": financing_jobs,
         "warnings": warnings,
         "error": error,
         "checked_at": datetime.now(timezone.utc).isoformat(),

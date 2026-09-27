@@ -112,6 +112,8 @@ def ensure_schema():
           id INTEGER PRIMARY KEY, checked_at TEXT NOT NULL, status TEXT NOT NULL);
         ''')
         evidence.ensure_schema(c)
+        from financing_jobs import ensure_schema as ensure_jobs
+        ensure_jobs(c)
         c.commit()
     finally:
         c.close()
