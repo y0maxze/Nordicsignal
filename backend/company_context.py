@@ -20,6 +20,21 @@ METRICS = {'annualTotalRevenue':'Omsetning', 'annualNetIncome':'Nettoresultat',
            'annualStockholdersEquity':'Egenkapital'}
 FINANCING = re.compile(r'\b(rights issue|private placement|share capital increase|subsequent offering|repair offering|subscription rights|bridge financ\w*|bridge facility|refinanc\w*|convertible loan|emisjon\w*|kapitalforhøyelse\w*|tegningsrett\w*|fortrinnsrett\w*)\b', re.I)
 
+FINANCING_TYPES = (
+    ('rights_issue', re.compile(r'\\b(rights issue|subscription rights|repair offering|subsequent offering|tegningsrett\\w*|fortrinnsrett\\w*)\\b', re.I)),
+    ('private_placement', re.compile(r'\\b(private placement|rettet emisjon)\\b', re.I)),
+    ('convertible', re.compile(r'\\b(convertible (?:bond|loan|note)|konvertibelt? lån)\\b', re.I)),
+    ('debt_or_refinancing', re.compile(r'\\b(bridge financ\\w*|bridge facility|refinanc\\w*)\\b', re.I)),
+    ('share_capital_increase', re.compile(r'\\b(share capital increase|kapitalforhøyelse\\w*)\\b', re.I)),
+)
+LIFECYCLE = (
+    ('cancelled', re.compile(r'\\b(cancel(?:led|lation)|withdrawn|avlyst|kansellert|trukket tilbake)\\b', re.I)),
+    ('completed', re.compile(r'\\b(successfully completed|completion of|final results?|fully subscribed|gjennomført|fullført|endelig resultat)\\b', re.I)),
+    ('open', re.compile(r'\\b(subscription period (?:starts|commences|opens)|offering period (?:starts|commences|opens)|subscriptions? (?:open|commence)|tegningsperioden (?:starter|åpner)|tegning åpner)\\b', re.I)),
+    ('approved', re.compile(r'\\b(approved by|resolved by|board has resolved|general meeting (?:approved|resolved)|vedtatt av|besluttet av)\\b', re.I)),
+    ('proposed', re.compile(r'\\b(proposed|intends? to (?:launch|carry out|conduct)|plans? to (?:launch|carry out|conduct)|foreslått|planlegger å|intensjon om)\\b', re.I)),
+)
+
 
 def now():
     return datetime.now(timezone.utc)
@@ -136,6 +151,14 @@ def collect_profile(row, provider):
     return payload
 
 
+def classify_financing(title):
+    """Classify explicit title evidence only; absence never implies a status."""
+    text = str(title or '')
+    financing_type = next((name for name, pattern in FINANCING_TYPES if pattern.search(text)), 'other_financing')
+    lifecycle = next((name for name, pattern in LIFECYCLE if pattern.search(text)), 'unknown')
+    return financing_type, lifecycle
+
+
 def event_for(item, identities, at):
     name = norm(item.get('company'))
     matches = identities.get(name,[])
@@ -147,10 +170,9 @@ def event_for(item, identities, at):
         u.hostname!='live.euronext.com' or u.username or not published or
         not timedelta(0)<=at-published<=timedelta(days=180) or not FINANCING.search(title)):
         return None
-    # This is a document flag, NOT a claimed current issue status or cash emergency.
-    return {'ticker':matches[0], 'identity':name, 'title':title, 'url':u.geturl(),
+    # Lifecycle is asserted only when the official title contains explicit evidence.\n    financing_type, lifecycle = classify_financing(title)\n    return {'ticker':matches[0], 'identity':name, 'title':title, 'url':u.geturl(),
             'published_at':published.isoformat(),'observed_at':at.isoformat(),
-            'kind':'financing_document','status':'Les siste vilkår i originalmeldingen'}
+            'kind':'financing_document','financing_type':financing_type,'lifecycle':lifecycle,\n            'status':'Les siste vilkår i originalmeldingen'}
 
 
 def enrol_news_issuers(items, provider, at, limit=4):
