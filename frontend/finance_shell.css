@@ -166,3 +166,12 @@ html.aksjerFinance:root .cfFilters{max-width:100%}
 .financingTerms>div{min-width:0;border-bottom:1px solid var(--border,#8993a433);padding-bottom:.5rem}
 .financingEvidence blockquote{margin:.5rem 0;padding-left:.75rem;border-left:3px solid currentColor;white-space:pre-wrap}
 .financingDilution{padding:.75rem 0 0;border-top:1px solid var(--border,#8993a433)}
+
+.companyOverview{padding:1rem;background:var(--surface-2,#f6f7f8);border:1px solid var(--line,#dce1e6);border-radius:8px;margin-bottom:1.25rem}
+.companyOverviewGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.companyOverview h4{margin:.5rem 0;font-size:1rem}
+.companyOverview ul{padding-left:1.25rem}
+.companySince{padding-top:.75rem;border-top:1px solid var(--line,#dce1e6);font-size:.85rem}
+.companyHistory ol{padding-left:1.25rem}
+.companyHistory li{padding:.75rem 0;border-bottom:1px solid var(--line,#dce1e6)}
+@media(max-width:650px){.companyOverviewGrid{grid-template-columns:minmax(0,1fr)}}

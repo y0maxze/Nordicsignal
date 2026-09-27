@@ -42,6 +42,17 @@ def install():
             row=context.universe().get(ticker)
             if not row:raise HTTPException(404,'Issuer identity unavailable')
             return context.context(ticker,identity=row['company'])
+        @app.get('/api/company-context/{ticker}/evidence')
+        def company_evidence(ticker: str, entity_key: str, revision: int):
+            ticker=ticker.upper().removesuffix('.OL')
+            if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{0,19}',ticker) or len(entity_key)>2048 or revision<1:
+                raise HTTPException(400,'Invalid evidence reference')
+            row=context.universe().get(ticker)
+            if not row:raise HTTPException(404,'Issuer identity unavailable')
+            from company_evidence import version
+            data=version(context.connect,ticker,row['identity'],entity_key,revision)
+            if not data:raise HTTPException(404,'Evidence version unavailable')
+            return data
     extra_api.install=patched
     extra_api._company_context_v1=True
 
