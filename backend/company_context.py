@@ -10,6 +10,7 @@ import logging
 import math
 import re
 import threading
+import base64
 from urllib.parse import urlsplit
 from database import connect
 import company_evidence as evidence
@@ -405,19 +406,21 @@ def save_event(c, event, at):
             evidence.record(c, key, event['ticker'],event['identity'],'financing_document',event,at)
 
 
-def read_all():
+def read_all(ticker=None):
     """One cached-data query set, no schema changes or external I/O on GET."""
     at=now();profiles={};events=defaultdict(list);state={}
     c=connect()
     try:
-        for row in c.execute('SELECT * FROM company_context_profiles').fetchall():
+        where=' WHERE ticker=?' if ticker else ''
+        params=(ticker,) if ticker else ()
+        for row in c.execute('SELECT * FROM company_context_profiles'+where,params).fetchall():
             r=dict(row);data=json.loads(r['payload']);captured=stamp(r['captured_at'])
             if data.get('yahoo_identity_verified') is not True:
                 data['financials']=[]
                 data.setdefault('source_status',{})['financials']='identity_unverified'
             profiles[r['ticker']]={**data,'identity':r['identity'],'captured_at':r['captured_at'],
                 'attempted_at':r['attempted_at'],'status':'stale' if captured and at-captured>timedelta(days=2) else r['status']}
-        for row in c.execute('SELECT payload FROM company_context_events ORDER BY observed_at DESC').fetchall():
+        for row in c.execute('SELECT payload FROM company_context_events'+where+' ORDER BY observed_at DESC',params).fetchall():
             e=json.loads(row['payload']);d=stamp(e['published_at'])
             if d and d <= at:
                 # Upgrade legacy title snapshots without network calls or status inference.
@@ -442,12 +445,27 @@ def read_all():
     return profiles,events,state
 
 
-def context(ticker, snapshots=None, identity=None):
-    profiles,events,state=snapshots if snapshots is not None else read_all()
+def context(ticker, snapshots=None, identity=None, before=None):
+    boundary=None
+    if before:
+        try:
+            if len(before)>4096:raise ValueError()
+            cursor=json.loads(base64.b64decode(before.encode('ascii'),altchars=b'-_',validate=True))
+            if not isinstance(cursor,list) or len(cursor)!=2 or not stamp(cursor[0]) or not isinstance(cursor[1],str):raise ValueError()
+            boundary=(stamp(cursor[0]),cursor[1])
+        except (ValueError,TypeError,UnicodeError):
+            raise ValueError('Invalid document cursor') from None
+    profiles,events,state=snapshots if snapshots is not None else read_all(ticker)
     p=profiles.get(ticker,{})
     if identity and p.get('identity')!=norm(identity):p={}
     all_events=[e for e in events.get(ticker,[]) if not identity or e['identity']==norm(identity)]
-    event_rows=sorted(all_events,key=lambda e:e['published_at'],reverse=True)[:20]
+    key=lambda e:(stamp(e['published_at']),e.get('url',''))
+    eligible=[e for e in all_events if not boundary or key(e)<boundary]
+    ordered=sorted(eligible,key=key,reverse=True)
+    event_rows=ordered[:20]
+    more=len(ordered)>len(event_rows)
+    next_cursor=base64.urlsafe_b64encode(json.dumps([event_rows[-1]['published_at'],event_rows[-1].get('url','')]).encode()).decode() if more else None
+    dates=[stamp(e['published_at']) for e in all_events]
     history = {'status':'unavailable','entries':[],'truncated':False}
     if identity:
         try: history = evidence.history(connect, ticker, norm(identity))
@@ -456,6 +474,9 @@ def context(ticker, snapshots=None, identity=None):
             'identity':norm(identity) if identity else p.get('identity'),
             'evidence_history':history,
             'financing_documents':event_rows,'financing_document_count':len(all_events),
-            'financing_documents_truncated':len(all_events)>len(event_rows),'news_checked_at':state.get('checked_at'),
+            'financing_coverage':{'status':'partial','historical_backfill':'not_connected',
+                                  'oldest_stored_publication':min(dates).isoformat() if dates else None,
+                                  'newest_stored_publication':max(dates).isoformat() if dates else None},
+            'financing_documents_truncated':more,'financing_next_cursor':next_cursor,'news_checked_at':state.get('checked_at'),
             'news_status':state.get('status','unavailable'),
             'coverage':'Lagrede observerte børsmeldinger, ikke full historikk. Dokumenter er ikke automatisk koblet til samme emisjon. Historisk status bekrefter ikke dagens status. Ingen treff betyr ikke at emisjon eller finansieringsrisiko er utelukket.'}

@@ -110,3 +110,25 @@ def test_late_profile_fetch_cannot_overwrite_concurrent_writer(db,monkeypatch,ex
     monkeypatch.setattr(cc,'collect_profile',overlapping)
     cc.scan_once(Provider(),lambda:[])
     assert cc.context('TECH')['description']=='Newer verified result'
+
+def test_document_cursor_visits_same_timestamp_documents_once_and_ignores_newer_insert(db):
+    c=db()
+    for n in range(45):
+        e=cc.event_for(event(url=f'https://live.euronext.com/en/node/{n:03d}'),{'techstep':['TECH']},AT)
+        cc.save_event(c,e,AT)
+    c.commit();c.close()
+    first=cc.context('TECH',identity='Techstep ASA')
+    assert len(first['financing_documents'])==20
+    c=db();cc.save_event(c,cc.event_for(event(url='https://live.euronext.com/en/node/999',published_at=AT.isoformat()),{'techstep':['TECH']},AT),AT);c.commit();c.close()
+    second=cc.context('TECH',identity='Techstep ASA',before=first['financing_next_cursor'])
+    third=cc.context('TECH',identity='Techstep ASA',before=second['financing_next_cursor'])
+    documents=first['financing_documents']+second['financing_documents']+third['financing_documents']
+    assert len(documents)==45 and len({e['url'] for e in documents})==45
+    assert not third['financing_documents_truncated'] and third['financing_next_cursor'] is None
+    assert cc.context('TECH',identity='Another issuer',before=first['financing_next_cursor'])['financing_documents']==[]
+
+
+@pytest.mark.parametrize('cursor',['bad!','a'*4097,'e30=','W251bGwsbnVsbF0='])
+def test_bad_document_cursor_rejected_before_storage(cursor,monkeypatch):
+    monkeypatch.setattr(cc,'read_all',lambda *a:pytest.fail('invalid cursor reached storage'))
+    with pytest.raises(ValueError):cc.context('TECH',before=cursor)
