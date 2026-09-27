@@ -85,3 +85,14 @@ def test_evidence_recording_uses_completion_time(db):
     assert doc['captured_at']==row['recorded_at']
     assert doc['attempted_at']==(AT+timedelta(seconds=1)).isoformat()
     c.close()
+
+
+def test_historical_backlog_does_not_starve_recent_supported_documents(db):
+    c=db()
+    for n,title,days in [(1,'Proposed private placement',1),(2,'Key information relating to rights issue',2),(3,'Key information relating to rights issue',100)]:
+        e=cc.event_for(event(title=title,url=f'https://live.euronext.com/en/node/{n}',published_at=(AT-timedelta(days=days)).isoformat()),{'techstep':['TECH']},AT)
+        cc.save_event(c,e,AT)
+    c.commit();c.close();calls=[]
+    def fetch(url):calls.append(url);return page(TERMS)
+    fd.enrich_saved(db,AT,limit=1,fetch=fetch)
+    assert calls==['https://live.euronext.com/en/node/2']

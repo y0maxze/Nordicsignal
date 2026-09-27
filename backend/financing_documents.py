@@ -174,14 +174,18 @@ def dilution(terms, event):
             'limitation': 'Dokumentscenario for en eier som ikke deltar. Ikke bekreftelse på gjennomføring, kurstap eller fullt utvannet aksjetall.'}
 
 
-def collect(event, at, previous=None, fetch=None):
+def supported_title(title):
     from company_context import FINANCING_TYPES
+    kinds = {kind for kind, pattern in FINANCING_TYPES if pattern.search(title)}
+    return len(kinds) == 1 and bool(re.search(r'\bkey information\b', title, re.I))
+
+
+def collect(event, at, previous=None, fetch=None):
     previous = previous or {}
     result = {'version': VERSION, 'attempted_at': at.isoformat(), 'captured_at': None,
               'status': 'unavailable', 'terms': {}, 'dilution': dilution({}, event),
               'source_url': event['url'], 'published_at': event['published_at']}
-    kinds = {kind for kind, pattern in FINANCING_TYPES if pattern.search(event['title'])}
-    if len(kinds) != 1 or not re.search(r'\bkey information\b', event['title'], re.I):
+    if not supported_title(event['title']):
         result['status'] = 'unsupported_document'
         return result
     try:
@@ -234,7 +238,12 @@ def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
         attempted = stamp(old.get('attempted_at'))
         if old.get('version') != VERSION or not attempted or at - attempted >= timedelta(days=7 if old.get('status') == 'partial' else 1):
             due.append((row, event, old))
-    due.sort(key=lambda entry: ((entry[2].get('attempted_at') or ''), entry[1].get('published_at') or ''))
+    # Historical catch-up must not starve recent supported documents behind a
+    # stream of older unsupported notices. Within each group, never-attempted
+    # documents precede retries, then newest publication first.
+    due.sort(key=lambda entry: (not supported_title(entry[1]['title']),
+                               entry[2].get('attempted_at') or '',
+                               -(stamp(entry[1].get('published_at')).timestamp() if stamp(entry[1].get('published_at')) else 0)))
     processed = 0
     for row, event, old in due:
         if processed >= max(0, min(int(limit), 4)):
