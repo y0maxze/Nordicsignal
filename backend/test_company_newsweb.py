@@ -93,3 +93,15 @@ def test_foreign_date_and_renamed_issuer_are_not_silently_imported(db):
 
 def test_multiple_share_tickers_for_same_issuer_do_not_choose_one():
     assert nw.adapt(raw(),{**UNIVERSE,'TECHB':UNIVERSE['TECH']},AT) is None
+
+
+def test_previous_open_day_is_finalised_after_midnight(db):
+    empty=lambda *a:{'messages':[],'overflow':False}
+    nw.scan(db,UNIVERSE,AT,empty,clock=lambda:AT)
+    later=AT+timedelta(days=1)
+    today=nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
+    yesterday=nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
+    assert today['day']==later.date().isoformat()
+    assert yesterday['day']==AT.date().isoformat() and yesterday['open_day'] is False
+    older=nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
+    assert older['day']==(AT-timedelta(days=1)).date().isoformat()

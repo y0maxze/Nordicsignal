@@ -107,7 +107,11 @@ def scan(connect, universe, at, fetch=None, clock=None):
         day=(today-timedelta(days=offset)).isoformat(); old=previous.get(day,{})
         last=stamp(old.get('attempted_at')); state=json.loads(old.get('payload') or '{}')
         lease=stamp(old.get('lease_until'))
-        if not last or (not state and (not lease or lease<=at)) or (offset==0 and at-last>=timedelta(hours=1)) or (state.get('status') in {'unavailable','truncated'} and at-last>=timedelta(days=1)):
+        if (not last or (not state and (not lease or lease<=at))
+            or (old.get('token') and lease and lease<=at)
+            or (offset>0 and state.get('open_day') is True)
+            or (offset==0 and at-last>=timedelta(hours=1))
+            or (state.get('status') in {'unavailable','truncated'} and at-last>=timedelta(days=1))):
             target=day;break
     if not target:return {'status':'idle'}
     token=uuid.uuid4().hex;c=connect()
@@ -118,7 +122,8 @@ def scan(connect, universe, at, fetch=None, clock=None):
         c.commit()
     finally:c.close()
     if not claimed:return {'status':'busy'}
-    events=[];state={'status':'unavailable','day':target,'matched':0,'source_count':None,'overflow':None}
+    events=[];state={'status':'unavailable','day':target,'open_day':target==today.isoformat(),
+                     'matched':0,'source_count':None,'overflow':None}
     try:
         data=(fetch or request)('list',{'fromDate':target,'toDate':target})
         rows=data.get('messages');overflow=data.get('overflow')
