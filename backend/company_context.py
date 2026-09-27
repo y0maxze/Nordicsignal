@@ -367,9 +367,14 @@ def scan_once(provider=None, fetch_news=None, batch_size=4, registry=None):
                     captured=old['captured_at'];status='stale'
             c=connect()
             try:
-                c.execute('INSERT INTO company_context_profiles(ticker,identity,payload,attempted_at,captured_at,status) VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET identity=excluded.identity,payload=excluded.payload,attempted_at=excluded.attempted_at,captured_at=excluded.captured_at,status=excluded.status',
-                          (row['ticker'],row['identity'],json.dumps(data),at.isoformat(),captured,status))
-                evidence.record(c, 'profile|'+row['ticker'], row['ticker'], row['identity'], 'profile', data, at)
+                if old:
+                    cursor=c.execute('UPDATE company_context_profiles SET identity=?,payload=?,attempted_at=?,captured_at=?,status=? WHERE ticker=? AND identity=? AND payload=? AND attempted_at=?',
+                                     (row['identity'],json.dumps(data),at.isoformat(),captured,status,row['ticker'],old['identity'],old['payload'],old['attempted_at']))
+                else:
+                    cursor=c.execute('INSERT INTO company_context_profiles(ticker,identity,payload,attempted_at,captured_at,status) VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO NOTHING',
+                                     (row['ticker'],row['identity'],json.dumps(data),at.isoformat(),captured,status))
+                if cursor.rowcount:
+                    evidence.record(c, 'profile|'+row['ticker'], row['ticker'], row['identity'], 'profile', data, now())
                 c.commit()
             finally:c.close()
         return {'status':'ok','universe_count':len(rows),'refreshed':min(len(due),batch_size),'pending':max(0,len(due)-batch_size),'score_effect':0}
@@ -421,7 +426,10 @@ def read_all():
                     title=re.sub(r'^'+re.escape(e['company'])+r'\s*[:–—-]\s*','',title,count=1,flags=re.I)
                 e.update(financing_evidence(title))
                 document=e.get('document')
-                if document and stamp(document.get('captured_at')) and at-stamp(document['captured_at'])>timedelta(days=8):
+                if document:
+                    from financing_documents import public_document
+                    document=e['document']=public_document(document)
+                if document and document.get('status')!='revalidation_required' and stamp(document.get('captured_at')) and at-stamp(document['captured_at'])>timedelta(days=8):
                     e['document']={**document,'status':'stale'}
                 events[e['ticker']].append(e)
         row=c.execute('SELECT * FROM company_context_state WHERE id=1').fetchone()

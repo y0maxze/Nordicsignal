@@ -67,7 +67,11 @@ def version(connect, ticker, identity, entity_key, revision):
                         (ticker, identity, entity_key, revision)).fetchone()
         if not row:
             return None
+        payload=json.loads(row['payload'])
+        if row['kind']=='financing_document' and payload.get('document'):
+            from financing_documents import public_document
+            payload['document']=public_document(payload['document'])
         return {'kind':row['kind'], 'recorded_at':row['recorded_at'],
-                'revision':revision, 'payload':json.loads(row['payload'])}
+                'revision':revision, 'payload':payload}
     finally:
         c.close()

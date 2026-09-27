@@ -93,3 +93,9 @@ test('historical version loads on demand, preserves old evidence and does not le
  assert.match(d.window.document.body.textContent,/Older/);assert.doesNotMatch(d.window.document.body.textContent,/Unverified|987654321/);
  assert.equal(d.window.document.querySelector('script'),null);
 });
+
+test('outdated extraction is explicitly awaiting revalidation',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const html=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{status:'revalidation_required',terms:{},dilution:{status:'unknown'}}}]});
+ assert.match(html,/Venter på ny dokumentkontroll/);assert.match(html,/Utvanning: Ukjent/);
+});
