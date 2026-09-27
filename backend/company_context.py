@@ -20,20 +20,61 @@ METRICS = {'annualTotalRevenue':'Omsetning', 'annualNetIncome':'Nettoresultat',
            'annualStockholdersEquity':'Egenkapital'}
 FINANCING = re.compile(r'\b(rights issue|private placement|share capital increase|subsequent offering|repair offering|subscription rights|bridge financ\w*|bridge facility|refinanc\w*|convertible loan|emisjon\w*|kapitalforhøyelse\w*|tegningsrett\w*|fortrinnsrett\w*)\b', re.I)
 
-FINANCING_TYPES = (
-    ('rights_issue', re.compile(r'\\b(rights issue|subscription rights|repair offering|subsequent offering|tegningsrett\\w*|fortrinnsrett\\w*)\\b', re.I)),
-    ('private_placement', re.compile(r'\\b(private placement|rettet emisjon)\\b', re.I)),
-    ('convertible', re.compile(r'\\b(convertible (?:bond|loan|note)|konvertibelt? lån)\\b', re.I)),
-    ('debt_or_refinancing', re.compile(r'\\b(bridge financ\\w*|bridge facility|refinanc\\w*)\\b', re.I)),
-    ('share_capital_increase', re.compile(r'\\b(share capital increase|kapitalforhøyelse\\w*)\\b', re.I)),
-)
+# Type recognition and status recognition are separate. A document can mention
+# several transactions; such a title must not lend one transaction another's state.
+FINANCING_TYPES = tuple((kind, re.compile(r'\b(?:' + pattern + r')\b', re.I)) for kind, pattern in (
+    ('rights_issue', r'rights issue|fortrinnsrettsemisjon'),
+    ('private_placement', r'private placement|rettet emisjon'),
+    ('repair_offering', r'repair offering|reparasjonsemisjon'),
+    ('subsequent_offering', r'subsequent offering'),
+    ('convertible', r'convertible (?:bond|loan|note)|konvertibelt? lån'),
+    ('debt_or_refinancing', r'bridge financ\w*|bridge facility|refinanc\w*|refinansiering'),
+    ('share_capital_increase', r'share capital increase|kapitalforhøyelse\w*'),
+))
+# Deliberately bounded templates, not keyword searches. Results/subscription
+# levels, registration and settlement are not interchangeable with completion.
 LIFECYCLE = (
-    ('cancelled', re.compile(r'\\b(cancel(?:led|lation)|withdrawn|avlyst|kansellert|trukket tilbake)\\b', re.I)),
-    ('completed', re.compile(r'\\b(successfully completed|completion of|final results?|fully subscribed|gjennomført|fullført|endelig resultat)\\b', re.I)),
-    ('open', re.compile(r'\\b(subscription period (?:starts|commences|opens)|offering period (?:starts|commences|opens)|subscriptions? (?:open|commence)|tegningsperioden (?:starter|åpner)|tegning åpner)\\b', re.I)),
-    ('approved', re.compile(r'\\b(approved by|resolved by|board has resolved|general meeting (?:approved|resolved)|vedtatt av|besluttet av)\\b', re.I)),
-    ('proposed', re.compile(r'\\b(proposed|intends? to (?:launch|carry out|conduct)|plans? to (?:launch|carry out|conduct)|foreslått|planlegger å|intensjon om)\\b', re.I)),
+    ('cancelled', (r'(?:cancellation|withdrawal) of (?:the )?{event}',
+                   r'{event} (?:has been |was |is )?(?:cancelled|canceled|withdrawn)',
+                   r'(?:avlyst|kansellert) {event}', r'{event} (?:er )?(?:avlyst|kansellert)')),
+    ('completed', (r'(?:successfully )?completed {event}',
+                   r'{event} (?:has been |was |is )?(?:successfully )?completed',
+                   r'(?:gjennomført|fullført) {event}', r'{event} (?:er )?(?:gjennomført|fullført)')),
+    ('open', (r'(?:subscription|offering) period (?:starts|commences|opens) (?:for|in) (?:the )?{event}',
+              r'{event}[: –-]+(?:subscription|offering) period (?:starts|commences|opens)',
+              r'tegningsperioden (?:starter|åpner) (?:i|for) {event}')),
+    ('approved', (r'{event} (?:has been |was |is )?approved by (?:the )?(?:board|general meeting)',
+                  r'(?:the )?(?:board|general meeting) (?:has )?approved (?:the )?{event}',
+                  r'{event} (?:er )?vedtatt av (?:styret|generalforsamlingen)')),
+    ('proposed', (r'proposed {event}', r'{event} proposed', r'foreslått {event}')),
 )
+
+
+def financing_evidence(title):
+    """Return a historical title assertion, never a current transaction state.
+
+    Only an entire affirmative title (optionally issuer-prefixed) is accepted.
+    Qualified, compound, negated and future statements remain unknown. This
+    intentionally trades recall for precision; full document parsing is separate.
+    """
+    text = re.sub(r'\s+', ' ', str(title or '')).strip()
+    mentions = [(kind, match) for kind, pattern in FINANCING_TYPES for match in pattern.finditer(text)]
+    kinds = {kind for kind, _ in mentions}
+    kind = next(iter(kinds)) if len(kinds) == 1 else 'other_financing'
+    result = {'financing_type': kind, 'lifecycle': 'unknown',
+              'evidence_scope': 'official_title', 'lifecycle_evidence': None,
+              'classification_version': 2, 'current_status': 'unknown'}
+    if len(mentions) != 1:
+        return result
+    # Strip only the verified issuer prefix in event_for; this helper also accepts
+    # bare titles. No arbitrary prefix stripping that could hide a qualification.
+    event_text = re.escape(mentions[0][1].group())
+    for status, templates in LIFECYCLE:
+        if any(re.fullmatch(template.format(event=event_text) + r'[.!]?', text, re.I)
+               for template in templates):
+            result.update(lifecycle=status, lifecycle_evidence=text)
+            break
+    return result
 
 
 def now():
@@ -152,11 +193,8 @@ def collect_profile(row, provider):
 
 
 def classify_financing(title):
-    """Classify explicit title evidence only; absence never implies a status."""
-    text = str(title or '')
-    financing_type = next((name for name, pattern in FINANCING_TYPES if pattern.search(text)), 'other_financing')
-    lifecycle = next((name for name, pattern in LIFECYCLE if pattern.search(text)), 'unknown')
-    return financing_type, lifecycle
+    evidence = financing_evidence(title)
+    return evidence['financing_type'], evidence['lifecycle']
 
 
 def event_for(item, identities, at):
@@ -168,11 +206,14 @@ def event_for(item, identities, at):
     except ValueError:return None
     if (len(matches)!=1 or item.get('official') is not True or u.scheme!='https' or
         u.hostname!='live.euronext.com' or u.username or not published or
-        not timedelta(0)<=at-published<=timedelta(days=180) or not FINANCING.search(title)):
+        not timedelta(0)<=at-published<=timedelta(days=180) or not (FINANCING.search(title) or any(p.search(title) for _, p in FINANCING_TYPES))):
         return None
-    # Lifecycle is asserted only when the official title contains explicit evidence.\n    financing_type, lifecycle = classify_financing(title)\n    return {'ticker':matches[0], 'identity':name, 'title':title, 'url':u.geturl(),
+    # Remove only an exact, already matched official issuer prefix.
+    evidence_title = re.sub(r'^' + re.escape(str(item.get('company'))) + r'\s*[:–—-]\s*', '', title, count=1, flags=re.I)
+    return {'ticker':matches[0], 'identity':name, 'title':title, 'url':u.geturl(),
             'published_at':published.isoformat(),'observed_at':at.isoformat(),
-            'kind':'financing_document','financing_type':financing_type,'lifecycle':lifecycle,\n            'status':'Les siste vilkår i originalmeldingen'}
+            'kind':'financing_document', **financing_evidence(evidence_title),
+            'status':'Historisk dokumentstatus; les siste vilkår i originalmeldingen'}
 
 
 def enrol_news_issuers(items, provider, at, limit=4):

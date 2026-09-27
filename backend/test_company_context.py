@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import sqlite3
+import pytest
 import company_context as cc
 AT=datetime(2026,9,25,15,tzinfo=timezone.utc)
 class Provider:
@@ -64,3 +65,55 @@ def test_event_exposes_evidence_status_without_claiming_more():
     assert row['lifecycle']=='completed'
     unknown=cc.event_for(event(title='Key information relating to rights issue'),{'techstep':['TECH']},AT)
     assert unknown['lifecycle']=='unknown'
+
+
+@pytest.mark.parametrize('title', [
+    'Private placement not completed',
+    'Private placement expected to be successfully completed',
+    'Proposed cancellation of rights issue',
+    'No cancellation of rights issue',
+    'Completion of private placement expected tomorrow',
+    'Completion of private placement',
+    'Final results of rights issue',
+    'Fully subscribed rights issue',
+    'Rights issue: subscription period opens tomorrow',
+    'Rights issue approved by board subject to shareholder approval',
+    'Prospectus for rights issue approved by regulator',
+    'Rights issue: cancellation of extraordinary general meeting',
+    'Successfully completed private placement and proposed subsequent offering',
+    'Successfully completed private placement and proposed private placement',
+    'Update on successfully completed private placement',
+    'Private placement completed subject to settlement',
+    'Refinancing: acquisition successfully completed',
+    'Rights issue cancelled?',
+])
+def test_qualified_unrelated_or_multiple_events_remain_unknown(title):
+    assert cc.classify_financing(title)[1] == 'unknown'
+
+
+@pytest.mark.parametrize('title,kind,status', [
+    ('Rights issue has been cancelled', 'rights_issue', 'cancelled'),
+    ('Private placement successfully completed', 'private_placement', 'completed'),
+    ('Rights issue approved by the general meeting', 'rights_issue', 'approved'),
+    ('The board has approved the rights issue', 'rights_issue', 'approved'),
+    ('Rights issue: subscription period commences', 'rights_issue', 'open'),
+    ('Gjennomført rettet emisjon', 'private_placement', 'completed'),
+    ('Foreslått reparasjonsemisjon', 'repair_offering', 'proposed'),
+    ('Proposed subsequent offering', 'subsequent_offering', 'proposed'),
+    ('Convertible bond update', 'convertible', 'unknown'),
+    ('Bridge financing update', 'debt_or_refinancing', 'unknown'),
+])
+def test_types_and_affirmative_templates(title, kind, status):
+    assert cc.classify_financing(title) == (kind, status)
+    row = cc.event_for(event(title=title), {'techstep':['TECH']}, AT)
+    assert row is not None
+    assert row['current_status'] == 'unknown'
+    assert row['lifecycle_evidence'] == (title if status != 'unknown' else None)
+
+
+def test_only_verified_issuer_prefix_can_be_removed():
+    row = cc.event_for(event(title='Techstep ASA: Successfully completed private placement'), {'techstep':['TECH']}, AT)
+    assert row['lifecycle'] == 'completed'
+    assert row['lifecycle_evidence'] == 'Successfully completed private placement'
+    row = cc.event_for(event(title='Expected: Successfully completed private placement'), {'techstep':['TECH']}, AT)
+    assert row['lifecycle'] == 'unknown'
