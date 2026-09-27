@@ -140,7 +140,15 @@ def universe():
     for ticker, matches in grouped.items():
         if len({norm(r['company']) for r in matches}) != 1:
             continue
-        out[ticker] = {**matches[0], 'ticker':ticker, 'identity':norm(matches[0]['company'])}
+        legal = [r['company'] for r in matches if re.search(r'\s(?:ASA|AS)$',r['company'],re.I)]
+        if len(set(v.casefold() for v in legal)) > 1:
+            continue
+        isins = {str(r.get('isin')).upper() for r in matches if re.fullmatch(r'[A-Z]{2}[A-Z0-9]{9}[0-9]',str(r.get('isin') or '').upper())}
+        out[ticker] = {**matches[0], 'ticker':ticker, 'identity':norm(matches[0]['company']),
+                       'legal_name':legal[0] if len(set(v.casefold() for v in legal))==1 else None,
+                       'isin':next(iter(isins)) if len(isins)==1 else None,
+                       'isin_listing_date':next((r.get('listing_date') for r in matches if r.get('isin') in isins),None) if len(isins)==1 else None,
+                       'isin_status':'documented' if len(isins)==1 else 'ambiguous' if isins else 'unknown'}
     return out
 
 
@@ -161,13 +169,19 @@ def project_financials(series, at):
     return out
 
 
-def collect_profile(row, provider):
+def collect_profile(row, provider, registry=None):
     """Separate failures preserve usable partial data; no unsafe derived multiples."""
     at = now()
     payload = {'company':row['company'],'ticker':row['ticker'],'sector':row.get('sector'),
                'description':None,'financials':[], 'source_url':'https://finance.yahoo.com/quote/'+row['ticker']+'.OL/',
-               'source':'Yahoo Finance', 'source_status':{}}
+               'source':'Yahoo Finance', 'source_status':{}, 'field_sources':{},
+               'isin':row.get('isin'),'isin_status':row.get('isin_status','unknown'),
+               'isin_listing_date':row.get('isin_listing_date'),
+               'isin_source_url':'https://live.euronext.com/en/markets/oslo/ipos' if row.get('isin') else None,
+               'isin_source':'Euronext Oslo listing registry' if row.get('isin') else None}
     symbol = row['ticker']+'.OL'
+    yahoo_verified = False
+    legal_name = row.get('legal_name') or row['company']
     try:
         data = provider._get(provider.BASE+'/v10/finance/quoteSummary/'+symbol,
                              {'modules':'assetProfile,price'},need_crumb=True)
@@ -176,6 +190,8 @@ def collect_profile(row, provider):
         # Require symbol and issuer identity; do not silently accept reused tickers.
         if price.get('symbol') != symbol or norm(price.get('longName') or price.get('shortName')) != row['identity']:
             raise ValueError('identity mismatch')
+        yahoo_verified = True
+        legal_name = price.get('longName') or legal_name
         profile = result.get('assetProfile') or {}
         payload.update(description=str(profile.get('longBusinessSummary') or '')[:5000] or None,
                        sector=profile.get('sector') or payload['sector'])
@@ -183,13 +199,55 @@ def collect_profile(row, provider):
     except Exception:
         payload['source_status']['description']='unavailable'
     try:
+        if not yahoo_verified:raise ValueError('issuer identity unverified')
         result = provider.fundamentals(row['ticker'])
         if result.get('symbol') != symbol:raise ValueError('symbol mismatch')
         payload['financials']=project_financials(result.get('series') or [],at)
         payload['source_status']['financials']='stored' if payload['financials'] else 'unavailable'
     except Exception:
         payload['source_status']['financials']='unavailable'
+    payload['yahoo_identity_verified']=yahoo_verified
+    for field in ('description','financials'):
+        payload['field_sources'][field]={'source':'Yahoo Finance','source_url':payload['source_url'],
+            'attempted_at':at.isoformat(),'captured_at':at.isoformat() if payload[field] else None,
+            'status':payload['source_status'][field]}
+    if registry is not None:
+        try:
+            official=registry(legal_name,at)
+            if official:
+                payload['registry']=official
+                if official.get('registered_activity'):
+                    payload['description']=official['registered_activity']
+                    payload['description_kind']='registered_activity'
+                    payload['source_status']['description']='stored'
+                    payload['field_sources']['description']={k:official.get(k) for k in ('source','source_url','license','captured_at','attempted_at','status')}
+            payload['source_status']['registry']='stored' if official else 'unavailable'
+        except Exception:
+            payload['source_status']['registry']='unavailable'
+    for fact in payload['financials']:
+        fact.update(source='Yahoo Finance',source_url=payload['source_url'],captured_at=at.isoformat())
     return payload
+
+
+def retain_profile_fields(data, old, at):
+    """Partial source failure must not erase independent previously captured facts."""
+    if not old:
+        return data
+    previous=json.loads(old['payload'])
+    for field in ('description','financials','registry'):
+        if field=='financials' and previous.get('yahoo_identity_verified') is not True:
+            continue
+        if not data.get(field) and previous.get(field):
+            data[field]=previous[field]
+            data['source_status'][field]='stale'
+            metadata=(previous.get('field_sources') or {}).get(field) or (previous.get('registry') if field=='registry' else None) or {
+                'source':previous.get('source'), 'source_url':previous.get('source_url'),
+                'captured_at':old.get('captured_at')}
+            data['field_sources'][field]={**metadata,'status':'stale','attempted_at':at.isoformat()}
+            if field=='description':data['description_kind']=previous.get('description_kind')
+            if field=='registry':data[field]={**data[field],'status':'stale','attempted_at':at.isoformat()}
+            if field=='financials':data['yahoo_identity_verified']=True
+    return data
 
 
 def classify_financing(title):
@@ -253,7 +311,7 @@ def enrol_news_issuers(items, provider, at, limit=4):
         if count>=limit:break
 
 
-def scan_once(provider=None, fetch_news=None, batch_size=4):
+def scan_once(provider=None, fetch_news=None, batch_size=4, registry=None):
     if not _LOCK.acquire(blocking=False):return {'status':'busy'}
     try:
         ensure_schema()
@@ -261,6 +319,8 @@ def scan_once(provider=None, fetch_news=None, batch_size=4):
         if provider is None:
             from providers import YahooProvider
             provider=YahooProvider()
+            from company_registry import collect_registry
+            registry=registry or collect_registry
         rows = universe()
         if fetch_news is None:
             from general_news_runtime import parse_general_euronext_html
@@ -293,13 +353,15 @@ def scan_once(provider=None, fetch_news=None, batch_size=4):
              at-(stamp(previous[t]['attempted_at']) or datetime.min.replace(tzinfo=timezone.utc))>=timedelta(hours=24)]
         due.sort(key=lambda r:previous.get(r['ticker'],{}).get('attempted_at',''))
         for row in due[:batch_size]:
-            data=collect_profile(row,provider)
-            usable=bool(data['description'] or data['financials'])
+            data=collect_profile(row,provider,registry)
+            usable=bool(data['description'] or data['financials'] or data.get('registry'))
             old=previous.get(row['ticker'],{})
             captured=at.isoformat() if usable else None
             status='partial' if usable else 'unavailable'
-            if not usable and old.get('identity')==row['identity'] and old.get('captured_at'):
-                data=json.loads(old['payload']);captured=old['captured_at'];status='stale'
+            if old.get('identity')==row['identity']:
+                data=retain_profile_fields(data,old,at)
+                if not usable and old.get('captured_at'):
+                    captured=old['captured_at'];status='stale'
             c=connect()
             try:
                 c.execute('INSERT INTO company_context_profiles(ticker,identity,payload,attempted_at,captured_at,status) VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET identity=excluded.identity,payload=excluded.payload,attempted_at=excluded.attempted_at,captured_at=excluded.captured_at,status=excluded.status',
@@ -317,6 +379,9 @@ def read_all():
     try:
         for row in c.execute('SELECT * FROM company_context_profiles').fetchall():
             r=dict(row);data=json.loads(r['payload']);captured=stamp(r['captured_at'])
+            if data.get('yahoo_identity_verified') is not True:
+                data['financials']=[]
+                data.setdefault('source_status',{})['financials']='identity_unverified'
             profiles[r['ticker']]={**data,'identity':r['identity'],'captured_at':r['captured_at'],
                 'attempted_at':r['attempted_at'],'status':'stale' if captured and at-captured>timedelta(days=2) else r['status']}
         for row in c.execute('SELECT payload FROM company_context_events ORDER BY observed_at DESC').fetchall():
