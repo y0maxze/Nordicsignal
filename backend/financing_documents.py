@@ -200,7 +200,7 @@ def collect(event, at, previous=None, fetch=None):
 
 def enrich_saved(connect, at, limit=2, fetch=None):
     import json
-    from company_context import stamp, financing_evidence
+    from company_context import stamp
     c = connect()
     try:
         rows = [dict(r) for r in c.execute('SELECT * FROM company_context_events').fetchall()]
@@ -217,12 +217,15 @@ def enrich_saved(connect, at, limit=2, fetch=None):
             due.append((row, event, old))
     due.sort(key=lambda entry: ((entry[2].get('attempted_at') or ''), entry[1].get('published_at') or ''))
     for row, event, old in due[:max(0, min(int(limit), 4))]:
-        event.update(financing_evidence(event['title']))
         event['document'] = collect(event, at, old, fetch)
         c = connect()
         try:
-            c.execute('UPDATE company_context_events SET payload=? WHERE event_key=? AND payload=?',
+            cursor = c.execute('UPDATE company_context_events SET payload=? WHERE event_key=? AND payload=?',
                       (json.dumps(event), row['event_key'], row['payload']))
+            if cursor.rowcount:
+                from company_evidence import record
+                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', json.loads(row['payload']), at)
+                record(c, row['event_key'], row['ticker'], row['identity'], 'financing_document', event, at)
             c.commit()
         finally:
             c.close()

@@ -38,3 +38,13 @@ test('registry activity and stale description keep separate financial provenance
  assert.match(d.window.document.body.textContent,/ISIN: Ukjent/);
  assert.equal(d.window.document.querySelectorAll('a').length,2);
 });
+
+test('history distinguishes recording from publication and escapes source titles',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,evidence_history:{status:'available',coverage:'Registreringstid er ikke publiseringstid.',truncated:true,entries:[{kind:'financing_document',revision:2,title:'<img src=x>',recorded_at:'2026-09-27T00:00:00Z',published_at:'2026-06-01T00:00:00Z',source_url:'javascript:alert(1)',changed_fields:['title','document']}]}});
+ assert.equal(d.window.document.querySelector('img'),null);assert.equal(d.window.document.querySelector('a'),null);
+ assert.match(d.window.document.body.textContent,/Endret lagret versjon 2/);
+ assert.match(d.window.document.body.textContent,/Dokument publisert/);
+ assert.match(d.window.document.body.textContent,/Eldre versjoner er bevart/);
+ assert.match(d.window.document.body.textContent,/Dokumentvilkår eller innhentingsstatus/);
+});
