@@ -76,6 +76,13 @@ def test_scripts_never_supply_facts_and_source_line_wrapping_is_preserved():
     assert 'net_proceeds' not in d['terms']
 
 
+def test_wrapped_qualifiers_cannot_be_lost_before_a_calculation():
+    lines=[x.replace('1,000,000','1,000,000<br>subject to final allocation') for x in TERMS]
+    d=fd.collect(EVENT,AT,fetch=lambda _:page(lines))
+    assert d['terms']['new_shares']['value'].endswith('subject to final allocation')
+    assert d['dilution']['status']=='unknown'
+
+
 @pytest.mark.parametrize('url', ['https://evil.test/en/node/123','https://live.euronext.com.evil.test/en/node/123','http://live.euronext.com/en/node/123','https://user:pass@live.euronext.com/en/node/123','https://live.euronext.com:444/en/node/123','https://live.euronext.com/en/node/123?redirect=evil','https://live.euronext.com/en/node/123#x','https://live.euronext.com/other'])
 def test_source_rejection_happens_before_network(url):
     calls=[]

@@ -112,11 +112,22 @@ def parse_terms(html, event):
     parser = PageText()
     parser.feed(html)
     found = {}
-    for line in parser.lines:
+    lines = parser.lines
+    for index, line in enumerate(lines):
         label, sep, value = line.partition(':')
         key = LABEL_MAP.get(label.strip().casefold())
         if key and sep:
-            found.setdefault(key, []).append((line, value.strip()))
+            # Line/paragraph wrapping must not discard a qualification after a
+            # number. Keep continuation text up to the next explicitly labelled
+            # field; too much prose will deliberately become unsupported below.
+            continuation = []
+            for following in lines[index + 1:]:
+                if ':' in following:
+                    break
+                continuation.append(following)
+            value = ' '.join([value.strip(), *continuation]).strip()
+            evidence = label + ': ' + value
+            found.setdefault(key, []).append((evidence, value))
     terms = {}
     for key, candidates in found.items():
         # Even duplicate values can refer to different tranches. Do not pick one.
