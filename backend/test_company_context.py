@@ -48,3 +48,19 @@ def test_news_issuer_resolution_requires_unique_exact_oslo_equity(tmp_path,monke
         def _get(self,*a,**k):return {'quotes':[{'symbol':'TECH.OL','quoteType':'EQUITY','longname':'Techstep ASA'}, {'symbol':'TECH.US','quoteType':'EQUITY','longname':'Techstep ASA'}]}
     cc.enrol_news_issuers([event()],Search(),AT)
     c=connect();assert c.execute('SELECT ticker FROM company_context_issuers').fetchone()[0]=='TECH';c.close()
+
+
+def test_financing_lifecycle_requires_explicit_title_evidence():
+    assert cc.classify_financing('Proposed private placement')[0:2] == ('private_placement','proposed')
+    assert cc.classify_financing('Successfully completed private placement')[0:2] == ('private_placement','completed')
+    assert cc.classify_financing('Cancellation of rights issue')[0:2] == ('rights_issue','cancelled')
+    assert cc.classify_financing('Subscription period opens for rights issue')[0:2] == ('rights_issue','open')
+    assert cc.classify_financing('Key information relating to rights issue')[0:2] == ('rights_issue','unknown')
+    assert cc.classify_financing('Refinancing update')[0:2] == ('debt_or_refinancing','unknown')
+
+def test_event_exposes_evidence_status_without_claiming_more():
+    row=cc.event_for(event(title='Successfully completed private placement'),{'techstep':['TECH']},AT)
+    assert row['financing_type']=='private_placement'
+    assert row['lifecycle']=='completed'
+    unknown=cc.event_for(event(title='Key information relating to rights issue'),{'techstep':['TECH']},AT)
+    assert unknown['lifecycle']=='unknown'
