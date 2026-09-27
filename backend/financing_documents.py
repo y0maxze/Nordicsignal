@@ -111,8 +111,11 @@ def parse_terms(html, event):
         return {}, 'unsupported_document'
     parser = PageText()
     parser.feed(html)
+    return parse_lines(parser.lines)
+
+
+def parse_lines(lines):
     found = {}
-    lines = parser.lines
     for index, line in enumerate(lines):
         label, sep, value = line.partition(':')
         key = LABEL_MAP.get(label.strip().casefold())
@@ -182,14 +185,19 @@ def collect(event, at, previous=None, fetch=None):
         result['status'] = 'unsupported_document'
         return result
     try:
-        if not source_allowed(event['url']):
-            raise ValueError('unverified source')
-        html = (fetch or fetch_document)(event['url'])
-        if not isinstance(html, str) or len(html.encode('utf-8')) > MAX_BYTES:
-            raise ValueError('invalid document')
-        terms, status = parse_terms(html, event)
+        if event.get('source_type')=='newsweb_oam':
+            from company_newsweb import document
+            terms,status,digest=document(event,fetch)
+        else:
+            if not source_allowed(event['url']):
+                raise ValueError('unverified source')
+            html = (fetch or fetch_document)(event['url'])
+            if not isinstance(html, str) or len(html.encode('utf-8')) > MAX_BYTES:
+                raise ValueError('invalid document')
+            terms, status = parse_terms(html, event)
+            digest=hashlib.sha256(html.encode('utf-8')).hexdigest()
         result.update(status=status, terms=terms, captured_at=at.isoformat(),
-                      content_sha256=hashlib.sha256(html.encode('utf-8')).hexdigest(),
+                      content_sha256=digest,
                       dilution=dilution(terms, event))
     except Exception:
         # Retain evidence only for the exact same immutable document identity.

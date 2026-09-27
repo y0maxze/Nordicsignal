@@ -113,3 +113,11 @@ test('older document pages are lazy, retryable and deduplicated',async()=>{
  assert.equal(root.querySelectorAll('.financingDocument').length,2);assert.equal(button.hidden,true);assert.equal(root.querySelector('img'),null);
  assert.match(root.querySelector('[data-financing-count]').textContent,/Full historisk dekning er ikke bekreftet/);
 });
+
+test('archive gaps and explicit source corrections remain visible',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_coverage:{historical_backfill:'partial',queried_days:5,failed_days:2,truncated_days:1},financing_documents:[{corrected_by_message_id:456,document:{status:'partial'}}]});
+ assert.match(d.window.document.body.textContent,/5 undersøkte kalenderdager for markedet · 2 feilede · 1 avkortede/);
+ assert.match(d.window.document.body.textContent,/Kilden markerer dokumentet som korrigert/);
+ assert.equal(d.window.document.querySelector('a').href,'https://newsweb.oslobors.no/message/456');
+});

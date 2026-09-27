@@ -16,6 +16,8 @@ def enqueue():
     def run():
         try:
             context.scan_once()
+            from company_newsweb import scan as scan_newsweb
+            scan_newsweb(context.connect,context.universe(),context.now())
             from financing_documents import enrich_saved
             enrich_saved(context.connect, context.now())
         except Exception:log.exception('Company context background batch failed')
