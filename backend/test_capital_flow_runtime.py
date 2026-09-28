@@ -93,7 +93,9 @@ def test_capital_flow_product_contract_is_wired_everywhere():
     assert "mobile_learning_nav.js" not in worker
     assert 'data-state="NEW"' in page and 'data-state="HISTORICAL"' in page
     assert '/api/capital-flow?' in client
-    assert "Push til telefonen er ikke aktivert" in alerts  # no unsupported filter or delivery claim
+    assert "Signalhistorikken nedenfor er ikke en kvittering for leverte push-varsler" in alerts
+    assert "Push til telefonen er ikke aktivert i denne versjonen" not in alerts
+    assert "Nye abonnementer og testpush kan ikke sendes" in alerts
     assert 'capital_flow_runtime' in sitecustomize
     assert 'capital_flow_push_bridge_runtime' in sitecustomize
 

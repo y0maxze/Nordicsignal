@@ -6,7 +6,15 @@ body{margin:0}.alertPage{max-width:900px;margin:auto;padding:24px 16px calc(110p
 </head><body><main class="alertPage">
 <header class="top"><h1>Varsler</h1></header>
 <p class="muted">Siste registrerte signalhendelser: scoreendringer, trend/aktivitet og Opportunity. Hendelsene er historikk, ikke nødvendigvis aktive kjøpssignaler.</p>
-<div class="notice">Push til telefonen er ikke aktivert i denne versjonen. Dette er signaloversikten i appen, ikke en kvittering for leverte push-varsler.</div>
+<section class="notice" aria-labelledby="pushHeading">
+<h2 id="pushHeading">Push på denne enheten</h2>
+<p id="pushPermission" role="status">Varseltillatelse: kontrollerer…</p>
+<p id="pushSubscription">Nettleserabonnement: kontrollerer…</p>
+<p id="pushServer">Push-tjeneste: kontrollerer…</p>
+<p class="muted">Et nettleserabonnement bekrefter ikke at serveren fortsatt har registreringen eller at varsler blir levert. Nye abonnementer og testpush kan ikke sendes gjennom dagens tilgangsoppsett. Eksisterende abonnementer kan fortsatt motta varsler.</p>
+<button id="refreshPushStatus" class="btn" type="button">Kontroller push-status</button>
+</section>
+<p class="muted">Signalhistorikken nedenfor er ikke en kvittering for leverte push-varsler.</p>
 <div class="toolbar"><span id="summary" role="status">Laster…</span><button id="refreshAlerts" class="btn" type="button">Oppdater</button></div>
 <section id="alertList" class="alertList" aria-label="Signalhendelser"></section>
 </main><script src="/ui_shell.js"></script><script src="/alerts.js"></script><script src="/finance_shell.js"></script></body></html>

@@ -185,15 +185,14 @@ def stocks():
 
 @app.get("/api/stocks/{ticker}")
 def stock(ticker: str):
-    conn = connect(); r = conn.execute("SELECT s.ticker,s.name,s.sector,sc.fundamentals,sc.insider,sc.valuation,sc.sentiment,sc.total,sc.created_at,COALESCE(sc.source,'stored') source FROM stocks s JOIN scores sc ON sc.ticker=s.ticker WHERE s.ticker=? ORDER BY sc.id DESC LIMIT 1", (ticker.upper(),)).fetchone(); conn.close()
-    if not r: return {"error": "Ticker not found"}
-    return {"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "score": r["total"], "fundamentals": r["fundamentals"], "insider": r["insider"] if r["source"] == "live" else None, "valuation": r["valuation"], "sentiment": r["sentiment"], "signal": signal_label(r["total"]), "score_source": r["source"], "live_verified": r["source"] == "live", "partial_live": r["source"] == "partial_live", "score_updated_at": r["created_at"]}
+    from company_context import universe
+    from stock_page_data import stock_summary
+    return stock_summary(ticker, connect, universe)
 
 @app.get("/api/quote/{ticker}")
 def quote(ticker: str):
-    try:
-        data = provider.quote(ticker); conn = connect(); conn.execute("INSERT INTO quotes(ticker,price,change_pct,volume,captured_at) VALUES(?,?,?,?,?)", (ticker.upper(), data.get("price"), data.get("change_pct"), data.get("volume"), data.get("captured_at") or datetime.now(timezone.utc).isoformat())); conn.commit(); conn.close(); return data
-    except Exception as exc: return {"ticker": ticker.upper(), "source": "unavailable", "error": str(exc)}
+    from stock_page_data import quote_result
+    return quote_result(ticker, provider, connect)
 
 @app.get("/api/history/{ticker}")
 def history(ticker: str, period: str = "1y"):
