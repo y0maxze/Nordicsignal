@@ -153,3 +153,80 @@ def test_old_parser_evidence_is_withheld_and_not_retained_after_failure():
     def down(url): raise RuntimeError('unavailable')
     result=fd.collect(EVENT,AT,old,down)
     assert result['version']==fd.VERSION and result['terms']=={} and not result['captured_at']
+
+
+NORWEGIAN_TITLE = 'Nøkkelinformasjon ved fortrinnsrettsemisjon – oppdatert'
+
+
+def test_norwegian_official_template_preserves_distinct_terms_without_calculation():
+    # Synthetic values; field labels follow Euronext notice 4.3.5.2A.
+    lines = [
+        'Dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert: 2 desember 2023',
+        'Siste dag inklusive: 23 desember 2023',
+        'Ex-dato: 27 desember 2024',
+        'Record date (eierregisterdato): 30 desember 2024',
+        'Vedtaksdato: 23 desember 2024',
+        'Maksimalt antall nye aksjer: 2 000 000',
+        'Tegningskurs: NOK 0,015',
+        'Tildelingsforhold: 2,5 fortrinnsretter per gammel aksje',
+        'avrundet ned til nærmeste hele tegningsrett',
+        'Tegningsforhold: 1:1 (antall nye aksjer per tegningsrett)',
+        'Tilrettelegger: Eksempel ASA',
+        'Oppgjørsagent: Annet Eksempel ASA',
+        'Skal rettene noteres ja/nei: Selskapet vil søke om notering',
+        'ISIN på fortrinnsrettene: Vil annonseres',
+        'Tegningsperiode: Forventet 5.–19. januar 2025',
+        'Tegningsfrist: 19. januar 2025 kl. 16:30',
+        'Øvrig informasjon (valgfritt): Betinget av generalforsamlingens godkjennelse',
+    ]
+    event = {**EVENT, 'title': NORWEGIAN_TITLE}
+    html = page(lines, title=NORWEGIAN_TITLE).replace('<h3>Issuer</h3>', '<h3>Utsteder</h3>')
+    d = fd.collect(event, AT, fetch=lambda _: html)
+    terms = d['terms']
+    assert d['status'] == 'partial'
+    assert terms['subscription_price']['value'] == 'NOK 0,015'
+    assert terms['maximum_new_shares']['value'] == '2 000 000'
+    assert 'new_shares' not in terms and d['dilution']['status'] == 'unknown'
+    assert terms['allocation_ratio']['value'].endswith('avrundet ned til nærmeste hele tegningsrett')
+    assert terms['subscription_ratio']['value'] == '1:1 (antall nye aksjer per tegningsrett)'
+    assert 'subscription_rights' not in terms
+    assert terms['arranger']['value'] == 'Eksempel ASA'
+    assert terms['settlement_agent']['value'] == 'Annet Eksempel ASA'
+    assert terms['rights_isin']['value'] == 'Vil annonseres'
+    assert terms['rights_listing']['value'] == 'Selskapet vil søke om notering'
+    assert terms['announcement_date']['value'].endswith('2023')  # Do not repair source dates.
+    assert terms['ex_date']['value'].endswith('2024')
+    assert terms['subscription_deadline']['value'].endswith('16:30')
+    assert 'Betinget' in terms['additional_information']['evidence']
+    assert 'lifecycle' not in d
+
+
+@pytest.mark.parametrize('title', [
+    'Nøkkelinformasjon ved fortrinnsrettsemisjon og rettet emisjon',
+    'Fortrinnsrettsemisjon',
+    'Nøkkelinformasjon ved utbytte',
+])
+def test_norwegian_title_gate_rejects_compound_and_unsupported_notices(title):
+    assert not fd.supported_title(title)
+    calls = []
+    assert fd.collect({**EVENT, 'title': title}, AT, fetch=lambda u: calls.append(u))['status'] == 'unsupported_document'
+    assert not calls
+
+
+def test_norwegian_alias_duplicates_are_ambiguous_and_conflicting_issuers_fail():
+    event = {**EVENT, 'title': NORWEGIAN_TITLE}
+    html = page(['Tegningskurs: NOK 1', 'Subscription price: NOK 1'], title=NORWEGIAN_TITLE)
+    assert fd.collect(event, AT, fetch=lambda _: html)['terms']['subscription_price']['status'] == 'ambiguous'
+    html += '<h3>Utsteder</h3><p>Other ASA</p>'
+    assert fd.collect(event, AT, fetch=lambda _: html)['status'] == 'unavailable'
+
+
+def test_parser_v2_is_withheld_until_revalidated_and_failure_does_not_resurrect_it():
+    old = {'version': 2, 'captured_at': AT.isoformat(), 'source_url': EVENT['url'],
+           'published_at': EVENT['published_at'], 'terms': {'subscription_price': {'value': 'NOK 1'}}}
+    assert fd.public_document(old)['status'] == 'revalidation_required'
+    assert fd.public_document(old)['terms'] == {}
+    def fail(_):
+        raise ValueError('unavailable')
+    result = fd.collect(EVENT, AT, previous=old, fetch=fail)
+    assert result['status'] == 'unavailable' and result['terms'] == {}
