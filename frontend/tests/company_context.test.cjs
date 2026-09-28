@@ -134,3 +134,14 @@ test('archive attempts do not masquerade as successful capture or issuer coverag
  assert.match(text,/Tidligere dokumenter beholdes ved kildefeil/);
  assert.doesNotMatch(text,/Invalid Date|null|undefined/);
 });
+
+test('Norwegian terms distinguish ratios, retain source uncertainty and escape evidence',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const fact=(value)=>({status:'documented',value,evidence:'Kilde: '+value});
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{status:'partial',terms:{allocation_ratio:fact('2,5 rettigheter per gammel aksje'),subscription_ratio:fact('1:1'),rights_isin:fact('Vil annonseres'),additional_information:fact('Betinget av godkjennelse <img src=x>'),maximum_new_shares:fact('2 000 000')}}}]});
+ const t=d.window.document.body.textContent;
+ assert.match(t,/Tildelingsforhold \(rettigheter per gammel aksje\)/);
+ assert.match(t,/Tegningsforhold \(ordrett\)1:1/);
+ assert.match(t,/Vil annonseres/);assert.match(t,/Betinget av godkjennelse/);
+ assert.match(t,/Utvanning: Ukjent/);assert.equal(d.window.document.querySelector('img'),null);
+});

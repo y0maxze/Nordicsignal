@@ -38,7 +38,8 @@ def test_repeated_capture_deduplicates_but_reversal_is_preserved(db):
 def test_source_correction_invalidates_terms_and_keeps_previous_version(db):
     c = db()
     first = cc.event_for(event(), {'techstep':['TECH']}, AT)
-    first['document'] = {'version':2,'terms': {'subscription_price': {'value':'NOK 2'}}}
+    from financing_documents import VERSION
+    first['document'] = {'version':VERSION,'terms': {'subscription_price': {'value':'NOK 2'}}}
     cc.save_event(c, first, AT)
     # Same feed evidence retains terms and adds no new version.
     cc.save_event(c, cc.event_for(event(), {'techstep':['TECH']}, AT), AT)

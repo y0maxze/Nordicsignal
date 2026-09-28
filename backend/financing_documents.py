@@ -1,6 +1,6 @@
 """Bounded official-document evidence. No model, push or per-GET network work.
 
-Version 2 deliberately handles English labelled key-information notices only.
+Version 3 handles English and Norwegian labelled key-information notices.
 It preserves the original field text, including qualifications; unstructured prose,
 conflicting labels and multi-offering titles are not reconciled automatically.
 """
@@ -11,23 +11,35 @@ from urllib.parse import urlsplit
 import hashlib
 import re
 
-VERSION = 2
+VERSION = 3
 MAX_BYTES = 1_000_000
 LABELS = {
-    'subscription_price': ('subscription price',),
+    'subscription_price': ('subscription price', 'tegningskurs'),
     'new_shares': ('number of new shares', 'number of new shares in the rights issue'),
-    'maximum_new_shares': ('maximum number of new shares', 'maximum number of new shares to be issued in the rights issue'),
+    'maximum_new_shares': ('maximum number of new shares', 'maximum number of new shares to be issued in the rights issue', 'maksimalt antall nye aksjer', 'maksimum antall nye aksjer'),
     'existing_shares': ('number of existing shares before the rights issue',),
     'share_class': ('class of existing and new shares',),
     'gross_proceeds': ('gross proceeds',),
     'net_proceeds': ('net proceeds',),
-    'subscription_period': ('subscription period',),
-    'subscription_deadline': ('subscription deadline',),
-    'ex_date': ('ex-date',),
-    'record_date': ('record date',),
+    'subscription_period': ('subscription period', 'tegningsperiode'),
+    'subscription_deadline': ('subscription deadline', 'tegningsfrist'),
+    'ex_date': ('ex-date', 'ex-dato'),
+    'record_date': ('record date', 'record date (eierregisterdato)'),
     'settlement_date': ('settlement date',),
     'delivery_date': ('delivery date',),
     'subscription_rights': ('ratio subscription rights', 'ratio preferential rights', 'subscription ratio'),
+    # The official Norwegian template distinguishes rights per old share from
+    # new shares per right. Preserve both verbatim; never invert a ratio.
+    'allocation_ratio': ('tildelingsforhold',),
+    'subscription_ratio': ('tegningsforhold',),
+    'announcement_date': ('dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert',),
+    'last_day_including': ('siste dag inklusive',),
+    'decision_date': ('vedtaksdato',),
+    'rights_listing': ('skal rettene notere ja/nei', 'skal rettene noteres ja/nei'),
+    'rights_isin': ('isin på fortrinnsrettene', 'isin for fortrinnsrettene'),
+    'arranger': ('tilrettelegger',),
+    'settlement_agent': ('oppgjørsagent',),
+    'additional_information': ('øvrig informasjon (valgfritt)', 'øvrig informasjon'),
     'eligibility': ('eligible shareholders', 'who may subscribe'),
     'primary_secondary': ('primary and secondary shares',),
     'use_of_proceeds': ('use of proceeds',),
@@ -98,16 +110,15 @@ def fetch_document(url):
 
 
 def parse_terms(html, event):
-    from company_context import norm, FINANCING_TYPES
+    from company_context import norm
     titles = re.findall(r'<h1\b[^>]*>(.*?)</h1>', html, re.I | re.S)
     if len(titles) != 1 or _text(titles[0]).casefold() != ' '.join(event['title'].split()).casefold():
         raise ValueError('document title mismatch')
-    issuers = re.findall(r'<h3\b[^>]*>\s*(?:Issuer|Company Name)\s*</h3>\s*<p\b[^>]*>(.*?)</p>', html, re.I | re.S)
+    issuers = re.findall(r'<h3\b[^>]*>\s*(?:Issuer|Utsteder|Company Name)\s*</h3>\s*<p\b[^>]*>(.*?)</p>', html, re.I | re.S)
     if not issuers or {norm(_text(v)) for v in issuers} != {event['identity']}:
         raise ValueError('document issuer mismatch')
     # Only labelled key-information documents with one financing type are supported.
-    kinds = {kind for kind, pattern in FINANCING_TYPES if pattern.search(event['title'])}
-    if len(kinds) != 1 or not re.search(r'\bkey information\b', event['title'], re.I):
+    if not supported_title(event['title']):
         return {}, 'unsupported_document'
     parser = PageText()
     parser.feed(html)
@@ -177,7 +188,7 @@ def dilution(terms, event):
 def supported_title(title):
     from company_context import FINANCING_TYPES
     kinds = {kind for kind, pattern in FINANCING_TYPES if pattern.search(title)}
-    return len(kinds) == 1 and bool(re.search(r'\bkey information\b', title, re.I))
+    return len(kinds) == 1 and bool(re.search(r'\b(?:key information|nøkkelinformasjon)\b', title, re.I))
 
 
 def collect(event, at, previous=None, fetch=None):
