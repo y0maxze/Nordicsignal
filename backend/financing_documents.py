@@ -1,6 +1,6 @@
 """Bounded official-document evidence. No model, push or per-GET network work.
 
-Version 3 handles English and Norwegian labelled key-information notices.
+Version 4 handles English and Norwegian labelled key-information notices.
 It preserves the original field text, including qualifications; unstructured prose,
 conflicting labels and multi-offering titles are not reconciled automatically.
 """
@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import hashlib
 import re
 
-VERSION = 3
+VERSION = 4
 MAX_BYTES = 1_000_000
 LABELS = {
     'subscription_price': ('subscription price', 'tegningskurs'),
@@ -27,19 +27,20 @@ LABELS = {
     'record_date': ('record date', 'record date (eierregisterdato)'),
     'settlement_date': ('settlement date',),
     'delivery_date': ('delivery date',),
-    'subscription_rights': ('ratio subscription rights', 'ratio preferential rights', 'subscription ratio'),
+    'subscription_rights': ('ratio subscription rights',),
     # The official Norwegian template distinguishes rights per old share from
     # new shares per right. Preserve both verbatim; never invert a ratio.
-    'allocation_ratio': ('tildelingsforhold',),
-    'subscription_ratio': ('tegningsforhold',),
-    'announcement_date': ('dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert',),
-    'last_day_including': ('siste dag inklusive',),
-    'decision_date': ('vedtaksdato',),
-    'rights_listing': ('skal rettene notere ja/nei', 'skal rettene noteres ja/nei'),
-    'rights_isin': ('isin på fortrinnsrettene', 'isin for fortrinnsrettene'),
-    'arranger': ('tilrettelegger',),
+    'allocation_ratio': ('tildelingsforhold', 'ratio preferential rights'),
+    'subscription_ratio': ('tegningsforhold', 'subscription ratio'),
+    'announcement_date': ('dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert', 'date on which the terms and conditions of the preferential rights issue were announced', 'date on which the terms and conditions of the subsequent offering were announced'),
+    'last_day_including': ('siste dag inklusive', 'last day of trading in the shares including subscription rights', 'last day including right to receive subscription rights', 'last day including rights', 'last day including right'),
+    'decision_date': ('vedtaksdato', 'date of approval'),
+    'expected_decision_date': ('expected date of approval',),
+    'rights_listing': ('skal rettene notere ja/nei', 'skal rettene noteres ja/nei', 'will the rights be listed', 'shall the rights be listed'),
+    'rights_isin': ('isin på fortrinnsrettene', 'isin for fortrinnsrettene', 'isin for the preferential rights'),
+    'arranger': ('tilrettelegger', 'manager'),
     'settlement_agent': ('oppgjørsagent',),
-    'additional_information': ('øvrig informasjon (valgfritt)', 'øvrig informasjon'),
+    'additional_information': ('øvrig informasjon (valgfritt)', 'øvrig informasjon', 'other information'),
     'eligibility': ('eligible shareholders', 'who may subscribe'),
     'primary_secondary': ('primary and secondary shares',),
     'use_of_proceeds': ('use of proceeds',),
@@ -125,24 +126,42 @@ def parse_terms(html, event):
     return parse_lines(parser.lines)
 
 
+def _field_at(lines, index):
+    """Exact labels only, with one list marker and at most three wrapped lines.
+
+    Unknown colon-bearing text is never a field boundary: it can qualify the
+    preceding number. Keep the source label, including any bullet, as evidence.
+    """
+    parts = []
+    for end in range(index, min(index + 3, len(lines))):
+        parts.append(lines[end].strip())
+        label, sep, value = ' '.join(parts).partition(':')
+        if sep:
+            lookup = re.sub(r'^[-*•]\s+', '', label).strip().casefold()
+            key = LABEL_MAP.get(lookup)
+            return (key, label, value, end + 1) if key else None
+    return None
+
+
 def parse_lines(lines):
     found = {}
-    for index, line in enumerate(lines):
-        label, sep, value = line.partition(':')
-        key = LABEL_MAP.get(label.strip().casefold())
-        if key and sep:
-            # Line/paragraph wrapping must not discard a qualification after a
-            # number. Keep continuation text up to the next explicitly labelled
-            # field; too much prose will deliberately become unsupported below.
-            continuation = []
-            for following in lines[index + 1:]:
-                following_label, following_sep, _ = following.partition(':')
-                if following_sep and following_label.strip().casefold() in LABEL_MAP:
-                    break
-                continuation.append(following)
-            value = ' '.join([value.strip(), *continuation]).strip()
-            evidence = label + ': ' + value
-            found.setdefault(key, []).append((evidence, value))
+    index = 0
+    while index < len(lines):
+        field = _field_at(lines, index)
+        if not field:
+            index += 1
+            continue
+        key, label, value, following_index = field
+        # Do not stop at an arbitrary heading/blank line or discard trailing
+        # prose: it may contain the offer's conditions, not just a footer.
+        continuation = []
+        while following_index < len(lines) and not _field_at(lines, following_index):
+            continuation.append(lines[following_index])
+            following_index += 1
+        value = ' '.join([value.strip(), *continuation]).strip()
+        evidence = label + ': ' + value
+        found.setdefault(key, []).append((evidence, value))
+        index = following_index
     terms = {}
     for key, candidates in found.items():
         # Even duplicate values can refer to different tranches. Do not pick one.

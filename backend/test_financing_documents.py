@@ -230,3 +230,76 @@ def test_parser_v2_is_withheld_until_revalidated_and_failure_does_not_resurrect_
         raise ValueError('unavailable')
     result = fd.collect(EVENT, AT, previous=old, fetch=fail)
     assert result['status'] == 'unavailable' and result['terms'] == {}
+
+
+@pytest.mark.parametrize('bullet', ['- ', '* ', '• '])
+def test_bulleted_wrapped_official_labels_keep_values_conditions_and_evidence(bullet):
+    lines = [
+        bullet + 'Date on which the terms and conditions of the Subsequent Offering were',
+        'announced: 2 June 2026',
+        bullet + 'Last day including rights: 1 June 2026',
+        bullet + 'Ex-date: 2 June 2026',
+        bullet + 'Record date: 3 June 2026',
+        bullet + 'Expected date of approval: Subject to a final board resolution',
+        'and publication of a prospectus',
+        bullet + 'Maximum number of new shares: 500,000',
+        bullet + 'Subscription price: NOK 1',
+        'Any offer remains conditional; the board may decide not to proceed.',
+    ]
+    terms, status = fd.parse_lines(lines)
+    assert status == 'partial'
+    assert terms['announcement_date']['value'] == '2 June 2026'
+    assert terms['announcement_date']['evidence'].startswith(bullet)
+    assert terms['record_date']['value'] == '3 June 2026'
+    assert terms['expected_decision_date']['value'].endswith('publication of a prospectus')
+    assert terms['subscription_price']['value'].endswith('may decide not to proceed.')
+    assert terms['maximum_new_shares']['value'] == '500,000'
+    assert fd.dilution(terms, EVENT)['status'] == 'unknown'
+
+
+def test_live_english_rights_ratios_and_decision_dates_remain_distinct():
+    terms, _ = fd.parse_lines([
+        'Record Date: 3 June 2026', 'Date of approval: 1 June 2026',
+        'Ratio preferential rights: Approximately 2.5 per existing share',
+        'rounded down to whole rights', 'Subscription ratio: 1:1',
+        'Manager: Example Bank', 'Will the rights be listed: Application planned',
+        'ISIN for the preferential rights: To be announced',
+        'Other information: Subject to shareholder approval',
+    ])
+    assert terms['record_date']['value'] == '3 June 2026'
+    assert terms['decision_date']['value'] == '1 June 2026'
+    assert terms['allocation_ratio']['value'].endswith('rounded down to whole rights')
+    assert terms['subscription_ratio']['value'] == '1:1'
+    assert terms['additional_information']['value'] == 'Subject to shareholder approval'
+    assert all(t['status'] == 'documented' for t in terms.values())
+
+
+def test_bullets_do_not_strip_unknown_qualifications_or_hide_duplicate_labels():
+    lines = ['Number of new shares in the rights issue: 1000',
+             '- Condition: subject to allocation',
+             'Number of existing shares before the rights issue: 4000',
+             'Class of existing and new shares: Ordinary shares']
+    terms, _ = fd.parse_lines(lines)
+    assert '- Condition: subject to allocation' in terms['new_shares']['value']
+    assert fd.dilution(terms, EVENT)['status'] == 'unknown'
+    terms, _ = fd.parse_lines(['* Subscription price: NOK 1', '- Subscription price: NOK 1'])
+    assert terms['subscription_price']['status'] == 'ambiguous'
+    terms, _ = fd.parse_lines(['Not Subscription price: NOK 1', '** Subscription price: NOK 1'])
+    assert terms == {}
+
+
+def test_v3_extraction_waits_for_new_parser_without_mutating_stored_evidence():
+    old = {'version': 3, 'terms': {'record_date': {'value': 'date mixed with approval date'}}}
+    public = fd.public_document(old)
+    assert public['status'] == 'revalidation_required' and public['terms'] == {}
+    assert old['terms']
+
+
+def test_singular_right_and_shall_listing_aliases_do_not_pollute_nearby_values():
+    terms, _ = fd.parse_lines(['Date on which the terms and conditions of the Subsequent Offering were',
+                              'announced: 1 June 2026', 'Last day including right: 2 June 2026',
+                              'Subscription price: NOK 2 per share', 'Shall the rights be listed: No',
+                              'Other information: Subject to a prospectus'])
+    assert terms['announcement_date']['value'] == '1 June 2026'
+    assert terms['subscription_price']['value'] == 'NOK 2 per share'
+    assert terms['rights_listing']['value'] == 'No'
