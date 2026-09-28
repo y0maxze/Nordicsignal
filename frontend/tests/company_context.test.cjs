@@ -145,3 +145,11 @@ test('Norwegian terms distinguish ratios, retain source uncertainty and escape e
  assert.match(t,/Vil annonseres/);assert.match(t,/Betinget av godkjennelse/);
  assert.match(t,/Utvanning: Ukjent/);assert.equal(d.window.document.querySelector('img'),null);
 });
+
+test('expected approval is shown as conditional evidence without confirming lifecycle',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{lifecycle:'unknown',document:{status:'partial',terms:{expected_decision_date:{status:'documented',value:'Subject to board approval during Q3',evidence:'Expected date of approval: Subject to board approval during Q3'}}}}]});
+ const t=d.window.document.body.textContent;
+ assert.match(t,/Forventet vedtaksdato \/ forbehold/);
+ assert.match(t,/Subject to board approval/);assert.match(t,/Dokumentstatus: Ukjent/);
+});
