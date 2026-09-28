@@ -102,18 +102,26 @@ def scan(connect, universe, at, fetch=None, clock=None):
     c=connect()
     try: previous={r['day']:dict(r) for r in c.execute('SELECT * FROM company_newsweb_windows').fetchall()}
     finally:c.close()
-    target=None
+    candidates=[]
     for offset in range(LOOKBACK_DAYS):
         day=(today-timedelta(days=offset)).isoformat(); old=previous.get(day,{})
         last=stamp(old.get('attempted_at')); state=json.loads(old.get('payload') or '{}')
         lease=stamp(old.get('lease_until'))
-        if (not last or (not state and (not lease or lease<=at))
-            or (old.get('token') and lease and lease<=at)
-            or (offset>0 and state.get('open_day') is True)
-            or (offset==0 and at-last>=timedelta(hours=1))
-            or (state.get('status') in {'unavailable','truncated'} and at-last>=timedelta(days=1))):
-            target=day;break
-    if not target:return {'status':'idle'}
+        if lease and lease>at:continue
+        elapsed=at-last if last else None
+        priority=None
+        if offset==0 and (not last or elapsed>=timedelta(hours=1)):priority=0
+        elif old.get('token') or (last and not state):priority=1
+        elif offset>0 and state.get('open_day') is True:priority=1
+        elif offset<=7 and last and elapsed>=timedelta(days=1):priority=1
+        elif not last:priority=2
+        elif state.get('status') in {'unavailable','truncated'} and elapsed>=timedelta(days=1):priority=3
+        elif elapsed>=timedelta(days=30):priority=3
+        if priority is not None:candidates.append((priority,last.isoformat() if last else '',offset,day))
+    if not candidates:return {'status':'idle'}
+    # New days newest first; revisits oldest attempt first. One request per batch.
+    candidates.sort()
+    target=candidates[0][3]
     token=uuid.uuid4().hex;c=connect()
     try:
         c.execute('INSERT INTO company_newsweb_windows(day) VALUES(?) ON CONFLICT(day) DO NOTHING',(target,))
@@ -124,6 +132,8 @@ def scan(connect, universe, at, fetch=None, clock=None):
     if not claimed:return {'status':'busy'}
     events=[];state={'status':'unavailable','day':target,'open_day':target==today.isoformat(),
                      'matched':0,'source_count':None,'overflow':None}
+    previous_state=json.loads(previous.get(target,{}).get('payload') or '{}')
+    state['last_success_at']=previous_state.get('last_success_at')
     try:
         data=(fetch or request)('list',{'fromDate':target,'toDate':target})
         rows=data.get('messages');overflow=data.get('overflow')
@@ -140,7 +150,9 @@ def scan(connect, universe, at, fetch=None, clock=None):
                      matched=len(events),rejected_dates=rejected)
     except Exception:
         pass  # Retain an explicit failed window, never claim an empty result.
-    finished=clock();c=connect()
+    finished=clock()
+    if state['status'] in {'partial','truncated'}:state['last_success_at']=finished.isoformat()
+    c=connect()
     try:
         cursor=c.execute('UPDATE company_newsweb_windows SET token=NULL,lease_until=NULL,payload=? WHERE day=? AND token=? AND lease_until>?',
                          (json.dumps(state),target,token,finished.isoformat()))
@@ -166,4 +178,6 @@ def coverage(connect):
             'oldest_queried_day':rows[0]['day'] if rows else None,
             'newest_queried_day':rows[-1]['day'] if rows else None,
             'attempted_at':max((r['attempted_at'] for r in rows),default=None),
+            'captured_at':max((v['last_success_at'] for v in values if v.get('last_success_at')),default=None),
+            'revalidation_policy':'Recent 7 days daily; older days after 30 days when initial backfill permits. Partial coverage only.',
             'identity_policy':'Ticker, issuer name and title prefix must agree; renamed historical issuers may be omitted.'}

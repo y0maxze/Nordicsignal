@@ -123,3 +123,14 @@ test('archive gaps and explicit source corrections remain visible',()=>{
  assert.match(d.window.document.body.textContent,/denne meldingen korrigerer/);
  assert.equal(d.window.document.querySelectorAll('a')[1].href,'https://newsweb.oslobors.no/message/123');
 });
+
+test('archive attempts do not masquerade as successful capture or issuer coverage',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_coverage:{historical_backfill:'partial',attempted_at:'2026-09-28T12:00:00Z',captured_at:null,failed_days:1}});
+ const text=d.window.document.body.textContent;
+ assert.match(text,/Siste forsøk:/);
+ assert.match(text,/Siste vellykkede arkivinnhenting:/);
+ assert.match(text,/ikke full dekning for dette selskapet/);
+ assert.match(text,/Tidligere dokumenter beholdes ved kildefeil/);
+ assert.doesNotMatch(text,/Invalid Date|null|undefined/);
+});
