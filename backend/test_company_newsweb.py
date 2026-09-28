@@ -105,3 +105,60 @@ def test_previous_open_day_is_finalised_after_midnight(db):
     assert yesterday['day']==AT.date().isoformat() and yesterday['open_day'] is False
     older=nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
     assert older['day']==(AT-timedelta(days=1)).date().isoformat()
+
+
+def test_recent_closed_day_revisited_and_correction_persisted(db):
+    empty=lambda *a:{'messages':[],'overflow':False}
+    nw.scan(db,UNIVERSE,AT,lambda *a:{'messages':[raw()],'overflow':False},clock=lambda:AT)
+    later=AT+timedelta(days=1)
+    nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
+    nw.scan(db,UNIVERSE,later,empty,clock=lambda:later)
+    tomorrow=later+timedelta(days=1)
+    nw.scan(db,UNIVERSE,tomorrow,empty,clock=lambda:tomorrow)
+    nw.scan(db,UNIVERSE,tomorrow,empty,clock=lambda:tomorrow)
+    revised=nw.scan(db,UNIVERSE,tomorrow,lambda *a:{'messages':[raw(correctedByMessageId=456)],'overflow':False},clock=lambda:tomorrow)
+    assert revised['day']==AT.date().isoformat()
+    assert cc.context('TECH',identity='Techstep ASA')['financing_documents'][0]['corrected_by_message_id']==456
+
+
+def test_failed_revisit_retains_success_time_and_documents(db):
+    nw.scan(db,UNIVERSE,AT,lambda *a:{'messages':[raw()],'overflow':False},clock=lambda:AT)
+    later=AT+timedelta(hours=1)
+    def down(*a):raise RuntimeError('unavailable')
+    state=nw.scan(db,UNIVERSE,later,down,clock=lambda:later)
+    assert state['status']=='unavailable' and state['last_success_at']==AT.isoformat()
+    coverage=nw.coverage(db)
+    assert coverage['captured_at']==AT.isoformat() and coverage['attempted_at']==later.isoformat()
+    assert coverage['failed_days']==1
+    assert cc.context('TECH',identity='Techstep ASA')['financing_document_count']==1
+
+
+def test_old_windows_revalidate_after_backfill_without_starving_initial_days(db,monkeypatch):
+    monkeypatch.setattr(nw,'LOOKBACK_DAYS',10)
+    c=db()
+    old=AT-timedelta(days=31)
+    for offset in range(10):
+        c.execute('INSERT INTO company_newsweb_windows(day,attempted_at,payload) VALUES(?,?,?)',
+          ((AT-timedelta(days=offset)).date().isoformat(),old.isoformat(),json.dumps({'status':'partial','open_day':False})))
+    c.commit();c.close()
+    days=[]
+    for _ in range(10):
+        state=nw.scan(db,UNIVERSE,AT,lambda *a:{'messages':[],'overflow':False},clock=lambda:AT)
+        days.append(state['day'])
+    assert len(set(days))==10
+    assert nw.scan(db,UNIVERSE,AT)['status']=='idle'
+
+
+def test_new_history_precedes_old_revisit_and_active_lease_is_skipped(db,monkeypatch):
+    monkeypatch.setattr(nw,'LOOKBACK_DAYS',10)
+    c=db()
+    for offset in range(10):
+        if offset==8:continue
+        c.execute('INSERT INTO company_newsweb_windows(day,attempted_at,token,lease_until,payload) VALUES(?,?,?,?,?)',
+          ((AT-timedelta(days=offset)).date().isoformat(),(AT-timedelta(days=31) if offset==9 else AT).isoformat(),
+           'active' if offset==0 else None,(AT+timedelta(minutes=3)).isoformat() if offset==0 else None,
+           json.dumps({'status':'partial','open_day':False})))
+    c.commit();c.close()
+    result=nw.scan(db,UNIVERSE,AT,lambda *a:{'messages':[],'overflow':False},clock=lambda:AT)
+    assert result['day']==(AT-timedelta(days=8)).date().isoformat()
+    assert result['last_success_at']==AT.isoformat()
