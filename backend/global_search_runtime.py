@@ -85,6 +85,28 @@ def _merge_results(local_items, global_items, limit=20):
     return out
 
 
+def _research_search(query, limit=20):
+    """Search existing reconciled issuer snapshots without provider calls or enrolment."""
+    from company_context import universe
+    q = _clean(query).casefold()
+    symbol_query = q.removesuffix('.ol')
+    matches = []
+    # universe rejects ambiguous issuer names and future listings. Do not repeat
+    # that identity reconciliation with a weaker ticker/name join here.
+    for ticker, issuer in universe().items():
+        name = issuer['company']
+        if symbol_query != ticker.casefold() and q not in name.casefold():
+            continue
+        matches.append({
+            'ticker': ticker, 'symbol': ticker + '.OL', 'market_symbol': ticker + '.OL',
+            'name': name, 'sector': issuer.get('sector'), 'exchange': 'Oslo Børs',
+            'quote_type': 'EQUITY', 'asset_class': 'Aksjer',
+            'tracked': False, 'has_signal': False,
+            'source': 'NordicSignal reconciled issuer snapshots',
+        })
+    return sorted(matches, key=lambda x: (x['ticker'].casefold() != symbol_query, x['name'].casefold()))[:limit]
+
+
 def search_all(provider, query, limit=20):
     q = _clean(query)
     if not q:
@@ -92,19 +114,28 @@ def search_all(provider, query, limit=20):
     limit = max(1, min(int(limit or 20), 50))
     local_items = _local_search(q, limit)
     sources = ["NordicSignal universe"]
+    warnings = []
+    try:
+        research_items = _research_search(q, limit)
+        local_tickers = {x['ticker'] for x in local_items}
+        local_items += [x for x in research_items if x['ticker'] not in local_tickers]
+        symbol_query = q.upper().removesuffix('.OL')
+        local_items.sort(key=lambda x: x['ticker'] != symbol_query)
+        sources.append('NordicSignal reconciled issuer snapshots')
+    except Exception:
+        warnings.append('Issuer snapshot search temporarily unavailable')
     global_items = []
-    warning = None
     try:
         global_items = search_instruments(provider, q, max(limit, 12))
         sources.append("Yahoo Finance Search")
     except Exception as exc:
-        warning = f"Global instrument search temporarily unavailable: {exc}"
+        warnings.append('Global instrument search temporarily unavailable')
         log.warning("Global search upstream unavailable for %r: %s", q, exc)
     return {
         "query": q,
         "items": _merge_results(local_items, global_items, limit),
         "sources": sources,
-        "warning": warning,
+        "warning": '; '.join(warnings) or None,
     }
 
 

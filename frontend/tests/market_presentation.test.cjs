@@ -3,6 +3,23 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const read=n=>fs.readFileSync('frontend/'+n,'utf8');
+test('both search controls expose partial provider coverage while keeping verified results',async()=>{
+ for(const stock of [false,true]){
+  const dom=new JSDOM(stock?'<main class="wrap"><div class="top"></div></main>':read('index.html'),{url:'https://example.test/'+(stock?'stock?ticker=TECH':'app'),runScripts:'outside-only'});
+  const w=dom.window;let runSearch;
+  w.setTimeout=fn=>{runSearch=fn;return 1};w.clearTimeout=()=>{};
+  w.AksjerIPO={load:async()=>({items:[]})};
+  w.fetch=async url=>({ok:true,json:async()=>url.includes('/api/search')?{items:[{ticker:'TECH',symbol:'TECH.OL',name:'Techstep ASA',tracked:false}],warning:'provider unavailable'}:{items:[]}});
+  if(stock)w.eval(read('stock_selector.js'));
+  else for(const s of w.document.querySelectorAll('script:not([src])'))w.eval(s.textContent);
+  const input=w.document.getElementById(stock?'nsIntelInput':'search');
+  input.value='TECH';input.dispatchEvent(new w.Event('input'));await runSearch();
+  const box=w.document.getElementById(stock?'nsIntelResults':'searchResultsList');
+  assert.match(box.textContent,/Techstep ASA/);assert.match(box.textContent,/Delvis søkedekning/);
+  await new Promise(resolve=>setImmediate(resolve));
+  dom.window.close();
+ }
+});
 test('market renders readable trends without altering scores, ranking or unknown values',async()=>{
  const dom=new JSDOM(read('index.html'),{url:'https://example.test/app',runScripts:'outside-only'});
  const w=dom.window;
