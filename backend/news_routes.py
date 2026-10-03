@@ -6,6 +6,7 @@ longer split between extra_api and runtime replacement patches.
 """
 
 from datetime import datetime, timezone
+import re
 from urllib.parse import quote_plus
 
 import extra_api
@@ -16,19 +17,20 @@ from providers import YahooProvider
 
 def news_matches_ticker(item, ticker, company_name=''):
     """Return True only when a media item belongs to the selected issuer."""
-    ticker = ticker.upper()
-    related = [str(x).upper() for x in (item.get('relatedTickers') or [])]
-    if ticker in related or f'{ticker}.OL' in related:
+    ticker = str(ticker).strip().upper().removesuffix('.OL')
+    related = [str(x).strip().upper() for x in (item.get('relatedTickers') or [])]
+    if f'{ticker}.OL' in related:
         return True
-    title = (item.get('title') or '').lower()
-    company = (company_name or '').lower().strip()
-    if company and company in title:
-        return True
-    tokens = [
-        x for x in company.split()
-        if len(x) >= 5 and x not in {'group', 'holding', 'international', 'systems', 'technologies', 'seafood'}
-    ]
-    return bool(tokens and any(token in title for token in tokens))
+    # An unsuffixed symbol may identify a different exchange (TECH is Bio-Techne).
+    # Conflicting provider tags must not be overridden by a loose title match.
+    if related:
+        return False
+    title = ' '.join(str(item.get('title') or '').casefold().split())
+    company = ' '.join(str(company_name or '').casefold().split())
+    if not company or company == ticker.casefold():
+        return False
+    # Require the complete registry name, bounded as words; no shared-name tokens.
+    return bool(re.search(r'(?<!\w)' + re.escape(company) + r'(?!\w)', title))
 
 
 def _issuer_company_name(ticker):
@@ -76,7 +78,8 @@ def _yahoo_news(provider, ticker, company, limit):
     limit = max(1, min(int(limit), 40))
     items = []
     try:
-        query = f'{company} {ticker}' if company and company.upper() != ticker else ticker
+        symbol = ticker.removesuffix('.OL') + '.OL'
+        query = f'{company} {symbol}' if company and company.upper() != ticker else symbol
         data = provider._get(
             f'{provider.BASE}/v1/finance/search?q={quote_plus(query)}&quotesCount=3&newsCount={min(limit * 4, 100)}'
         )
