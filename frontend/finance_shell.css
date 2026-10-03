@@ -39,6 +39,8 @@ html.aksjerFinance:root .metric b{font-size:20px;line-height:1.35;font-variant-n
 html.aksjerFinance:root .notice{color:var(--m);font-size:12px;line-height:1.6;padding:12px 14px;border-left:3px solid var(--line-strong)!important}
 html.aksjerFinance:root .btn,html.aksjerFinance:root .tab,html.aksjerFinance:root .nsThemeToggle{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:6px!important;color:var(--t)!important;box-shadow:none!important;min-height:44px;transform:none!important}
 html.aksjerFinance:root .btn:hover,html.aksjerFinance:root .tab:hover{background:var(--surface-2)!important}
+/* Change foreground and background together when switching themes. */
+html.aksjerFinance:root .btn,html.aksjerFinance:root .tab{transition:none!important}
 html.aksjerFinance:root .btn.active,html.aksjerFinance:root .tab.active,html.aksjerFinance:root .btn.primary{background:var(--t)!important;color:var(--bg)!important;border-color:var(--t)!important}
 html.aksjerFinance:root input,html.aksjerFinance:root select{font:inherit}
 html.aksjerFinance:root .search,html.aksjerFinance:root #nsIntelInput{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:6px!important;min-height:44px;color:var(--t)!important;padding:10px 14px;box-shadow:none!important}

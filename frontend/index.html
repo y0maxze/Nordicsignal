@@ -30,7 +30,7 @@ function supportedStock(x){const symbol=String(x.symbol||x.market_symbol||x.tick
 function openStock(t){location.href='/stock?ticker='+encodeURIComponent(t)}
 function activeOpportunity(o){return ['EARLY_OPPORTUNITY','EARLY_OPPORTUNITY_HIGH'].includes(o?.label)}
 function statusLabel(x){const opp=opportunityByTicker.get(x.ticker),early=earlyByTicker.get(x.ticker),ipo=ipoByTicker.get(x.ticker),out=[];if(activeOpportunity(opp))out.push('<span class="badge watch">Opportunity · lagret</span>');if(early?.label==='EARLY_BUILDUP')out.push('<span class="badge watch">Early · forskning</span>');if(ipo)out.push('<span class="badge watch">'+esc(ipo.display_status||'PRE-IPO')+'</span>');if(!out.length)out.push('<span class="sub">Ingen handling</span>');return '<span class="statusStack">'+out.join('')+'</span>'}
-function trendText(x){const v=x.trend??x.trend_label??x.momentum_label;return v==null?"—":String(v).replaceAll("_"," ")}
+function trendText(x){const v=x.trend??x.trend_label??x.momentum_label;return v==null?'—':({CONFIRMED_UPTREND:'Bekreftet opptrend',EARLY_REVERSAL:'Tidlig trendvending',REVERSAL_CANDIDATE:'Mulig trendvending',BOTTOMING:'Mulig bunndannelse',FALLING_OR_WEAK:'Fallende eller svak',INSUFFICIENT_DATA:'For lite data'})[v]||'Ukjent'}
 function volumeText(x){const v=x.volume_ratio??x.relative_volume??x.volume_vs_20d;return finite(v)?Number(v).toLocaleString("no-NO",{maximumFractionDigits:1})+"×":"—"}
 function relativeText(x){const v=x.relative_strength??x.relative_strength_20d??x.excess_return_20d;return finite(v)?(Number(v)>0?"+":"")+Number(v).toLocaleString("no-NO",{maximumFractionDigits:1})+"%":"—"}
 function priceText(x){const v=x.price??x.last_price;return finite(v)?Number(v).toLocaleString("no-NO",{maximumFractionDigits:2}):"—"}
