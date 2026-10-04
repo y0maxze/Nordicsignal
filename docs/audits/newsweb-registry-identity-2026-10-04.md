@@ -9,6 +9,13 @@ Brreg lookup for Techstep ASA returned HTTP 200 and one entity, organisation
 977037093. The independently sourced register data could therefore fill a gap
 without guessing a suffix or relaxing issuer matching.
 
+This slice adds no NewsWeb/Euronext requests and reuses stored issuer identity
+facts. Brreg's adapter retains its NLOD 2.0 attribution. A separate expansion to
+bulk Euronext website profiles requires an explicit source-rights review: the
+published terms describe permission requirements for automated access. Public
+visibility alone is not a data licence. Existing ingestion rights are not
+certified by this code change. Reference: https://www.euronext.com/en/terms-use .
+
 ## Selection boundary
 
 During background collection only, a missing Norwegian legal name may be supplied
@@ -48,6 +55,10 @@ Tests cover source/date/identity conflicts, corrected documents, stale evidence,
 missing providers, retained data, batch limits, one-time revalidation and escaped
 source presentation. Production-wide complete coverage is not claimed. Missing
 financials, ISINs and unsupported financing documents remain visible.
+
+The first PR head failed the static CI cache-version assertion because that
+assertion still expected v28. It was updated to v29 without removing the gate;
+the new head must pass all checks before merge.
 
 No score, Opportunity, High Conviction, sizing, automatic push rules or secrets
 changed. The earlier push confirmation remains an owner-reported device test,
