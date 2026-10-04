@@ -100,8 +100,8 @@ def test_late_profile_fetch_cannot_overwrite_concurrent_writer(db,monkeypatch,ex
     if existing: cc.scan_once(Provider(),lambda:[])
     monkeypatch.setattr(cc,'now',lambda:AT+timedelta(days=2))
     original=cc.collect_profile
-    def overlapping(row,provider,registry):
-        fetched=original(row,provider,registry)
+    def overlapping(row,provider,registry,registry_documents=None):
+        fetched=original(row,provider,registry,registry_documents)
         newer={**fetched,'description':'Newer verified result'}
         c=db()
         c.execute('INSERT INTO company_context_profiles VALUES(?,?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET payload=excluded.payload,attempted_at=excluded.attempted_at',

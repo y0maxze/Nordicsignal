@@ -17,6 +17,7 @@ import company_evidence as evidence
 
 log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
+REGISTRY_IDENTITY_VERSION = 1
 METRICS = {'annualTotalRevenue':'Omsetning', 'annualNetIncome':'Nettoresultat',
            'annualFreeCashFlow':'Fri kontantstrøm', 'annualTotalDebt':'Gjeld',
            'annualStockholdersEquity':'Egenkapital'}
@@ -177,10 +178,11 @@ def project_financials(series, at):
     return out
 
 
-def collect_profile(row, provider, registry=None):
+def collect_profile(row, provider, registry=None, registry_documents=None):
     """Separate failures preserve usable partial data; no unsafe derived multiples."""
     at = now()
     payload = {'company':row['company'],'ticker':row['ticker'],'sector':row.get('sector'),
+               'registry_identity_version':REGISTRY_IDENTITY_VERSION,
                'description':None,'financials':[], 'source_url':'https://finance.yahoo.com/quote/'+row['ticker']+'.OL/',
                'source':'Yahoo Finance', 'source_status':{}, 'field_sources':{},
                'isin':row.get('isin'),'isin_status':row.get('isin_status','unknown'),
@@ -190,6 +192,15 @@ def collect_profile(row, provider, registry=None):
     symbol = row['ticker']+'.OL'
     yahoo_verified = False
     legal_name = row.get('legal_name') or row['company']
+    registry_identity = None
+    # Source reconciliation belongs to the background collector. GETs never
+    # discover identities or request provider data.
+    if registry_documents is not None and not re.search(r'\s(?:ASA|AS)$', str(legal_name or ''), re.I):
+        from company_registry import documented_issuer_name
+        registry_identity = documented_issuer_name(row, registry_documents, at)
+        if registry_identity['status'] == 'documented':
+            legal_name = registry_identity['legal_name']
+        payload['registry_identity'] = registry_identity
     try:
         data = provider._get(provider.BASE+'/v10/finance/quoteSummary/'+symbol,
                              {'modules':'assetProfile,price'},need_crumb=True)
@@ -225,8 +236,12 @@ def collect_profile(row, provider, registry=None):
             'status':payload['source_status'][field]}
     if registry is not None:
         try:
+            if registry_identity and registry_identity['status'] in {'ambiguous','unavailable'}:
+                raise ValueError('ambiguous registry identity')
             official=registry(legal_name,at)
             if official:
+                if registry_identity and registry_identity['status'] == 'documented':
+                    official={**official, 'identity_evidence':registry_identity}
                 payload['registry']=official
                 if official.get('registered_activity'):
                     payload['description']=official['registered_activity']
@@ -235,7 +250,7 @@ def collect_profile(row, provider, registry=None):
                     payload['field_sources']['description']={k:official.get(k) for k in ('source','source_url','license','captured_at','attempted_at','status')}
             payload['source_status']['registry']='stored' if official else 'unavailable'
         except Exception:
-            payload['source_status']['registry']='unavailable'
+            payload['source_status']['registry']='identity_ambiguous' if registry_identity and registry_identity['status']=='ambiguous' else 'unavailable'
     for fact in payload['financials']:
         fact.update(source='Yahoo Finance',source_url=payload['source_url'],captured_at=at.isoformat())
     return payload
@@ -247,6 +262,9 @@ def retain_profile_fields(data, old, at):
         return data
     previous=json.loads(old['payload'])
     for field in ('description','financials','registry'):
+        if data['source_status'].get('registry') == 'identity_ambiguous' and (
+                field == 'registry' or (field == 'description' and previous.get('description_kind') == 'registered_activity')):
+            continue
         if field=='financials' and previous.get('yahoo_identity_verified') is not True:
             continue
         if not data.get(field) and previous.get(field):
@@ -361,10 +379,19 @@ def scan_once(provider=None, fetch_news=None, batch_size=4, registry=None):
             c.commit()
         finally:c.close()
         due=[r for t,r in rows.items() if t not in previous or previous[t]['identity']!=r['identity'] or
+             json.loads(previous[t]['payload']).get('registry_identity_version')!=REGISTRY_IDENTITY_VERSION or
              at-(stamp(previous[t]['attempted_at']) or datetime.min.replace(tzinfo=timezone.utc))>=timedelta(hours=24)]
         due.sort(key=lambda r:previous.get(r['ticker'],{}).get('attempted_at',''))
         for row in due[:batch_size]:
-            data=collect_profile(row,provider,registry)
+            registry_documents=None
+            if registry is not None and not re.search(r'\s(?:ASA|AS)$', str(row.get('legal_name') or row['company']), re.I):
+                c=connect()
+                try:
+                    registry_documents=[json.loads(r['payload']) for r in c.execute(
+                        'SELECT payload FROM company_context_events WHERE ticker=? AND identity=? LIMIT 501',
+                        (row['ticker'],row['identity'])).fetchall()]
+                finally:c.close()
+            data=collect_profile(row,provider,registry,registry_documents)
             usable=bool(data['description'] or data['financials'] or data.get('registry'))
             old=previous.get(row['ticker'],{})
             captured=at.isoformat() if usable else None

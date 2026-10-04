@@ -28,6 +28,13 @@ function provenance(meta){
  const stale=meta.status==='stale'?'Eldre opplysning · ':'';
  return '<p class="muted">'+esc(stale)+link(meta.source_url,meta.source||'Datakilde')+' · hentet '+esc(date(meta.captured_at))+' · siste forsøk '+esc(date(meta.attempted_at))+(meta.license?' · '+esc(meta.license):'')+'</p>';
 }
+function registryIdentity(p){
+ if(p.registry_identity?.status==='ambiguous')return '<p class="muted">Registeroppslag er stoppet: motstridende juridiske navn eller issuer-ID-er i kildegrunnlaget. Identiteten må avklares.</p>';
+ if(p.registry_identity?.status==='unavailable')return '<p class="muted">Kildegrunnlaget for registerkoblingen kunne ikke kontrolleres fullstendig.</p>';
+ const e=p.registry?.identity_evidence;
+ if(e?.status!=='documented')return '';
+ return '<details><summary>Kilde for kobling til selskapsregisteret</summary><p>Juridisk navn '+esc(e.legal_name)+' fra offisiell utstedermetadata · dokument publisert '+esc(date(e.published_at))+'. Brukt til et eksakt registeroppslag; sier ikke noe om dagens emisjonsstatus.</p>'+provenance(e)+'</details>';
+}
 function historyPanel(h){
  if(h?.status!=='available')return '<p class="muted">Endringshistorikk er utilgjengelig. Dette betyr ikke at opplysningene er uendret.</p>';
  const labels={title:'Tittel',published_at:'Publiseringsdato',identity:'Selskapsidentitet',company:'Selskapsnavn',description:'Virksomhetsbeskrivelse',financials:'Regnskapstall',registry:'Registeropplysninger',document:'Dokumentvilkår eller innhentingsstatus',field_sources:'Kilder eller datastatus',source_status:'Kildestatus',sector:'Sektor',isin:'ISIN',lifecycle:'Dokumentstatus',lifecycle_evidence:'Statusbelegg'};
@@ -107,6 +114,7 @@ function render(p){
  (p.description_kind==='registered_activity'?'<p class="muted">Registrert aktivitet · kan avvike fra konsernets samlede virksomhet.</p>':'')+
  '<p>'+esc(p.description||'Virksomhetsbeskrivelse er ikke tilgjengelig fra datakilden ennå.')+'</p>'+provenance(p.field_sources?.description)+'<p>Sektor: '+esc(p.sector||'Ukjent')+'</p>'+
  (p.registry?'<p>Juridisk navn: '+esc(p.registry.official_name)+' · org.nr. '+esc(p.registry.organisation_number)+'</p><p>Registrert næring: '+esc(p.registry.industry||'Ukjent')+'</p>'+provenance(p.registry):'')+
+ registryIdentity(p)+
  '<p>ISIN: '+esc(p.isin||'Ukjent')+(p.isin?' · '+link(p.isin_source_url,p.isin_source||'Kilde ukjent')+' · noteringsdato '+esc(p.isin_listing_date||'ukjent'):'')+'</p>'+
  (p.financials?.length?'<dl>'+p.financials.map(f=>'<dt>'+esc(f.label)+'</dt><dd>'+esc(number(f.value))+' '+esc(f.currency||'(valuta ukjent)')+' <span class="muted">· periode '+esc(f.period)+' · '+esc(f.period_type)+'</span></dd>').join('')+'</dl>':'<p>Regnskapstall er ikke tilgjengelige ennå.</p>')+
  provenance(p.field_sources?.financials)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+

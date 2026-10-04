@@ -49,6 +49,19 @@ test('history distinguishes recording from publication and escapes source titles
  assert.match(d.window.document.body.textContent,/Dokumentvilkår eller innhentingsstatus/);
 });
 
+test('registry identity linkage keeps official evidence and conflicts visible',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,registry:{identity_evidence:{status:'documented',legal_name:'Techstep ASA <img>',source:'NewsWeb',source_url:'https://newsweb.oslobors.no/message/123',published_at:'2026-09-17T12:00:00Z'}}});
+ assert.match(d.window.document.body.textContent,/Kilde for kobling til selskapsregisteret/);
+ assert.match(d.window.document.body.textContent,/sier ikke noe om dagens emisjonsstatus/);
+ assert.equal(d.window.document.querySelector('img'),null);
+ assert.equal(d.window.document.querySelector('a').href,'https://newsweb.oslobors.no/message/123');
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,registry_identity:{status:'ambiguous'}});
+ assert.match(d.window.document.body.textContent,/Registeroppslag er stoppet: motstridende juridiske navn/);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,registry_identity:{status:'unavailable'}});
+ assert.match(d.window.document.body.textContent,/kunne ikke kontrolleres fullstendig/);
+});
+
 test('overview exposes partial coverage and missing data instead of reassuring on zero hits',()=>{
  const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
  d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financials:[{value:1}],financing_documents:[]});
