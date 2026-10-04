@@ -28,7 +28,8 @@ def fetch_registry(name):
 def collect_registry(name, at, fetch=None):
     # A shortened display name could accidentally identify a Norwegian subsidiary
     # of a foreign listed parent. Never append a legal suffix to guess that identity.
-    if not re.search(r'\s(?:ASA|AS)$', str(name or ''), re.I):
+    form = re.search(r'\s(ASA|AS)$', str(name or ''), re.I)
+    if not form:
         return None
     payload = (fetch or fetch_registry)(name)
     page = payload.get('page') or {}
@@ -42,7 +43,7 @@ def collect_registry(name, at, fetch=None):
     row = matches[0]
     org = str(row.get('organisasjonsnummer') or '')
     if (not re.fullmatch(r'\d{9}', org) or row.get('slettedato')
-            or (row.get('organisasjonsform') or {}).get('kode') not in {'AS','ASA'}):
+            or (row.get('organisasjonsform') or {}).get('kode') != form.group(1).upper()):
         return None
     activity = row.get('aktivitet')
     description = ' '.join(activity) if isinstance(activity,list) and all(isinstance(v,str) for v in activity) else None

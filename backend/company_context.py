@@ -199,7 +199,11 @@ def collect_profile(row, provider, registry=None):
         if price.get('symbol') != symbol or norm(price.get('longName') or price.get('shortName')) != row['identity']:
             raise ValueError('identity mismatch')
         yahoo_verified = True
-        legal_name = price.get('longName') or legal_name
+        # Preserve the reconciled full Norwegian legal name. Yahoo may omit or
+        # substitute its legal suffix even when the normalized name matches.
+        # A provider display name must not redirect the independent registry lookup.
+        if not re.search(r'\s(?:ASA|AS)$', str(legal_name or ''), re.I):
+            legal_name = price.get('longName') or legal_name
         profile = result.get('assetProfile') or {}
         payload.update(description=str(profile.get('longBusinessSummary') or '')[:5000] or None,
                        sector=profile.get('sector') or payload['sector'])

@@ -11,3 +11,28 @@ Corrects the previous financials identity gap: a matching ticker alone no longer
 Background enrichment remains four profiles per scheduled batch; GET handlers remain snapshot-only. No changes to score, Opportunity, High Conviction, sizing, signal thresholds, push or secrets. PWA cache v16.
 
 Limitations: this adapter does not infer a shortened legal name, resolve foreign parents through Norwegian subsidiaries, invent an ISIN, or provide audited financial statements. Complete historical financing backfill and cross-document transaction reconciliation still need a reliably accessible official source. Euronext direct requests encountered verification pages in this session. Production browser navigation timed out, so signed-in desktop/mobile and actual push/PWA behavior remain pending.
+
+## Legal-name retention correction — 2026-10-04
+
+A verified Yahoo display name could overwrite an already reconciled Norwegian
+legal name before the independent Brreg lookup. If Yahoo omitted the legal suffix,
+the registry adapter then rejected the lookup and lost otherwise usable coverage.
+If Yahoo supplied another suffix, it could redirect the lookup. Preserve a full
+AS/ASA name supplied by the existing universe; use the verified provider long name
+only when that full legal name is absent. No legal suffix is inferred or appended.
+The returned registry legal-form code must also agree with the requested suffix.
+
+Regression tests cover both explicit `legal_name` and full company-name inputs,
+shortened and conflicting provider display names, the existing provider fallback,
+and mismatched registry legal forms. All 766 backend and 44 UI/Worker tests passed
+locally. The backend run also reported four existing FastAPI deprecation warnings
+and the previously observed asynchronous test-fixture warning for a missing
+`opportunity_market_context` table. No production model code changed.
+
+A fresh read-only Brreg request returned HTTP 200 and one exact Techstep ASA
+entity on 2026-10-04. This confirms provider availability, not refreshed production
+coverage for every ticker. Existing snapshots refresh through the bounded
+scheduler; GET requests remain read-only, and partial/stale coverage remains
+visible. The change does not resolve issuers for which no full legal name exists.
+Later authenticated production and push observations are recorded in their
+dated audit notes; this section does not certify every mobile/PWA scenario.

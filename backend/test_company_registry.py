@@ -69,6 +69,42 @@ def test_official_source_can_supply_missing_description_without_authorizing_yaho
     assert result['description']=='Registered technology activity.' and not result['financials']
 
 
+@pytest.mark.parametrize('row', [ROW, {**ROW,'company':'Techstep','legal_name':'Techstep ASA'}])
+@pytest.mark.parametrize('provider_name', ['Techstep', 'Techstep AS', 'Techstep ASA'])
+def test_reconciled_legal_name_is_not_overwritten_by_provider_display_name(row,provider_name):
+    class DisplayName(Provider):
+        def _get(self,*a,**kw):
+            data=super()._get(*a,**kw)
+            data['quoteSummary']['result'][0]['price']['longName']=provider_name
+            return data
+    looked_up=[]
+    def registry(name,at):
+        looked_up.append(name)
+        return cr.collect_registry(name,at,lambda _:payload())
+    result=cc.collect_profile(row,DisplayName(),registry)
+    assert looked_up==['Techstep ASA']
+    assert result['registry']['organisation_number']=='977037093'
+    assert result['description']=='Registered technology activity.'
+    assert result['field_sources']['description']['source']==cr.SOURCE
+
+
+def test_verified_provider_full_name_still_supplies_missing_legal_name():
+    result=cc.collect_profile({**ROW,'company':'Techstep'},Provider(),
+                              lambda name,at:cr.collect_registry(name,at,lambda _:payload()))
+    assert result['registry']['official_name']=='TECHSTEP ASA'
+
+
+@pytest.mark.parametrize('form', ['AS', 'NUF', None])
+def test_registry_name_and_legal_form_must_agree(form):
+    data=payload([{**ENTITY,'organisasjonsform':{'kode':form}}])
+    assert cr.collect_registry('Techstep ASA',AT,lambda _:data) is None
+
+
+def test_as_entity_remains_supported_with_matching_legal_form():
+    data=payload([{**ENTITY,'navn':'EXAMPLE AS','organisasjonsform':{'kode':'AS'}}])
+    assert cr.collect_registry('Example AS',AT,lambda _:data)['official_name']=='EXAMPLE AS'
+
+
 def test_partial_failure_retains_independent_fields_and_capture_times(monkeypatch):
     monkeypatch.setattr(cc,'now',lambda:AT)
     previous=cc.collect_profile(ROW,Provider())
