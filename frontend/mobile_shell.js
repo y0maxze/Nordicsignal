@@ -102,8 +102,15 @@
     const button=document.getElementById('nsEnableAlerts');
     // A saved legacy preference must never start portfolio requests or polling.
     if(!button)return;
-    button.onclick=enableAlerts;setPushTestVisible(false);
-    setAlertUi('Push er ikke bekreftet registrert i denne økten. Aktiver for å registrere og teste.',false);
+    button.hidden=true;button.disabled=true;setPushTestVisible(false);
+    try {
+      const access=await getJson('/api/push/access');
+      if(access.push_write_allowed!==true)throw Error('Access required');
+      button.onclick=enableAlerts;button.hidden=false;button.disabled=false;
+      setAlertUi('Push er ikke bekreftet registrert i denne økten. Aktiver for å registrere og teste.',false);
+    } catch {
+      setAlertUi('Push-registrering er utilgjengelig. Kontroller innloggingen og last siden på nytt. Eksisterende abonnementer kan fortsatt motta varsler.',false);
+    }
   }
 
   async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,registerRealPush,currentPushState,testRealPush}}

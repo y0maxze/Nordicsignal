@@ -1,4 +1,5 @@
 import "./frontend/brand_config.js";
+import {verifiedAccess} from "./access_auth.js";
 
 const API_ORIGIN = "https://nordicsignal-api.onrender.com";
 const BRAND = globalThis.NORDICSIGNAL_BRAND;
@@ -145,6 +146,31 @@ async function serveAsset(request, env, pathname) {
   return new Response(html, {status:response.status, headers});
 }
 
+const PUSH_WRITES = new Set(['/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test']);
+
+async function pushWriteBody(request) {
+  // Cap the actual stream as well as any declared length (including chunked bodies).
+  if (!request.body || Number(request.headers.get('content-length')) > 16384) return null;
+  const reader = request.body.getReader(), chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > 16384) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    const body = new TextDecoder('utf-8', {fatal:true}).decode(bytes);
+    const parsed = JSON.parse(body);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return null;
+    return body;
+  } catch { return null; }
+  finally { reader.releaseLock(); }
+}
+
 async function proxyApi(request, url, env) {
   const upstream = new URL(`${API_ORIGIN}${url.pathname}`);
   upstream.search = url.search;
@@ -153,13 +179,34 @@ async function proxyApi(request, url, env) {
     // Scheduled jobs use the backend directly with the existing secret.
     const mutates = !['GET','HEAD','OPTIONS'].includes(request.method) || url.pathname === '/api/refresh' || url.pathname.endsWith('/refresh') || url.searchParams.getAll('refresh').some(value => ['true','1','yes','on'].includes(value.toLowerCase()));
     if (/^\/api\/(holdings|portfolio|watchlist|purchases|alerts|notifications|dashboard-home)(\/|$)/.test(url.pathname)) return json({status:'error',code:'PRIVATE_READ_ACCESS_REQUIRED'},403);
-    if (mutates) return json({status:'error',code:'PRIVATE_WRITE_ACCESS_REQUIRED',message:'Private authenticated write access is required'},403);
+    if (url.pathname === '/api/push/access' && request.method === 'GET' && !url.search) {
+      const allowed = !!env?.NORDICSIGNAL_WRITE_TOKEN && await verifiedAccess(request, env);
+      return json({push_write_allowed:allowed}, allowed ? 200 : 403);
+    }
+    let pushBody;
+    if (mutates) {
+      const sameOrigin = url.protocol === 'https:' && request.headers.get('origin') === url.origin;
+      const site = request.headers.get('sec-fetch-site');
+      const jsonBody = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'application/json';
+      if (!PUSH_WRITES.has(url.pathname) || request.method !== 'POST' || url.search ||
+          !sameOrigin || (site && site !== 'same-origin') || !jsonBody ||
+          !env?.NORDICSIGNAL_WRITE_TOKEN || !await verifiedAccess(request, env)) {
+        return json({status:'error',code:'PRIVATE_WRITE_ACCESS_REQUIRED',message:'Private authenticated write access is required'},403);
+      }
+      pushBody = await pushWriteBody(request);
+      if (pushBody === null) return json({status:'error',code:'INVALID_PUSH_BODY'},400);
+    }
     const headers = new Headers(request.headers);
-    headers.delete('x-nordicsignal-internal-token');
+    // Access credentials belong at the edge, never at the Render origin.
+    for (const name of [...headers.keys()]) {
+      if (name === 'cookie' || name === 'authorization' || name.startsWith('cf-access-') ||
+          name === 'x-nordicsignal-internal-token') headers.delete(name);
+    }
     if (env && env.NORDICSIGNAL_WRITE_TOKEN) {
       headers.set("x-nordicsignal-internal-token", env.NORDICSIGNAL_WRITE_TOKEN);
     }
-    const forwarded = new Request(upstream.toString(), request);
+    const forwarded = pushBody === undefined ? new Request(upstream.toString(), request) :
+      new Request(upstream.toString(), {method:request.method, headers, body:pushBody});
     const secured = new Request(forwarded, {headers});
     const response = await fetch(new Request(secured, {signal:AbortSignal.timeout(30000)}));
     const responseHeaders = applySecurityHeaders(new Headers(response.headers));

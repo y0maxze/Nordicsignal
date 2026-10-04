@@ -95,7 +95,8 @@ def test_capital_flow_product_contract_is_wired_everywhere():
     assert '/api/capital-flow?' in client
     assert "Signalhistorikken nedenfor er ikke en kvittering for leverte push-varsler" in alerts
     assert "Push til telefonen er ikke aktivert i denne versjonen" not in alerts
-    assert "Nye abonnementer og testpush kan ikke sendes" in alerts
+    assert "Registrering og testpush krever verifisert innlogging" in alerts
+    assert 'id="nsEnableAlerts" class="btn" type="button" hidden disabled' in alerts
     assert 'capital_flow_runtime' in sitecustomize
     assert 'capital_flow_push_bridge_runtime' in sitecustomize
 

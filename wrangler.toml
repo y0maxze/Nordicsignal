@@ -12,3 +12,8 @@ binding = "ASSETS"
 run_worker_first = true
 html_handling = "none"
 not_found_handling = "404-page"
+
+# Public identifiers, not secrets. Access policy remains the authorization authority.
+[vars]
+NORDICSIGNAL_ACCESS_ISSUER = "https://lucky-darkness-5204.cloudflareaccess.com"
+NORDICSIGNAL_ACCESS_AUD = "e69c194b40f48b534a5643373d4231fc3463dee5688331b8ce3cd2fbc6d744bd"
