@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install locked Worker dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Deploy Worker and static assets
         run: npx --yes wrangler@4 deploy
         env:

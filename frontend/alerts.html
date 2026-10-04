@@ -11,7 +11,9 @@ body{margin:0}.alertPage{max-width:900px;margin:auto;padding:24px 16px calc(110p
 <p id="pushPermission" role="status">Varseltillatelse: kontrollerer…</p>
 <p id="pushSubscription">Nettleserabonnement: kontrollerer…</p>
 <p id="pushServer">Push-tjeneste: kontrollerer…</p>
-<p class="muted">Et nettleserabonnement bekrefter ikke at serveren fortsatt har registreringen eller at varsler blir levert. Nye abonnementer og testpush kan ikke sendes gjennom dagens tilgangsoppsett. Eksisterende abonnementer kan fortsatt motta varsler.</p>
+<p class="muted">Et nettleserabonnement bekrefter ikke at serveren fortsatt har registreringen eller at varsler blir levert. Registrering og testpush krever verifisert innlogging. Eksisterende abonnementer kan fortsatt motta varsler.</p>
+<p id="alertStatus" role="status">Kontrollerer tilgang til push-registrering…</p>
+<button id="nsEnableAlerts" class="btn" type="button" hidden disabled>Aktiver</button>
 <button id="refreshPushStatus" class="btn" type="button">Kontroller push-status</button>
 </section>
 <p class="muted">Signalhistorikken nedenfor er ikke en kvittering for leverte push-varsler.</p>
