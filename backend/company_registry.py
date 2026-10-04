@@ -5,10 +5,58 @@ complete bounded result must contain exactly one exact legal-name match.
 Only company activity/identity/industry are retained, no personal/contact data.
 """
 import re
+from datetime import timedelta
 
 BASE = 'https://data.brreg.no/enhetsregisteret/api/enheter'
 SOURCE = 'Brønnøysundregistrene / Enhetsregisteret'
 LICENSE = 'NLOD 2.0'
+
+
+def documented_issuer_name(row, documents, at):
+    """Use recent, already reconciled NewsWeb issuer metadata; never infer a suffix.
+
+    This selects a name for a fresh exact Brreg lookup, not a company description
+    or a current financing state. Conflicting legal names or issuer IDs fail closed.
+    """
+    from company_context import norm, stamp
+    if len(documents) > 500:
+        return {'status': 'unavailable', 'reason': 'document_limit'}
+    candidates = []
+    for event in documents:
+        if not isinstance(event, dict):
+            continue
+        mid, iid = event.get('source_message_id'), event.get('source_issuer_id')
+        name = event.get('company')
+        published, observed = stamp(event.get('published_at')), stamp(event.get('observed_at'))
+        if (event.get('source_type') != 'newsweb_oam' or event.get('kind') != 'financing_document'
+                or event.get('ticker') != row['ticker'] or event.get('identity') != row['identity']
+                or type(mid) is not int or mid <= 0 or type(iid) is not int or iid <= 0
+                or event.get('url') != 'https://newsweb.oslobors.no/message/' + str(mid)
+                or type(event.get('corrected_by_message_id')) is not int or event['corrected_by_message_id'] != 0
+                or type(event.get('correction_for_message_id')) is not int or event['correction_for_message_id'] < 0
+                or not isinstance(name, str) or not re.search(r'\s(?:ASA|AS)$', name, re.I)
+                or norm(name) != row['identity']
+                or not published or not observed or not published <= observed <= at
+                or at - published > timedelta(days=180)):
+            continue
+        title = event.get('title')
+        prefix = re.match(r'^(.+?)(?:\s+[-–—]\s+|:\s+)(.+)$', title) if isinstance(title, str) else None
+        if not prefix or norm(prefix[1]) != row['identity']:
+            continue
+        title_form = re.search(r'\s(ASA|AS)$', prefix[1], re.I)
+        if title_form and not legal_name(name).endswith(' ' + title_form[1].casefold()):
+            continue
+        candidates.append(event)
+    if not candidates:
+        return {'status': 'unknown'}
+    if len({(legal_name(e['company']), e['source_issuer_id']) for e in candidates}) != 1:
+        return {'status': 'ambiguous'}
+    latest = max(candidates, key=lambda e: stamp(e['published_at']))
+    return {'status': 'documented', 'legal_name': latest['company'],
+            'source': 'NewsWeb official issuer metadata', 'source_url': latest['url'],
+            'source_issuer_id': latest['source_issuer_id'], 'published_at': latest['published_at'],
+            'captured_at': latest['observed_at'], 'attempted_at': at.isoformat(),
+            'scope': 'legal_name_for_exact_registry_lookup', 'maximum_age_days': 180}
 
 
 def legal_name(value):
