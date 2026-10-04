@@ -41,6 +41,13 @@ Production delivery, iPhone installation, background receipt and tapping a
 notification require actual-device verification. Neither a green test suite nor
 an HTTP acceptance response certifies these behaviors.
 
+After the production deployment, the owner was asked to activate notifications
+and run Test push from the phone's Home Screen app, then check receipt/opening.
+The owner replied "Det fungerer." on 2026-10-04. This records a successful test
+reported by the owner, not an independently observed device trace. Separate
+background/offline, duplicate-delivery and installation/update cases remain
+unverified.
+
 References:
 - https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/
 - https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/
