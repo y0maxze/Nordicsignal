@@ -15,7 +15,7 @@ test('push proxy verifies identity and keeps every other write closed',async()=>
   backend.push(request);return Response.json({status:'ok'});
  };
  try {
-  const worker=(await import('../../worker.js')).default;
+  const worker=(await import('../worker.js')).default;
   const now=Math.floor(Date.now()/1000);
   async function token(overrides={},key=privateKey,alg='RS256') {
    return new SignJWT({iss:issuer,aud:[audience],sub:'owner',email:'owner@example.test',type:'app',iat:now,nbf:now-1,exp:now+300,...overrides}).setProtectedHeader({alg,kid:'test-key'}).sign(key);
