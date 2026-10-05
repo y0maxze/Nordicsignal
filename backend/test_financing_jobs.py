@@ -96,3 +96,25 @@ def test_historical_backlog_does_not_starve_recent_supported_documents(db):
     def fetch(url):calls.append(url);return page(TERMS)
     fd.enrich_saved(db,AT,limit=1,fetch=fetch)
     assert calls==['https://live.euronext.com/en/node/2']
+
+
+def test_fetched_unparsed_document_keeps_success_time_and_weekly_retry(db):
+    seed(db)
+    done = AT + timedelta(seconds=20)
+    times = iter([AT, AT, done])
+    calls = []
+    def fetch(url):
+        calls.append(url)
+        return page(['Unstructured text without supported fields'])
+    fd.enrich_saved(db, AT, fetch=fetch, clock=lambda: next(times))
+    c = db()
+    doc = json.loads(c.execute('SELECT payload FROM company_context_events').fetchone()[0])['document']
+    job = c.execute('SELECT * FROM financing_document_jobs').fetchone()
+    c.close()
+    assert doc['status'] == 'no_supported_terms'
+    assert doc['captured_at'] == done.isoformat() and doc['terms'] == {}
+    assert job['next_attempt_at'] == (done + timedelta(days=7)).isoformat()
+    assert fd.enrich_saved(db, AT + timedelta(days=1), fetch=fetch)['processed'] == 0
+    later = AT + timedelta(days=7)
+    assert fd.enrich_saved(db, later, fetch=fetch, clock=lambda: later)['processed'] == 1
+    assert len(calls) == 2

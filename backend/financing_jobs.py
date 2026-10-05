@@ -37,7 +37,7 @@ def finish(c, key, token, status, at):
     Eligibility is derived from the durable document snapshot, including parser
     version; next_attempt_at is an operational projection, not a second scheduler.
     """
-    days = 7 if status == 'partial' else 1
+    days = 7 if status in {'partial', 'no_supported_terms'} else 1
     cursor = c.execute('UPDATE financing_document_jobs SET state=?,token=NULL,lease_until=NULL,finished_at=?,next_attempt_at=? WHERE event_key=? AND token=? AND lease_until>?',
                        (status, at.isoformat(), (at+timedelta(days=days)).isoformat(), key, token, at.isoformat()))
     return bool(cursor.rowcount)
