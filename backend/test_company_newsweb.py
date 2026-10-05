@@ -46,6 +46,15 @@ def test_verified_document_body_and_missing_denominator():
     assert len(result['content_sha256'])==64
 
 
+def test_compact_and_middle_dot_source_lists_are_parsed_after_identity_check():
+    body = '·Record date: 3 June 2026\n-Subscription price: NOK 1\nSubject to final approval.'
+    result = fd.collect(nw.adapt(raw(), UNIVERSE, AT), AT,
+                        fetch=lambda *a: {'message': raw(body=body)})
+    assert result['terms']['record_date']['value'] == '3 June 2026'
+    assert result['terms']['subscription_price']['value'].endswith('final approval.')
+    assert result['dilution']['status'] == 'unknown'
+
+
 @pytest.mark.parametrize('changes',[{'id':456},{'issuerId':1},{'issuerSign':'OTHER'},
     {'issuerName':'Different ASA'},{'publishedTime':'2020-01-01T12:00:00Z'},
     {'correctedByMessageId':456},{'title':'Changed rights issue'},{'test':True},{'body':None}])

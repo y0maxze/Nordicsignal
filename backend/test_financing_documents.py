@@ -303,3 +303,101 @@ def test_singular_right_and_shall_listing_aliases_do_not_pollute_nearby_values()
     assert terms['announcement_date']['value'] == '1 June 2026'
     assert terms['subscription_price']['value'] == 'NOK 2 per share'
     assert terms['rights_listing']['value'] == 'No'
+
+
+@pytest.mark.parametrize('bullet', ['-', '*', '•', '·', '- ', '* ', '• ', '· '])
+def test_compact_list_markers_preserve_exact_labels_and_qualifications(bullet):
+    terms, status = fd.parse_lines([
+        bullet + 'Date on which the terms and conditions of the subsequent offering were',
+        'announced: 1 June 2026',
+        bullet + 'Last day including right: 1 June 2026',
+        bullet + 'Ex-date: 2 June 2026',
+        bullet + 'Record date: 3 June 2026',
+        bullet + 'Maximum number of new shares: up to 500,000',
+        bullet + 'Subscription price: NOK 1',
+        'The offering remains subject to approval.',
+    ])
+    assert status == 'partial'
+    assert terms['announcement_date']['value'] == '1 June 2026'
+    assert terms['announcement_date']['evidence'].startswith(bullet)
+    assert terms['record_date']['value'] == '3 June 2026'
+    assert terms['maximum_new_shares']['value'] == 'up to 500,000'
+    assert terms['subscription_price']['value'].endswith('subject to approval.')
+    assert fd.dilution(terms, EVENT)['status'] == 'unknown'
+
+
+def test_observed_template_aliases_do_not_merge_dates_ratios_and_managers():
+    terms, _ = fd.parse_lines([
+        'Date on which the terms and conditions of the repair issue were announced: 1 June 2026',
+        'Last day of trading including right to receive subscription rights: 2 June 2026',
+        'First day of trading exclusive right to receive subscription rights (Ex-date): 3 June 2026',
+        'Record Date: 4 June 2026',
+        'Subscription ratio: 1:1 (number of new shares per subscription right)',
+        'Managers: Example Bank and Other Bank',
+        'Will the rights be listed yes/no: Yes, subject to approval',
+        'Other information: The board may cancel the offering',
+    ])
+    assert terms['announcement_date']['value'] == '1 June 2026'
+    assert terms['last_day_including']['value'] == '2 June 2026'
+    assert terms['ex_date']['value'] == '3 June 2026'
+    assert terms['record_date']['value'] == '4 June 2026'
+    assert terms['subscription_ratio']['value'] == '1:1 (number of new shares per subscription right)'
+    assert terms['arranger']['value'] == 'Example Bank and Other Bank'
+    assert terms['rights_listing']['value'] == 'Yes, subject to approval'
+    assert terms['additional_information']['value'] == 'The board may cancel the offering'
+
+
+def test_compact_markers_do_not_hide_duplicates_or_unknown_conditions():
+    terms, _ = fd.parse_lines(['Subscription price: NOK 1', '-Subscription price: NOK 1'])
+    assert terms['subscription_price']['status'] == 'ambiguous'
+    terms, _ = fd.parse_lines(['Number of new shares in the rights issue: 1000',
+                             '-Condition: subject to allocation',
+                             'Number of existing shares before the rights issue: 4000',
+                             'Class of existing and new shares: Ordinary shares'])
+    assert '-Condition: subject to allocation' in terms['new_shares']['value']
+    assert fd.dilution(terms, EVENT)['status'] == 'unknown'
+    terms, _ = fd.parse_lines(['--Subscription price: NOK 1', 'Not Subscription price: NOK 1'])
+    assert terms == {}
+
+
+def test_fetched_document_without_supported_fields_is_not_labelled_partially_parsed():
+    result = fd.collect(EVENT, AT, fetch=lambda _: page(['Unstructured information without labelled terms']))
+    assert result['status'] == 'no_supported_terms'
+    assert result['captured_at'] == AT.isoformat()
+    assert result['content_sha256'] and result['terms'] == {}
+    assert result['dilution']['status'] == 'unknown'
+
+
+def test_v4_mixed_fields_are_withheld_until_revalidated():
+    old = {'version': 4, 'terms': {'subscription_ratio': {'value': '1:1 Managers: Example'}}}
+    public = fd.public_document(old)
+    assert public['status'] == 'revalidation_required' and public['terms'] == {}
+    assert old['terms']
+
+
+def test_repair_offering_aliases_keep_conditions_and_listing_distinct():
+    terms, _ = fd.parse_lines([
+        '• Date on which the terms and conditions of the Subsequent Repair Offering were announced: 1 June 2026',
+        '• Last day including right to receive subscription rights in the Subsequent Repair Offering: 2 June 2026',
+        '• Subscription price: NOK 1',
+        'Will the subscription rights be listed: No',
+        'Other information: Subject to approval',
+    ])
+    assert terms['announcement_date']['value'] == '1 June 2026'
+    assert terms['last_day_including']['value'] == '2 June 2026'
+    assert terms['subscription_price']['value'] == 'NOK 1'
+    assert terms['rights_listing']['value'] == 'No'
+
+
+def test_long_conditions_are_preserved_without_truncation_or_calculation():
+    conditions = 'The offering remains subject to approval. ' * 30
+    terms, status = fd.parse_lines([
+        'Number of existing shares before the rights issue: 4000',
+        'Class of existing and new shares: Ordinary shares',
+        'Number of new shares in the rights issue: 1000', conditions,
+    ])
+    assert status == 'partial'
+    assert terms['new_shares']['value'] == '1000 ' + conditions.strip()
+    assert fd.dilution(terms, EVENT)['status'] == 'unknown'
+    terms, status = fd.parse_lines(['Subscription price: NOK 1', 'x' * fd.MAX_TERM_CHARS])
+    assert terms == {} and status == 'no_supported_terms'

@@ -1,6 +1,6 @@
 """Bounded official-document evidence. No model, push or per-GET network work.
 
-Version 4 handles English and Norwegian labelled key-information notices.
+Version 5 handles English and Norwegian labelled key-information notices.
 It preserves the original field text, including qualifications; unstructured prose,
 conflicting labels and multi-offering titles are not reconciled automatically.
 """
@@ -11,8 +11,11 @@ from urllib.parse import urlsplit
 import hashlib
 import re
 
-VERSION = 4
+VERSION = 5
 MAX_BYTES = 1_000_000
+# Final fields often include several paragraphs of conditions and legal text.
+# Preserve those together; never truncate to a bare price or exact share count.
+MAX_TERM_CHARS = 10_000
 LABELS = {
     'subscription_price': ('subscription price', 'tegningskurs'),
     'new_shares': ('number of new shares', 'number of new shares in the rights issue'),
@@ -23,7 +26,7 @@ LABELS = {
     'net_proceeds': ('net proceeds',),
     'subscription_period': ('subscription period', 'tegningsperiode'),
     'subscription_deadline': ('subscription deadline', 'tegningsfrist'),
-    'ex_date': ('ex-date', 'ex-dato'),
+    'ex_date': ('ex-date', 'ex-dato', 'first day of trading exclusive right to receive subscription rights (ex-date)'),
     'record_date': ('record date', 'record date (eierregisterdato)'),
     'settlement_date': ('settlement date',),
     'delivery_date': ('delivery date',),
@@ -32,13 +35,13 @@ LABELS = {
     # new shares per right. Preserve both verbatim; never invert a ratio.
     'allocation_ratio': ('tildelingsforhold', 'ratio preferential rights'),
     'subscription_ratio': ('tegningsforhold', 'subscription ratio'),
-    'announcement_date': ('dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert', 'date on which the terms and conditions of the preferential rights issue were announced', 'date on which the terms and conditions of the subsequent offering were announced'),
-    'last_day_including': ('siste dag inklusive', 'last day of trading in the shares including subscription rights', 'last day including right to receive subscription rights', 'last day including rights', 'last day including right'),
+    'announcement_date': ('dato for når vilkårene for fortrinnsrettsemisjonen ble annonsert', 'date on which the terms and conditions of the preferential rights issue were announced', 'date on which the terms and conditions of the subsequent offering were announced', 'date on which the terms and conditions of the repair issue were announced', 'date on which the terms and conditions of the subsequent repair offering were announced'),
+    'last_day_including': ('siste dag inklusive', 'last day of trading in the shares including subscription rights', 'last day of trading including right to receive subscription rights', 'last day including right to receive subscription rights', 'last day including right to receive subscription rights in the subsequent repair offering', 'last day including rights', 'last day including right'),
     'decision_date': ('vedtaksdato', 'date of approval'),
     'expected_decision_date': ('expected date of approval',),
-    'rights_listing': ('skal rettene notere ja/nei', 'skal rettene noteres ja/nei', 'will the rights be listed', 'shall the rights be listed'),
+    'rights_listing': ('skal rettene notere ja/nei', 'skal rettene noteres ja/nei', 'will the rights be listed', 'shall the rights be listed', 'will the rights be listed yes/no', 'will the subscription rights be listed'),
     'rights_isin': ('isin på fortrinnsrettene', 'isin for fortrinnsrettene', 'isin for the preferential rights'),
-    'arranger': ('tilrettelegger', 'manager'),
+    'arranger': ('tilrettelegger', 'manager', 'managers'),
     'settlement_agent': ('oppgjørsagent',),
     'additional_information': ('øvrig informasjon (valgfritt)', 'øvrig informasjon', 'other information'),
     'eligibility': ('eligible shareholders', 'who may subscribe'),
@@ -137,7 +140,7 @@ def _field_at(lines, index):
         parts.append(lines[end].strip())
         label, sep, value = ' '.join(parts).partition(':')
         if sep:
-            lookup = re.sub(r'^[-*•]\s+', '', label).strip().casefold()
+            lookup = re.sub(r'^[-*•·]\s*', '', label).strip().casefold()
             key = LABEL_MAP.get(lookup)
             return (key, label, value, end + 1) if key else None
     return None
@@ -169,10 +172,10 @@ def parse_lines(lines):
             terms[key] = {'status': 'ambiguous', 'value': None, 'evidence': None}
             continue
         evidence, value = candidates[0]
-        if not value or len(evidence) > 700:
+        if not value or len(evidence) > MAX_TERM_CHARS:
             continue
         terms[key] = {'status': 'documented', 'value': value, 'evidence': evidence}
-    return terms, 'partial'
+    return terms, 'partial' if terms else 'no_supported_terms'
 
 
 def _integer(term):
@@ -266,7 +269,7 @@ def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
         if old.get('status') == 'unsupported_document' and old.get('version') == VERSION:
             continue
         attempted = stamp(old.get('attempted_at'))
-        if old.get('version') != VERSION or not attempted or at - attempted >= timedelta(days=7 if old.get('status') == 'partial' else 1):
+        if old.get('version') != VERSION or not attempted or at - attempted >= timedelta(days=7 if old.get('status') in {'partial', 'no_supported_terms'} else 1):
             due.append((row, event, old))
     # Historical catch-up must not starve recent supported documents behind a
     # stream of older unsupported notices. Within each group, never-attempted
@@ -285,7 +288,7 @@ def enrich_saved(connect, at, limit=2, fetch=None, clock=None):
         started = clock()
         event['document'] = collect(event, started, old, fetch)
         finished = clock()
-        if event['document']['status'] == 'partial' and event['document'].get('captured_at'):
+        if event['document']['status'] in {'partial', 'no_supported_terms'} and event['document'].get('captured_at'):
             event['document']['captured_at'] = finished.isoformat()
         c = connect()
         try:

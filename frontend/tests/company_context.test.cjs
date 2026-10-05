@@ -166,3 +166,27 @@ test('expected approval is shown as conditional evidence without confirming life
  assert.match(t,/Forventet vedtaksdato \/ forbehold/);
  assert.match(t,/Subject to board approval/);assert.match(t,/Dokumentstatus: Ukjent/);
 });
+
+test('fetched documents without recognized terms do not claim partial extraction or a source failure',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{status:'no_supported_terms',terms:{}}}]});
+ const text=d.window.document.body.textContent;
+ assert.match(text,/Dokument hentet · ingen støttede vilkår funnet/);
+ assert.doesNotMatch(text,/Delvis tolket|Kilden utilgjengelig/);
+ assert.match(text,/Utvanning: Ukjent/);
+});
+
+test('long financing evidence is folded without losing qualifications or allowing HTML',()=>{
+ const d=new JSDOM('',{runScripts:'outside-only'});d.window.eval(script);
+ const value='NOK 1. '+('Subject to final approval. '.repeat(30))+'The board may cancel. <img src=x>';
+ const evidence='Subscription price: '+value;
+ d.window.document.body.innerHTML=d.window.AksjerCompany.render({score_effect:0,financing_documents:[{document:{status:'partial',terms:{subscription_price:{status:'documented',value,evidence}}}}]});
+ const details=d.window.document.querySelector('.financingTerms .financingEvidence');
+ assert.equal(details.open,false);
+ assert.equal(details.querySelector('summary').textContent,'Vis full kildetekst med verdi og forbehold');
+ assert.equal(details.querySelector('blockquote').textContent,evidence);
+ assert.equal(d.window.document.querySelector('img'),null);
+ details.querySelector('summary').click();
+ assert.equal(details.open,true);
+ assert.match(details.textContent,/The board may cancel/);
+});
