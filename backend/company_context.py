@@ -18,7 +18,7 @@ import company_evidence as evidence
 log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 REGISTRY_IDENTITY_VERSION = 1
-METRICS = {'annualTotalRevenue':'Omsetning', 'annualNetIncome':'Nettoresultat',
+METRICS = {'annualTotalRevenue':'Omsetning', 'annualEBITDA':'EBITDA', 'annualNetIncome':'Nettoresultat',
            'annualFreeCashFlow':'Fri kontantstrøm', 'annualTotalDebt':'Gjeld',
            'annualStockholdersEquity':'Egenkapital'}
 FINANCING = re.compile(r'\b(rights issue|private placement|share capital increase|subsequent offering|repair offering|subscription rights|bridge financ\w*|bridge facility|refinanc\w*|convertible loan|emisjon\w*|kapitalforhøyelse\w*|tegningsrett\w*|fortrinnsrett\w*)\b', re.I)
