@@ -40,6 +40,10 @@ def test_financial_dates_currency_and_invalid_values():
     assert next(f for f in facts if f['label']=='Gjeld')['value']==4
     assert next(f for f in facts if f['label']=='Nettoresultat')['currency'] is None
 
+def test_ebitda_is_projected_with_its_own_period_and_currency():
+    facts=cc.project_financials([{'annualEBITDA':[{'asOfDate':'2025-12-31','reportedValue':{'raw':-300},'currencyCode':'USD','periodType':'12M'}]}],AT)
+    assert facts==[{'label':'EBITDA','value':-300,'currency':'USD','period':'2025-12-31','period_type':'12M'}]
+
 def test_news_issuer_resolution_requires_unique_exact_oslo_equity(tmp_path,monkeypatch):
     def connect():
         c=sqlite3.connect(tmp_path/'names.db');c.row_factory=sqlite3.Row;return c

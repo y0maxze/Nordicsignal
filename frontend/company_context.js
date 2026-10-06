@@ -28,6 +28,19 @@ function provenance(meta){
  const stale=meta.status==='stale'?'Eldre opplysning · ':'';
  return '<p class="muted">'+esc(stale)+link(meta.source_url,meta.source||'Datakilde')+' · hentet '+esc(date(meta.captured_at))+' · siste forsøk '+esc(date(meta.attempted_at))+(meta.license?' · '+esc(meta.license):'')+'</p>';
 }
+function financialFacts(p){
+ return p?.yahoo_identity_verified===true&&Array.isArray(p.financials)?p.financials.filter(f=>f&&typeof f.value==='number'&&Number.isFinite(f.value)):[];
+}
+function financials(p){
+ const facts=financialFacts(p);
+ return (facts.length?'<dl class="companyFinancials">'+facts.map(f=>'<div><dt>'+esc(f.label)+'</dt><dd>'+esc(number(f.value))+' '+esc(f.currency||'(valuta ukjent)')+' <span class="muted">· periode '+esc(f.period||'ukjent')+' · '+esc(f.period_type||'periodetype ukjent')+'</span></dd></div>').join('')+'</dl>':'<p>Identitetskontrollerte regnskapstall er ikke tilgjengelige i det lagrede datagrunnlaget ennå.</p>')+
+ provenance(p?.field_sources?.financials);
+}
+function financialPanel(p){
+ if(!p||p.score_effect!==0)return '<h2>Regnskap og verdsettelse</h2><p>UTILGJENGELIG · regnskapsgrunnlaget kunne ikke hentes.</p>';
+ return '<h2>Regnskap og verdsettelse</h2><p class="muted">Samme lagrede datagrunnlag som selskapsinformasjonen. Perioder og valuta vises per tall; de kan være forskjellige.</p>'+financials(p)+
+ '<p class="muted">P/E, P/B og EV/EBITDA: Ukjent. Beregning krever kontrollerte og sammenlignbare kurs-, aksje-, periode- og regnskapsopplysninger.</p>';
+}
 function registryIdentity(p){
  if(p.registry_identity?.status==='ambiguous')return '<p class="muted">Registeroppslag er stoppet: motstridende juridiske navn eller issuer-ID-er i kildegrunnlaget. Identiteten må avklares.</p>';
  if(p.registry_identity?.status==='unavailable')return '<p class="muted">Kildegrunnlaget for registerkoblingen kunne ikke kontrolleres fullstendig.</p>';
@@ -45,8 +58,9 @@ function overview(p){
  const docs=p.financing_documents||[], latest=docs[0], missing=[];
  if(!p.description)missing.push('Virksomhetsbeskrivelse');
  if(!p.isin)missing.push('ISIN');
- if(!p.financials?.length)missing.push('Regnskapstall');
- else if(p.financials.some(f=>!f.currency||!f.period))missing.push('Valuta eller rapporteringsperiode for enkelte regnskapstall');
+ const facts=financialFacts(p);
+ if(!facts.length)missing.push('Identitetskontrollerte regnskapstall');
+ else if(facts.some(f=>!f.currency||!f.period))missing.push('Valuta eller rapporteringsperiode for enkelte regnskapstall');
  if(!docs.some(e=>Object.values(e.document?.terms||{}).some(t=>t.status==='documented'&&t.evidence)))missing.push('Sikkert tolkede emisjonsvilkår');
  missing.push('Bekreftet nåværende finansieringsstatus og komplett historikk');
  return '<section class="companyOverview" aria-label="Oversikt over datagrunnlaget"><h3>Rask oversikt</h3><div class="companyOverviewGrid"><div><h4>Hvilke kapitalhendelser er observert?</h4>'+(latest?'<p>'+esc(p.financing_document_count??docs.length)+' lagrede dokumenter. Nyeste publiserte dokument:</p><p>'+link(latest.url,latest.title)+' · '+esc(date(latest.published_at))+'</p>':'<p>Ingen treff i innhentet materiale. Finansieringsrisiko er fortsatt ukjent.</p>')+'<p class="muted">Dokumenter kan gjelde ulike transaksjoner. Ingen aktiv emisjon utledes automatisk.</p></div><div><h4>Hva mangler i datagrunnlaget?</h4><ul>'+missing.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div></div><p class="companySince" data-company-since>Endringer siden sist krever en vellykket tidligere visning på denne enheten.</p></section>';
@@ -116,18 +130,20 @@ function render(p){
  (p.registry?'<p>Juridisk navn: '+esc(p.registry.official_name)+' · org.nr. '+esc(p.registry.organisation_number)+'</p><p>Registrert næring: '+esc(p.registry.industry||'Ukjent')+'</p>'+provenance(p.registry):'')+
  registryIdentity(p)+
  '<p>ISIN: '+esc(p.isin||'Ukjent')+(p.isin?' · '+link(p.isin_source_url,p.isin_source||'Kilde ukjent')+' · noteringsdato '+esc(p.isin_listing_date||'ukjent'):'')+'</p>'+
- (p.financials?.length?'<dl>'+p.financials.map(f=>'<dt>'+esc(f.label)+'</dt><dd>'+esc(number(f.value))+' '+esc(f.currency||'(valuta ukjent)')+' <span class="muted">· periode '+esc(f.period)+' · '+esc(f.period_type)+'</span></dd>').join('')+'</dl>':'<p>Regnskapstall er ikke tilgjengelige ennå.</p>')+
- provenance(p.field_sources?.financials)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
+ financials(p)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
  '<h3>Finansiering og utvanning</h3><p>Dokumenterte observasjoner · ingen bekreftelse på aktiv emisjon.</p>'+(p.financing_coverage?'<p class="muted">Lagrede dokumenters publiseringsdatoer: '+esc(date(p.financing_coverage.oldest_stored_publication))+' – '+esc(date(p.financing_coverage.newest_stored_publication))+'. Dette er ikke sammenhengende dekning. '+(p.financing_coverage.historical_backfill==='partial'?'NewsWeb-arkiv: '+esc(p.financing_coverage.queried_days??0)+' undersøkte kalenderdager for markedet · '+esc(p.financing_coverage.failed_days??0)+' feilede · '+esc(p.financing_coverage.truncated_days??0)+' avkortede. Siste forsøk: '+esc(date(p.financing_coverage.attempted_at))+'. Siste vellykkede arkivinnhenting: '+esc(date(p.financing_coverage.captured_at))+'. Datoene gjelder markedssøket, ikke full dekning for dette selskapet. Tidligere dokumenter beholdes ved kildefeil. Nyere dager kontrolleres på nytt; eldre dager gjenkontrolleres gradvis. Navneendringer og usikker identitet kan gi utelatelser.':p.financing_coverage.historical_backfill==='not_connected'?'Historisk arkivinnhenting er ikke koblet til.':'Status for arkivinnhenting er utilgjengelig.')+'</p>':'')+'<div data-financing-list>'+(p.financing_documents?.length?p.financing_documents.map(financingDocument).join(''):'<p>Ingen finansieringsmeldinger i innhentet materiale. Dette utelukker ikke emisjon eller kapitalbehov.</p>')+'</div>'+
  (p.financing_documents_truncated?'<p class="muted" data-financing-count>Viser de 20 nyeste av '+esc(p.financing_document_count)+' lagrede dokumenter. Eldre dokumenter er bevart.</p>'+(p.financing_next_cursor?'<button class="btn" type="button" data-financing-more>Vis eldre dokumenter</button>':''):'')+
  '<p class="muted">'+esc(p.coverage||'Dekning ukjent')+' Kildestatus: '+esc(p.news_status==='partial'?'delvis dekning':'utilgjengelig')+'. Siste forsøk: '+esc(date(p.news_checked_at))+'.</p>'+
  '<details><summary>Hva bør kontrolleres ved en emisjon?</summary><ul><li>Er emisjonen foreslått, vedtatt, gjennomført eller avlyst? Les siste melding.</li><li>Tegningskurs og antall nye aksjer: eierandelen kan bli redusert dersom du ikke deltar.</li><li>Rett til å delta, eks-dato og tegningsfrist må bekreftes i vilkårene.</li><li>Skal pengene finansiere vekst, drift, gjeld eller refinansiering?</li><li>En ny kontrakt er ikke det samme som kontanter nå og opphever ikke en emisjon.</li></ul><p>Eksisterende aksjer er ikke mindreverdige bare fordi de er «gamle». Rettigheter og aksjeklasse avhenger av dokumenterte vilkår.</p></details>'+
  '<p class="muted">Verdsettelse, kapitalbruk, eiersalg og lock-up må kontrolleres i siste rapport/prospekt når de ikke er dokumentert her. Forskning · ingen score-effekt.</p></div>';
 }
-async function mount(root,ticker){
+async function mount(root,ticker,{financialRoot}={}){
  if(!root)return;const key={};root._companyRequest=key;root.innerHTML='<h2>Selskapsinformasjon og finansiering</h2><p>Laster lagrede opplysninger…</p>';
- try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(root.isConnected&&root._companyRequest===key){root.innerHTML=render(p);if(p?.score_effect===0){markVisit(root,p);bindHistory(root,p,key);bindOlderDocuments(root,p,key);}}}
- catch{if(root.isConnected&&root._companyRequest===key)root.innerHTML='<h2>Selskapsinformasjon</h2><p>UTILGJENGELIG · selskapsopplysninger kunne ikke hentes. Dette sier ingenting om finansieringsrisikoen.</p>';}
+ if(financialRoot){financialRoot._companyRequest=key;financialRoot.innerHTML='<h2>Regnskap og verdsettelse</h2><p>Laster lagrede opplysninger…</p>';}
+ const current=()=>root.isConnected&&root._companyRequest===key;
+ const showFinancials=p=>{if(current()&&financialRoot?.isConnected&&financialRoot._companyRequest===key)financialRoot.innerHTML=financialPanel(p);};
+ try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(p?.score_effect!==0||(p.ticker&&p.ticker!==ticker))throw Error();if(current()){root.innerHTML=render(p);showFinancials(p);markVisit(root,p);bindHistory(root,p,key);bindOlderDocuments(root,p,key);}}
+ catch{if(current()){root.innerHTML='<h2>Selskapsinformasjon</h2><p>UTILGJENGELIG · selskapsopplysninger kunne ikke hentes. Dette sier ingenting om finansieringsrisikoen.</p>';showFinancials(null);}}
 }
-window.AksjerCompany={render,mount};
+window.AksjerCompany={render,mount,financialPanel};
 })();

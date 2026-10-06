@@ -158,6 +158,9 @@ html.aksjerFinance:root .cfFilters{max-width:100%}
 .companyContext {min-width:0;overflow-wrap:anywhere}
 .companyContext dt {font-weight:600;margin-top:.75rem}
 .companyContext dd {margin:0 0 .5rem}
+.companyFinancials{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.75rem 1.25rem;overflow-wrap:anywhere}
+.companyFinancials dt{font-weight:600}
+.companyFinancials dd{margin:.25rem 0 0}
 .companyContext summary {min-height:44px;padding:12px 0;cursor:pointer}
 .companyContext li {margin-bottom:.65rem}
 
