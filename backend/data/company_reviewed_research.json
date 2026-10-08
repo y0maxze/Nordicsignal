@@ -1,0 +1,667 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "ticker": "HYPRO",
+      "identity": "hydrogenpro",
+      "isin": "NO0010892359",
+      "newsweb_issuer_id": 12809,
+      "revision": 1,
+      "reviewed_at": "2026-10-08T22:02:52.200546+00:00",
+      "business": {
+        "text": "Utvikler elektrolysører og elektroder for hydrogenproduksjon. Leverer utstyr, prosjektering og service til industriprosjekter gjennom internasjonale samarbeidspartnere.",
+        "source_id": "q2",
+        "locator": "s. 3"
+      },
+      "developments": [
+        {
+          "text": "Q2-omsetningen steg fra samme kvartal året før. EBITDA-bedringen omfatter reversering av avsetninger og materialkostnader.",
+          "source_id": "q2",
+          "locator": "s. 7 og 12"
+        }
+      ],
+      "risks": [
+        {
+          "text": "Rapporten beskriver usikkerhet om fortsatt drift og behov for ny ekstern finansiering på kort sikt.",
+          "source_id": "q2",
+          "locator": "s. 6 og 21, note 11"
+        }
+      ],
+      "financial_groups": [
+        {
+          "kind": "quarter",
+          "label": "Q2 2026",
+          "previous_label": "Q2 2025",
+          "start": "2026-04-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-04-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 12",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Omsetning",
+              "value": 15347,
+              "previous": 12818
+            },
+            {
+              "label": "EBITDA",
+              "value": -16001,
+              "previous": -48425
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -51310,
+              "previous": -75752
+            }
+          ]
+        },
+        {
+          "kind": "half_year",
+          "label": "H1 2026",
+          "previous_label": "H1 2025",
+          "start": "2026-01-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-01-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 12",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Omsetning",
+              "value": 31213,
+              "previous": 35214
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -92807,
+              "previous": -141106
+            }
+          ]
+        },
+        {
+          "kind": "balance",
+          "label": "30.06.2026",
+          "previous_label": "31.12.2025",
+          "start": null,
+          "end": "2026-06-30",
+          "previous_start": null,
+          "previous_end": "2025-12-31",
+          "source_id": "q2",
+          "locator": "s. 13",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Kontanter og bankinnskudd",
+              "value": 58642,
+              "previous": 102244
+            },
+            {
+              "label": "Egenkapital",
+              "value": 158190,
+              "previous": 246851
+            }
+          ]
+        },
+        {
+          "kind": "annual",
+          "label": "2025",
+          "previous_label": "2024",
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "previous_start": "2024-01-01",
+          "previous_end": "2024-12-31",
+          "source_id": "annual",
+          "locator": "s. 52",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Omsetning",
+              "value": 86650,
+              "previous": 195688
+            },
+            {
+              "label": "EBITDA",
+              "value": -193057,
+              "previous": -204184
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -239594,
+              "previous": -200138
+            }
+          ]
+        }
+      ],
+      "sources": {
+        "q2": {
+          "label": "Halvårsrapport 2026",
+          "url": "https://api3.oslo.oslobors.no/v1/newsreader/attachment?messageId=680437&attachmentId=331689",
+          "published_on": "2026-08-21",
+          "sha256": "f17263e7727453c40ee91adfd6b934a7e8e60817d590eb7437a97a70ec2c62e9",
+          "message_id": 680437
+        },
+        "annual": {
+          "label": "Årsrapport 2025",
+          "url": "https://api3.oslo.oslobors.no/v1/newsreader/attachment?messageId=669527&attachmentId=322353",
+          "published_on": "2026-03-27",
+          "sha256": "6d1b78d251303f37bf36924715f723281f05cfc2201991aba234b2a2fc21ac3c",
+          "message_id": 669527
+        },
+        "calendar": {
+          "label": "HydrogenPro · finanskalender",
+          "url": "https://hydrogenpro.com/mfn_news/financial-calendar-for-hydrogenpro-asa/",
+          "published_on": null
+        },
+        "key": {
+          "label": "Vilkår 22. juni",
+          "url": "https://newsweb.oslobors.no/message/676716",
+          "published_on": "2026-06-22",
+          "message_id": 676716
+        },
+        "result": {
+          "label": "Resultat 21. juli",
+          "url": "https://newsweb.oslobors.no/message/678505",
+          "published_on": "2026-07-21",
+          "message_id": 678505
+        }
+      },
+      "next_event": {
+        "date": "2026-11-13",
+        "text": "Q3-rapport 2026",
+        "source_id": "calendar",
+        "locator": "Finanskalender 2026"
+      },
+      "transactions": [
+        {
+          "id": "hypro-private-2026-06",
+          "title": "Rettet emisjon · juni 2026",
+          "steps": [
+            {
+              "date": "2026-06-22",
+              "text": "Kapitalinnhenting omtalt med cirka 15 mill. NOK i bruttoproveny og kurs 0,50 NOK.",
+              "source_id": "key",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-08-21",
+              "text": "Halvårsrapporten bekrefter 30 millioner nye aksjer og 15 mill. NOK innhentet i juni.",
+              "source_id": "q2",
+              "locator": "s. 5 og 21"
+            }
+          ]
+        },
+        {
+          "id": "hypro-subsequent-2026-07",
+          "title": "Reparasjonsemisjon · juli 2026",
+          "steps": [
+            {
+              "date": "2026-06-22",
+              "text": "Mulig tilbud varslet, inntil 12 762 444 aksjer til 0,50 NOK.",
+              "source_id": "key",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-07-21",
+              "text": "12 762 444 aksjer tildelt etter fristen 20. juli. Registrering og levering var fortsatt betinget av betaling i denne meldingen.",
+              "source_id": "result",
+              "locator": "Meldingen"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ticker": "HDLY",
+      "identity": "huddly",
+      "isin": null,
+      "newsweb_issuer_id": 12850,
+      "revision": 1,
+      "reviewed_at": "2026-10-08T22:02:52.200546+00:00",
+      "business": {
+        "text": "Utvikler kameraer, videobarer og programvare for videomøter. Selger til organisasjoner gjennom partnere og distributører internasjonalt, blant annet for Teams, Zoom og Google Meet.",
+        "source_id": "q2",
+        "locator": "s. 3–6"
+      },
+      "developments": [
+        {
+          "text": "Bruttofortjenesten i Q2 steg svakt selv om omsetningen falt. Marginen var 49 %, mot 43 % året før.",
+          "source_id": "q2",
+          "locator": "s. 7"
+        }
+      ],
+      "risks": [
+        {
+          "text": "Forsinket partnerutrulling og fortsatt kontantforbruk fra drift gir usikkerhet om vekst og finansieringsbehov.",
+          "source_id": "q2",
+          "locator": "s. 7–11"
+        }
+      ],
+      "financial_groups": [
+        {
+          "kind": "quarter",
+          "label": "Q2 2026",
+          "previous_label": "Q2 2025",
+          "start": "2026-04-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-04-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 14",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Varesalg",
+              "value": 50373,
+              "previous": 56742
+            },
+            {
+              "label": "Driftsresultat (EBIT)",
+              "value": -34682,
+              "previous": -26082
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -41080,
+              "previous": -20228
+            }
+          ],
+          "note": "Varesalg vises separat fra fremleieinntekter, slik det presenteres i rapporten."
+        },
+        {
+          "kind": "half_year",
+          "label": "H1 2026",
+          "previous_label": "H1 2025",
+          "start": "2026-01-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-01-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 14",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Varesalg",
+              "value": 98862,
+              "previous": 102037
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -83586,
+              "previous": -74255
+            }
+          ]
+        },
+        {
+          "kind": "balance",
+          "label": "30.06.2026",
+          "previous_label": "31.12.2025",
+          "start": null,
+          "end": "2026-06-30",
+          "previous_start": null,
+          "previous_end": "2025-12-31",
+          "source_id": "q2",
+          "locator": "s. 16",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Kontanter og kontantekvivalenter",
+              "value": 62329,
+              "previous": 58364
+            },
+            {
+              "label": "Egenkapital",
+              "value": 333277,
+              "previous": 334981
+            }
+          ],
+          "note": "Sammenligningstallene følger halvårsrapportens presentasjon; se omtalen av depositum på s. 8."
+        },
+        {
+          "kind": "annual",
+          "label": "2025",
+          "previous_label": "2024",
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "previous_start": "2024-01-01",
+          "previous_end": "2024-12-31",
+          "source_id": "annual",
+          "locator": "s. 17",
+          "currency": "NOK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Varesalg",
+              "value": 211312,
+              "previous": 148781
+            },
+            {
+              "label": "Driftsresultat (EBIT)",
+              "value": -133629,
+              "previous": -153388
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -141468,
+              "previous": -172179
+            }
+          ]
+        }
+      ],
+      "sources": {
+        "q2": {
+          "label": "Halvårsrapport 2026",
+          "url": "https://cdn.sanity.io/files/9e8eokgu/production/a4257d01d22ed617ae070359263da5decc61a1e6.pdf",
+          "published_on": "2026-08-26",
+          "sha256": "f38d16aae28e782cc18c8c9532671d52855ff21c68eaa0d78c9d2285021ef8a4"
+        },
+        "annual": {
+          "label": "Årsrapport 2025",
+          "url": "https://cdn.sanity.io/files/9e8eokgu/production/f0bf4277e77dfbc2df0723f25d42a458539e54bc.pdf",
+          "published_on": "2026-04-23",
+          "sha256": "f31aa67922463164f1d40f18e03622d573b6ed32c0bb09d7994978fbcba6a4d3"
+        },
+        "calendar": {
+          "label": "Huddly · finanskalender",
+          "url": "https://www.huddly.com/investor-relations/",
+          "published_on": null
+        },
+        "allocation": {
+          "label": "Tildeling 26. august",
+          "url": "https://newsweb.oslobors.no/message/680918",
+          "published_on": "2026-08-26",
+          "message_id": 680918
+        },
+        "registration": {
+          "label": "Registrering 4. september",
+          "url": "https://newsweb.oslobors.no/message/681682",
+          "published_on": "2026-09-04",
+          "message_id": 681682
+        },
+        "cancel": {
+          "label": "Kansellering 25. september",
+          "url": "https://newsweb.oslobors.no/message/683086",
+          "published_on": "2026-09-25",
+          "message_id": 683086
+        }
+      },
+      "next_event": {
+        "date": "2026-11-05",
+        "text": "Q3-rapport 2026",
+        "source_id": "calendar",
+        "locator": "Finanskalender 2026"
+      },
+      "transactions": [
+        {
+          "id": "hdly-private-2026-08",
+          "title": "Rettet emisjon · august 2026",
+          "steps": [
+            {
+              "date": "2026-08-26",
+              "text": "3 161 444 aksjer tildelt til 22 NOK. Pengene skulle blant annet finansiere produktutvikling og arbeidskapital.",
+              "source_id": "allocation",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-09-04",
+              "text": "Kapitalforhøyelsen registrert. Selskapet oppga 34 775 893 aksjer etter emisjonen.",
+              "source_id": "registration",
+              "locator": "Meldingen"
+            }
+          ]
+        },
+        {
+          "id": "hdly-subsequent-2026-09",
+          "title": "Reparasjonsemisjon · september 2026",
+          "steps": [
+            {
+              "date": "2026-09-16",
+              "text": "Tegningen åpnet med inntil 500 000 aksjer til 22 NOK, ifølge den senere kanselleringsmeldingen.",
+              "source_id": "cancel",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-09-25",
+              "text": "Tilbudet kansellert i sin helhet. Ingen aksjer skulle tildeles eller utstedes i dette tilbudet.",
+              "source_id": "cancel",
+              "locator": "Meldingen"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ticker": "INIFY",
+      "identity": "inify laboratories",
+      "isin": "SE0017486103",
+      "newsweb_issuer_id": 12973,
+      "revision": 1,
+      "reviewed_at": "2026-10-08T22:02:52.200546+00:00",
+      "business": {
+        "text": "Leverer laboratorietjenester innen vevsdiagnostikk for prostata og mage/tarm. Betjener helseaktører i Sverige og Storbritannia med en digital arbeidsflyt der patologen stiller diagnosen med AI-støtte.",
+        "source_id": "q2",
+        "locator": "s. 2–6"
+      },
+      "developments": [
+        {
+          "text": "Laboratoriet i Storbritannia startet klinisk drift i juni. Q2-salget økte fra samme kvartal året før.",
+          "source_id": "q2",
+          "locator": "s. 2 og 10"
+        }
+      ],
+      "risks": [
+        {
+          "text": "Underskuddet økte. Utbygging i Storbritannia og flere ansatte bidro til høyere kostnader.",
+          "source_id": "q2",
+          "locator": "s. 6 og 10"
+        }
+      ],
+      "financial_groups": [
+        {
+          "kind": "quarter",
+          "label": "Q2 2026",
+          "previous_label": "Q2 2025",
+          "start": "2026-04-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-04-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 10",
+          "currency": "SEK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Nettoomsetning",
+              "value": 6323,
+              "previous": 5558
+            },
+            {
+              "label": "Driftsresultat (EBIT)",
+              "value": -22335,
+              "previous": -17833
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -21821,
+              "previous": -17177
+            }
+          ]
+        },
+        {
+          "kind": "half_year",
+          "label": "H1 2026",
+          "previous_label": "H1 2025",
+          "start": "2026-01-01",
+          "end": "2026-06-30",
+          "previous_start": "2025-01-01",
+          "previous_end": "2025-06-30",
+          "source_id": "q2",
+          "locator": "s. 10",
+          "currency": "SEK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Nettoomsetning",
+              "value": 12299,
+              "previous": 10680
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -43317,
+              "previous": -32559
+            }
+          ]
+        },
+        {
+          "kind": "balance",
+          "label": "30.06.2026",
+          "previous_label": "31.12.2025",
+          "start": null,
+          "end": "2026-06-30",
+          "previous_start": null,
+          "previous_end": "2025-12-31",
+          "source_id": "q2",
+          "locator": "s. 11",
+          "currency": "SEK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Kontanter og bank",
+              "value": 90658,
+              "previous": 57532
+            },
+            {
+              "label": "Egenkapital",
+              "value": 159694,
+              "previous": 106538
+            }
+          ]
+        },
+        {
+          "kind": "annual",
+          "label": "2025",
+          "previous_label": "2024",
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "previous_start": "2024-01-01",
+          "previous_end": "2024-12-31",
+          "source_id": "annual",
+          "locator": "s. 35",
+          "currency": "SEK",
+          "scale": 1000,
+          "scope": "group",
+          "metrics": [
+            {
+              "label": "Nettoomsetning",
+              "value": 22006,
+              "previous": 13131
+            },
+            {
+              "label": "Driftsresultat (EBIT)",
+              "value": -69657,
+              "previous": -52986
+            },
+            {
+              "label": "Nettoresultat",
+              "value": -67886,
+              "previous": -51643
+            }
+          ]
+        }
+      ],
+      "sources": {
+        "q2": {
+          "label": "Halvårsrapport 2026",
+          "url": "https://mb.cision.com/Main/21520/4387640/4232762.pdf",
+          "published_on": "2026-08-26",
+          "sha256": "32ccd1d77b22a75bf8c363a74e75f5ac3c29c4d0a54cdf577c82487c75d1f5c3"
+        },
+        "annual": {
+          "label": "Årsrapport 2025",
+          "url": "https://mb.cision.com/Main/21520/4334808/4037202.pdf",
+          "published_on": "2026-04-15",
+          "sha256": "79812b371239495a15c35b8c4096be915dbe8586930086ca1017afe84230f6ca"
+        },
+        "calendar": {
+          "label": "Inify · finanskalender",
+          "url": "https://www.inify.com/financial-calendar/",
+          "published_on": null
+        },
+        "repair": {
+          "label": "Resultat 27. januar",
+          "url": "https://www.inify.com/inify-laboratories-final-results-of-the-repair-issue/",
+          "published_on": "2026-01-27"
+        },
+        "registration": {
+          "label": "Registrering 24. mars",
+          "url": "https://www.inify.com/inify-laboratories-new-share-capital-registered-2/",
+          "published_on": "2026-03-24"
+        }
+      },
+      "next_event": {
+        "date": "2026-10-28",
+        "text": "Q3-rapport 2026",
+        "source_id": "calendar",
+        "locator": "Finanskalender 2026"
+      },
+      "transactions": [
+        {
+          "id": "inify-private-2025-12",
+          "title": "Rettet emisjon · vedtatt desember 2025",
+          "steps": [
+            {
+              "date": "2025-12-04",
+              "text": "Vedtak om 26 266 866 nye aksjer, bekreftet i registreringsmeldingen.",
+              "source_id": "registration",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-03-24",
+              "text": "Kapitalforhøyelsen registrert sammen med reparasjonsemisjonen. Samlet aksjetall etter begge: 107 474 845.",
+              "source_id": "registration",
+              "locator": "Meldingen"
+            }
+          ]
+        },
+        {
+          "id": "inify-repair-2026-01",
+          "title": "Reparasjonsemisjon · januar 2026",
+          "steps": [
+            {
+              "date": "2026-01-27",
+              "text": "2 304 563 aksjer tildelt til 3,50 NOK. Brutto 8 065 970,50 NOK; garantistene fikk aksjene som ikke ble tegnet.",
+              "source_id": "repair",
+              "locator": "Meldingen"
+            },
+            {
+              "date": "2026-03-24",
+              "text": "Kapitalforhøyelsen registrert. Levering var fortsatt betinget av rettidig betaling i meldingen.",
+              "source_id": "registration",
+              "locator": "Meldingen"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

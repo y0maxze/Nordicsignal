@@ -176,6 +176,24 @@ html.aksjerFinance:root .cfFilters{max-width:100%}
 .companyOverviewGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
 .companyOverview h4{margin:.5rem 0;font-size:1rem}
 .companyOverview ul{padding-left:1.25rem}
+.researchSource{display:block;font-size:.85rem;color:var(--muted);overflow-wrap:anywhere;margin:.35rem 0 .8rem}
+#companySummary h3{font-size:1rem;margin:.5rem 0}
+#companySummary p{line-height:1.55}
+.reviewedFinancialGroup,.researchArchive{border-top:1px solid var(--line);padding:.9rem 0}
+.reviewedFinancialGroup summary,.researchArchive>summary{cursor:pointer;font-weight:650;line-height:1.5}
+.researchTableScroll{max-width:100%;overflow-x:auto;margin:.75rem 0}
+.researchTable{width:100%;border-collapse:collapse;min-width:480px;font-variant-numeric:tabular-nums}
+.researchTable caption{text-align:left;font-size:.85rem;margin-bottom:.6rem;color:var(--muted)}
+.researchTable th,.researchTable td{padding:.7rem .6rem;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.researchTable th:first-child{text-align:left;white-space:normal;min-width:130px}
+.researchTransactions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.25rem}
+.researchTransactions article{border:1px solid var(--line);border-radius:10px;padding:1rem;min-width:0;overflow-wrap:anywhere}
+.researchTransactions h4{margin:0 0 1rem}
+.researchTransactions ol{padding-left:1.3rem;margin:0}
+.researchTransactions li{padding-left:.3rem;margin-bottom:1rem}
+.researchTransactions time{font-size:.85rem;font-weight:650}
+.researchTransactions p{line-height:1.5;margin:.4rem 0}
+@media(max-width:650px){.researchTransactions{grid-template-columns:minmax(0,1fr)}.researchTable th,.researchTable td{padding:.6rem .4rem}}
 .companySince{padding-top:.75rem;border-top:1px solid var(--line,#dce1e6);font-size:.85rem}
 .companyHistory ol{padding-left:1.25rem}
 .companyHistory li{padding:.75rem 0;border-bottom:1px solid var(--line,#dce1e6)}

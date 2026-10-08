@@ -41,12 +41,13 @@ class Provider:
         return {'symbol':'TECH.OL','series':[{'annualTotalDebt':[{'asOfDate':'2025-12-31','reportedValue':100,'currencyCode':'NOK'}]}]}
 
 
-def test_official_activity_has_own_source_financials_retain_yahoo_source(monkeypatch):
+def test_registry_activity_does_not_replace_verified_business_description(monkeypatch):
     monkeypatch.setattr(cc,'now',lambda:AT)
     result=cc.collect_profile(ROW,Provider(),lambda name,at:cr.collect_registry(name,at,lambda _:payload()))
-    assert result['description']=='Registered technology activity.'
-    assert result['description_kind']=='registered_activity'
-    assert result['field_sources']['description']['source']==cr.SOURCE
+    assert result['description']=='Yahoo description'
+    assert result.get('description_kind')!='registered_activity'
+    assert result['field_sources']['description']['source']=='Yahoo Finance'
+    assert result['registry']['registered_activity']=='Registered technology activity.'
     assert result['field_sources']['financials']['source']=='Yahoo Finance'
     assert result['financials'][0]['currency']=='NOK'
     assert result['yahoo_identity_verified'] is True
@@ -84,8 +85,8 @@ def test_reconciled_legal_name_is_not_overwritten_by_provider_display_name(row,p
     result=cc.collect_profile(row,DisplayName(),registry)
     assert looked_up==['Techstep ASA']
     assert result['registry']['organisation_number']=='977037093'
-    assert result['description']=='Registered technology activity.'
-    assert result['field_sources']['description']['source']==cr.SOURCE
+    assert result['description']=='Yahoo description'
+    assert result['field_sources']['description']['source']=='Yahoo Finance'
 
 
 def test_verified_provider_full_name_still_supplies_missing_legal_name():
