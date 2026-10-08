@@ -74,6 +74,13 @@ function reviewedTransactions(p){
  const r=reviewed(p);if(!r)return '';
  return '<h3>Dokumenterte finansieringsforløp</h3>'+reviewStatus(r)+'<p>Utvalgte transaksjoner med dokumenterte sammenhenger. Siste punkt viser hva kilden bekreftet på den datoen. Full historikk og dagens finansieringsbehov er ikke bekreftet.</p><div class="researchTransactions">'+r.transactions.map(t=>'<article><h4>'+esc(t.title)+'</h4><ol>'+t.steps.map(s=>'<li><time datetime="'+esc(s.date)+'">'+esc(day(s.date))+'</time><p>'+esc(s.text)+'</p>'+researchSource(r,s)+'</li>').join('')+'</ol></article>').join('')+'</div><p class="muted">Rettede emisjoner og reparasjonsemisjoner vises hver for seg. Utvanning er ikke beregnet uten kontrollerte aksjetall for samme transaksjon.</p>';
 }
+function reviewedReports(p){
+ const r=reviewed(p);if(!r)return '';
+ const ids=[...new Set(r.financial_groups.map(g=>g.source_id))];
+ return '<h3>Rapporter bak regnskapstallene</h3>'+reviewStatus(r)+'<p>Samme originalrapporter som i regnskapsdelen.</p><ul>'+ids.map(id=>{
+  const s=r.sources[id],a=link(s?.url,s?.label);return a?'<li>'+a+(s.published_on?' · publisert '+esc(day(s.published_on)):'')+'</li>':'';
+ }).join('')+'</ul>';
+}
 function registryIdentity(p){
  if(p.registry_identity?.status==='ambiguous')return '<p class="muted">Registeroppslag er stoppet: motstridende juridiske navn eller issuer-ID-er i kildegrunnlaget. Identiteten må avklares.</p>';
  if(p.registry_identity?.status==='unavailable')return '<p class="muted">Kildegrunnlaget for registerkoblingen kunne ikke kontrolleres fullstendig.</p>';
@@ -171,12 +178,13 @@ function render(p){
  '<details><summary>Hva bør kontrolleres ved en emisjon?</summary><ul><li>Er emisjonen foreslått, vedtatt, gjennomført eller avlyst? Les siste melding.</li><li>Tegningskurs og antall nye aksjer: eierandelen kan bli redusert dersom du ikke deltar.</li><li>Rett til å delta, eks-dato og tegningsfrist må bekreftes i vilkårene.</li><li>Skal pengene finansiere vekst, drift, gjeld eller refinansiering?</li><li>En ny kontrakt er ikke det samme som kontanter nå og opphever ikke en emisjon.</li></ul><p>Eksisterende aksjer er ikke mindreverdige bare fordi de er «gamle». Rettigheter og aksjeklasse avhenger av dokumenterte vilkår.</p></details>'+
  '<p class="muted">Verdsettelse, kapitalbruk, eiersalg og lock-up må kontrolleres i siste rapport/prospekt når de ikke er dokumentert her. Forskning · ingen score-effekt.</p>'+(r?'</details>':'')+'</div>';
 }
-async function mount(root,ticker,{financialRoot,summaryRoot}={}){
+async function mount(root,ticker,{financialRoot,summaryRoot,reportsRoot}={}){
  if(!root)return;const key={};root._companyRequest=key;root.innerHTML='<h2>Selskapsinformasjon og finansiering</h2><p>Laster lagrede opplysninger…</p>';
  if(financialRoot){financialRoot._companyRequest=key;financialRoot.innerHTML='<h2>Regnskap og verdsettelse</h2><p>Laster lagrede opplysninger…</p>';}
  if(summaryRoot){summaryRoot._companyRequest=key;summaryRoot.hidden=true;summaryRoot.innerHTML='';}
+ if(reportsRoot){reportsRoot._companyRequest=key;reportsRoot.hidden=true;reportsRoot.innerHTML='';}
  const current=()=>root.isConnected&&root._companyRequest===key;
- const showFinancials=p=>{if(current()&&financialRoot?.isConnected&&financialRoot._companyRequest===key)financialRoot.innerHTML=financialPanel(p);if(current()&&summaryRoot?.isConnected&&summaryRoot._companyRequest===key){summaryRoot.innerHTML=summaryPanel(p);summaryRoot.hidden=!summaryRoot.innerHTML;}};
+ const showFinancials=p=>{if(current()&&financialRoot?.isConnected&&financialRoot._companyRequest===key)financialRoot.innerHTML=financialPanel(p);if(current()&&summaryRoot?.isConnected&&summaryRoot._companyRequest===key){summaryRoot.innerHTML=summaryPanel(p);summaryRoot.hidden=!summaryRoot.innerHTML;}if(current()&&reportsRoot?.isConnected&&reportsRoot._companyRequest===key){reportsRoot.innerHTML=reviewedReports(p);reportsRoot.hidden=!reportsRoot.innerHTML;}};
  try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(p?.score_effect!==0||(p.ticker&&p.ticker!==ticker))throw Error();if(current()){root.innerHTML=render(p);showFinancials(p);markVisit(root,p);bindHistory(root,p,key);bindOlderDocuments(root,p,key);}}
  catch{if(current()){root.innerHTML='<h2>Selskapsinformasjon</h2><p>UTILGJENGELIG · selskapsopplysninger kunne ikke hentes. Dette sier ingenting om finansieringsrisikoen.</p>';showFinancials(null);}}
 }
