@@ -243,7 +243,7 @@ def collect_profile(row, provider, registry=None, registry_documents=None):
                 if registry_identity and registry_identity['status'] == 'documented':
                     official={**official, 'identity_evidence':registry_identity}
                 payload['registry']=official
-                if official.get('registered_activity'):
+                if official.get('registered_activity') and not payload['description']:
                     payload['description']=official['registered_activity']
                     payload['description_kind']='registered_activity'
                     payload['source_status']['description']='stored'
@@ -267,7 +267,10 @@ def retain_profile_fields(data, old, at):
             continue
         if field=='financials' and previous.get('yahoo_identity_verified') is not True:
             continue
-        if not data.get(field) and previous.get(field):
+        prefer_previous_description = (field == 'description' and data.get('description_kind') == 'registered_activity'
+                                       and previous.get('description_kind') != 'registered_activity'
+                                       and previous.get('yahoo_identity_verified') is True)
+        if (not data.get(field) or prefer_previous_description) and previous.get(field):
             data[field]=previous[field]
             data['source_status'][field]='stale'
             metadata=(previous.get('field_sources') or {}).get(field) or (previous.get('registry') if field=='registry' else None) or {
@@ -512,7 +515,14 @@ def context(ticker, snapshots=None, identity=None, before=None):
         from company_newsweb import coverage
         backfill=coverage(connect)
     except Exception:log.warning('NewsWeb coverage unavailable')
+    reviewed = None
+    try:
+        from company_reviewed_research import project
+        reviewed = project(ticker, norm(identity) if identity else p.get('identity'), p, all_events, now())
+    except (ValueError, KeyError, TypeError, OSError):
+        log.warning('Reviewed company research unavailable')
     return {**p,'ticker':ticker,'status':p.get('status','collecting'),'score_effect':0,
+            'reviewed_research':reviewed,
             'identity':norm(identity) if identity else p.get('identity'),
             'evidence_history':history,
             'financing_documents':event_rows,'financing_document_count':len(all_events),

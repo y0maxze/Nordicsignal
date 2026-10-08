@@ -38,8 +38,41 @@ function financials(p){
 }
 function financialPanel(p){
  if(!p||p.score_effect!==0)return '<h2>Regnskap og verdsettelse</h2><p>UTILGJENGELIG · regnskapsgrunnlaget kunne ikke hentes.</p>';
+ if(reviewed(p))return '<h2>Regnskap og verdsettelse</h2>'+reviewedFinancials(p)+
+ '<p class="muted">P/E, P/B og EV/EBITDA: Ukjent. Kurs, aksjetall og regnskap må være sammenlignbare før multipler beregnes.</p>';
  return '<h2>Regnskap og verdsettelse</h2><p class="muted">Samme lagrede datagrunnlag som selskapsinformasjonen. Perioder og valuta vises per tall; de kan være forskjellige.</p>'+financials(p)+
  '<p class="muted">P/E, P/B og EV/EBITDA: Ukjent. Beregning krever kontrollerte og sammenlignbare kurs-, aksje-, periode- og regnskapsopplysninger.</p>';
+}
+function reviewed(p){
+ const r=p?.reviewed_research;
+ return p?.score_effect===0&&r?.status==='reviewed_snapshot'&&r.ticker===p.ticker&&r.identity===p.identity?r:null;
+}
+const day=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')?v.split('-').reverse().join('.'):'ukjent dato';
+function researchSource(r,item){
+ const s=r.sources?.[item.source_id];if(!s)return '';
+ return '<span class="researchSource">'+link(s.url,s.label)+' · '+esc(item.locator)+(s.published_on?' · publisert '+esc(day(s.published_on)):'')+'</span>';
+}
+function reviewStatus(r){
+ return '<p class="muted">Kildegjennomgang '+esc(date(r.reviewed_at))+'. Utvalgte opplysninger fra selskapets rapporter og meldinger; oppdateres ved ny gjennomgang.</p>'+
+ (r.needs_review?'<p class="notice">Gjennomgangen bør oppdateres. '+(r.newer_financing_count?esc(r.newer_financing_count)+' nyere finansieringsmeldinger er lagret. ':'')+(r.source_correction_observed?'En kilde er markert som korrigert. ':'')+'Les nyere originalmeldinger før du bruker opplysningene.</p>':'');
+}
+function summaryPanel(p){
+ const r=reviewed(p);if(!r)return '';
+ const items=(list)=>list.map(x=>'<p>'+esc(x.text)+'</p>'+researchSource(r,x)).join('');
+ const event=r.next_event;
+ return '<h2>Selskapet på ett minutt</h2>'+reviewStatus(r)+'<div class="companyOverviewGrid"><div><h3>Virksomheten</h3>'+items([r.business])+'</div><div><h3>Utvikling i siste gjennomgåtte rapport</h3>'+items(r.developments)+'</div><div><h3>Risiko å følge</h3>'+items(r.risks)+'</div><div><h3>Neste oppgitte rapportdato</h3><p>'+(event.passed?'Den kontrollerte kalenderdatoen '+esc(day(event.date))+' er passert. Ny dato er ikke kontrollert.':esc(event.text)+' · '+esc(day(event.date)))+'</p>'+researchSource(r,event)+'<p class="muted">Kalenderdatoer kan endres.</p></div></div><p><a href="#fundamentalSection">Se regnskap og sammenligning</a> · <a href="#companyContextSection">Se finansieringsforløp</a></p>';
+}
+function reviewedFinancials(p){
+ const r=reviewed(p),format=v=>new Intl.NumberFormat('nb-NO',{minimumFractionDigits:3,maximumFractionDigits:3}).format(v/1000);
+ const labels={quarter:'Kvartal',half_year:'Halvår',annual:'Årsregnskap',balance:'Balanse'};
+ return reviewStatus(r)+'<p>Konserntall fra originalrapportene. Beløp i millioner av oppgitt valuta. Endring er differansen i samme valuta.</p>'+r.financial_groups.map(g=>{
+  const period=g.kind==='balance'?'Balansedager':day(g.start)+'–'+day(g.end)+' mot '+day(g.previous_start)+'–'+day(g.previous_end);
+  return '<details class="reviewedFinancialGroup"'+(g.kind==='quarter'?' open':'')+'><summary>'+esc(labels[g.kind])+' · '+esc(g.label)+' · mill. '+esc(g.currency)+'</summary><p>'+esc(period)+(g.kind==='balance'?'. Rapportert beholdning på datoene nedenfor; dette er ikke dagens saldo.':'')+'</p><div class="researchTableScroll" role="region" aria-label="'+esc(labels[g.kind])+'" tabindex="0"><table class="researchTable"><caption>'+esc(g.label)+' sammenlignet med '+esc(g.previous_label)+' · mill. '+esc(g.currency)+'</caption><thead><tr><th scope="col">Post</th><th scope="col">'+esc(g.label)+'</th><th scope="col">'+esc(g.previous_label)+'</th><th scope="col">Endring</th></tr></thead><tbody>'+g.metrics.map(m=>'<tr><th scope="row">'+esc(m.label)+'</th><td>'+esc(format(m.value))+'</td><td>'+esc(format(m.previous))+'</td><td>'+esc(format(m.value-m.previous))+'</td></tr>').join('')+'</tbody></table></div>'+researchSource(r,g)+(g.note?'<p class="muted">'+esc(g.note)+'</p>':'')+'</details>';
+ }).join('')+'<p class="muted">Kvartal, halvår og helår er separate perioder. Beløpene er ikke annualisert eller valutakonvertert. Halvårstallene er ureviderte. Kontantbeholdningen sier alene ikke hvor lenge finansieringen varer.</p>';
+}
+function reviewedTransactions(p){
+ const r=reviewed(p);if(!r)return '';
+ return '<h3>Dokumenterte finansieringsforløp</h3>'+reviewStatus(r)+'<p>Utvalgte transaksjoner med dokumenterte sammenhenger. Siste punkt viser hva kilden bekreftet på den datoen. Full historikk og dagens finansieringsbehov er ikke bekreftet.</p><div class="researchTransactions">'+r.transactions.map(t=>'<article><h4>'+esc(t.title)+'</h4><ol>'+t.steps.map(s=>'<li><time datetime="'+esc(s.date)+'">'+esc(day(s.date))+'</time><p>'+esc(s.text)+'</p>'+researchSource(r,s)+'</li>').join('')+'</ol></article>').join('')+'</div><p class="muted">Rettede emisjoner og reparasjonsemisjoner vises hver for seg. Utvanning er ikke beregnet uten kontrollerte aksjetall for samme transaksjon.</p>';
 }
 function registryIdentity(p){
  if(p.registry_identity?.status==='ambiguous')return '<p class="muted">Registeroppslag er stoppet: motstridende juridiske navn eller issuer-ID-er i kildegrunnlaget. Identiteten må avklares.</p>';
@@ -124,26 +157,28 @@ function bindOlderDocuments(root,p,requestKey){
 function render(p){
  if(!p||p.score_effect!==0)return '<p>Selskapsopplysninger er utilgjengelige.</p>';
  const statuses={collecting:'Venter på automatisk innhenting',unavailable:'Kildene er utilgjengelige',partial:'Delvis dekning · lagrede opplysninger',stale:'Eldre opplysninger · må kontrolleres'};
- return '<div class="companyContext">'+overview(p)+'<h3>Selskapsinformasjon</h3><p class="muted">'+esc(statuses[p.status]||'Ukjent datastatus')+' · sist hentet '+esc(date(p.captured_at))+'</p>'+historyPanel(p.evidence_history)+
+ const r=reviewed(p);
+ return '<div class="companyContext">'+(r?'<h2>Selskapsinformasjon og finansiering</h2><p>'+esc(r.business.text)+'</p>'+researchSource(r,r.business)+reviewedTransactions(p)+'<details class="researchArchive"><summary>Automatisk innhentede opplysninger og dokumentarkiv</summary>':'')+overview(p)+'<h3>Selskapsinformasjon</h3><p class="muted">'+esc(statuses[p.status]||'Ukjent datastatus')+' · sist hentet '+esc(date(p.captured_at))+'</p>'+historyPanel(p.evidence_history)+
  (p.description_kind==='registered_activity'?'<p class="muted">Registrert aktivitet · kan avvike fra konsernets samlede virksomhet.</p>':'')+
  '<p>'+esc(p.description||'Virksomhetsbeskrivelse er ikke tilgjengelig fra datakilden ennå.')+'</p>'+provenance(p.field_sources?.description)+'<p>Sektor: '+esc(p.sector||'Ukjent')+'</p>'+
  (p.registry?'<p>Juridisk navn: '+esc(p.registry.official_name)+' · org.nr. '+esc(p.registry.organisation_number)+'</p><p>Registrert næring: '+esc(p.registry.industry||'Ukjent')+'</p>'+provenance(p.registry):'')+
  registryIdentity(p)+
  '<p>ISIN: '+esc(p.isin||'Ukjent')+(p.isin?' · '+link(p.isin_source_url,p.isin_source||'Kilde ukjent')+' · noteringsdato '+esc(p.isin_listing_date||'ukjent'):'')+'</p>'+
- financials(p)+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
+ (r?'<p><a href="#fundamentalSection">Se kontrollerte rapporttall i regnskapsdelen</a></p>':financials(p))+(p.field_sources?'':link(p.source_url,'Datakilde: '+(p.source||'ukjent')))+
  '<h3>Finansiering og utvanning</h3><p>Dokumenterte observasjoner · ingen bekreftelse på aktiv emisjon.</p>'+(p.financing_coverage?'<p class="muted">Lagrede dokumenters publiseringsdatoer: '+esc(date(p.financing_coverage.oldest_stored_publication))+' – '+esc(date(p.financing_coverage.newest_stored_publication))+'. Dette er ikke sammenhengende dekning. '+(p.financing_coverage.historical_backfill==='partial'?'NewsWeb-arkiv: '+esc(p.financing_coverage.queried_days??0)+' undersøkte kalenderdager for markedet · '+esc(p.financing_coverage.failed_days??0)+' feilede · '+esc(p.financing_coverage.truncated_days??0)+' avkortede. Siste forsøk: '+esc(date(p.financing_coverage.attempted_at))+'. Siste vellykkede arkivinnhenting: '+esc(date(p.financing_coverage.captured_at))+'. Datoene gjelder markedssøket, ikke full dekning for dette selskapet. Tidligere dokumenter beholdes ved kildefeil. Nyere dager kontrolleres på nytt; eldre dager gjenkontrolleres gradvis. Navneendringer og usikker identitet kan gi utelatelser.':p.financing_coverage.historical_backfill==='not_connected'?'Historisk arkivinnhenting er ikke koblet til.':'Status for arkivinnhenting er utilgjengelig.')+'</p>':'')+'<div data-financing-list>'+(p.financing_documents?.length?p.financing_documents.map(financingDocument).join(''):'<p>Ingen finansieringsmeldinger i innhentet materiale. Dette utelukker ikke emisjon eller kapitalbehov.</p>')+'</div>'+
  (p.financing_documents_truncated?'<p class="muted" data-financing-count>Viser de 20 nyeste av '+esc(p.financing_document_count)+' lagrede dokumenter. Eldre dokumenter er bevart.</p>'+(p.financing_next_cursor?'<button class="btn" type="button" data-financing-more>Vis eldre dokumenter</button>':''):'')+
  '<p class="muted">'+esc(p.coverage||'Dekning ukjent')+' Kildestatus: '+esc(p.news_status==='partial'?'delvis dekning':'utilgjengelig')+'. Siste forsøk: '+esc(date(p.news_checked_at))+'.</p>'+
  '<details><summary>Hva bør kontrolleres ved en emisjon?</summary><ul><li>Er emisjonen foreslått, vedtatt, gjennomført eller avlyst? Les siste melding.</li><li>Tegningskurs og antall nye aksjer: eierandelen kan bli redusert dersom du ikke deltar.</li><li>Rett til å delta, eks-dato og tegningsfrist må bekreftes i vilkårene.</li><li>Skal pengene finansiere vekst, drift, gjeld eller refinansiering?</li><li>En ny kontrakt er ikke det samme som kontanter nå og opphever ikke en emisjon.</li></ul><p>Eksisterende aksjer er ikke mindreverdige bare fordi de er «gamle». Rettigheter og aksjeklasse avhenger av dokumenterte vilkår.</p></details>'+
- '<p class="muted">Verdsettelse, kapitalbruk, eiersalg og lock-up må kontrolleres i siste rapport/prospekt når de ikke er dokumentert her. Forskning · ingen score-effekt.</p></div>';
+ '<p class="muted">Verdsettelse, kapitalbruk, eiersalg og lock-up må kontrolleres i siste rapport/prospekt når de ikke er dokumentert her. Forskning · ingen score-effekt.</p>'+(r?'</details>':'')+'</div>';
 }
-async function mount(root,ticker,{financialRoot}={}){
+async function mount(root,ticker,{financialRoot,summaryRoot}={}){
  if(!root)return;const key={};root._companyRequest=key;root.innerHTML='<h2>Selskapsinformasjon og finansiering</h2><p>Laster lagrede opplysninger…</p>';
  if(financialRoot){financialRoot._companyRequest=key;financialRoot.innerHTML='<h2>Regnskap og verdsettelse</h2><p>Laster lagrede opplysninger…</p>';}
+ if(summaryRoot){summaryRoot._companyRequest=key;summaryRoot.hidden=true;summaryRoot.innerHTML='';}
  const current=()=>root.isConnected&&root._companyRequest===key;
- const showFinancials=p=>{if(current()&&financialRoot?.isConnected&&financialRoot._companyRequest===key)financialRoot.innerHTML=financialPanel(p);};
+ const showFinancials=p=>{if(current()&&financialRoot?.isConnected&&financialRoot._companyRequest===key)financialRoot.innerHTML=financialPanel(p);if(current()&&summaryRoot?.isConnected&&summaryRoot._companyRequest===key){summaryRoot.innerHTML=summaryPanel(p);summaryRoot.hidden=!summaryRoot.innerHTML;}};
  try{const r=await fetch('/api/company-context/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const p=await r.json();if(p?.score_effect!==0||(p.ticker&&p.ticker!==ticker))throw Error();if(current()){root.innerHTML=render(p);showFinancials(p);markVisit(root,p);bindHistory(root,p,key);bindOlderDocuments(root,p,key);}}
  catch{if(current()){root.innerHTML='<h2>Selskapsinformasjon</h2><p>UTILGJENGELIG · selskapsopplysninger kunne ikke hentes. Dette sier ingenting om finansieringsrisikoen.</p>';showFinancials(null);}}
 }
-window.AksjerCompany={render,mount,financialPanel};
+window.AksjerCompany={render,mount,financialPanel,summaryPanel};
 })();
