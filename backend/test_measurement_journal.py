@@ -52,6 +52,57 @@ def test_unverified_version(db):
     with db() as c:c.execute("UPDATE opportunity_event_versions SET source='legacy'")
     assert not journal.capture(1)
 
+def test_decision_snapshot_survives_source_revision_and_reads_do_not_write(db):
+    payload = {'opportunity': {'score': 85, 'reasons': ['Strong insider cluster'],
+                              'components': {'volume_ratio': 2.1, 'independent_buyers': 3}},
+               'private_unused_field': 'never exposed'}
+    with db() as c:
+        c.execute('UPDATE opportunity_events SET payload=?', (json.dumps(payload),))
+    assert journal.capture(1)
+    first = journal.summary()['recent_signals'][0]
+    assert first['decision_evidence']['score'] == 85
+    assert first['decision_evidence']['components']['volume_ratio'] == 2.1
+    assert 'never exposed' not in json.dumps(first)
+    with db() as c:
+        original = c.execute('SELECT source_json FROM measurement_signal_evidence').fetchone()[0]
+        c.execute("UPDATE opportunity_events SET payload='changed'")
+    assert journal.summary()['recent_signals'][0] == first
+    with db() as c:
+        assert c.execute('SELECT source_json FROM measurement_signal_evidence').fetchone()[0] == original
+
+def test_missing_snapshot_never_backfilled_on_retry(db):
+    journal.capture(1)
+    with db() as c: c.execute('DELETE FROM measurement_signal_evidence')
+    journal.initialize()
+    assert not journal.capture(1)
+    assert journal.summary()['recent_signals'][0]['decision_evidence']['status'] == 'not_captured'
+
+def test_snapshot_tampering_is_visible(db):
+    journal.capture(1)
+    with db() as c: c.execute("UPDATE measurement_signal_evidence SET source_json='{}'")
+    assert journal.summary()['recent_signals'][0]['decision_evidence'] == {'status': 'integrity_error'}
+
+def test_snapshot_failure_rolls_back_signal(db):
+    with db() as c:
+        c.executescript("CREATE TRIGGER reject_evidence BEFORE INSERT ON measurement_signal_evidence BEGIN SELECT RAISE(ABORT, 'test failure'); END;")
+    with pytest.raises(sqlite3.IntegrityError): journal.capture(1)
+    assert journal.summary()['signals'] == 0
+
+@pytest.mark.parametrize('payload', ['null', '[]', '{bad', '{"opportunity":null}'])
+def test_malformed_decision_does_not_break_summary(db, payload):
+    with db() as c: c.execute('UPDATE opportunity_events SET payload=?', (payload,))
+    journal.capture(1)
+    assert journal.summary()['recent_signals'][0]['decision_evidence']['status'] == 'unavailable'
+
+def test_decision_projection_is_bounded_and_missing_numbers_are_not_zero(db):
+    payload = {'opportunity': {'score': True, 'reasons': ['x' * 400] * 21,
+                              'components': {'volume_ratio': '2.5'}}}
+    with db() as c: c.execute('UPDATE opportunity_events SET payload=?', (json.dumps(payload),))
+    journal.capture(1)
+    e = journal.summary()['recent_signals'][0]['decision_evidence']
+    assert e['score'] is None and e['components']['volume_ratio'] is None
+    assert len(e['reasons']) == 20 and len(e['reasons'][0]) == 300 and e['reasons_truncated']
+
 @pytest.mark.parametrize('value',['2026-10-09T17:01:00','invalid','2026-10-09T18:00:00Z'])
 def test_invalid_signal_time(db,value):
     with db() as c:c.execute('UPDATE opportunity_events SET observed_at=?',(value,))
