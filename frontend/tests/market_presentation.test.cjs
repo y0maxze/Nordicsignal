@@ -50,3 +50,17 @@ test('finance buttons change theme colours together instead of animating only th
  assert.equal(rule.style.getPropertyPriority('transition'),'important');
  dom.window.close();
 });
+
+test('market explains limited ranking coverage and shows price time without a hover',async(t)=>{
+ const dom=new JSDOM(read('index.html'),{url:'https://example.test/app',runScripts:'outside-only'}),w=dom.window;
+ t.after(()=>dom.window.close());
+ w.AksjerIPO={load:async()=>({items:[]})};
+ w.fetch=async url=>({ok:true,json:async()=>({status:'partial',unavailable_sources:['opportunity'],items:url==='/api/market-snapshot'?[{ticker:'AAA',name:'Alpha',score:73,price:12,quote_as_of:'2026-10-09T14:25:00Z'},{ticker:'BBB',name:'Beta',score:72,price:10}]:[]})});
+ for(const script of w.document.querySelectorAll('script:not([src])'))w.eval(script.textContent);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(w.document.body.textContent,/ikke hele Oslo Børs/);
+ assert.match(w.document.body.textContent,/Kurs- eller modelldata er delvis utilgjengelig/);
+ const rows=[...w.document.querySelectorAll('a.row')];
+ assert.match(rows[0].textContent,/9.10.*16:25/);assert.match(rows[1].textContent,/Kurstid ukjent/);
+ dom.window.close();
+});
