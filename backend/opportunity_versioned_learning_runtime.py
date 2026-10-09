@@ -18,6 +18,7 @@ from collections import Counter
 import hashlib
 import inspect
 import json
+import logging
 from statistics import median
 
 import insider_signal_v2_runtime as insider_signal
@@ -141,7 +142,7 @@ def _stamp_live_event(event, identity=None):
     if not event:
         return False
     identity = identity or _current_identity()
-    return _persist_version(
+    stored = _persist_version(
         int(event["id"]),
         identity["signal_version"],
         identity["signal_fingerprint"],
@@ -149,6 +150,12 @@ def _stamp_live_event(event, identity=None):
         identity["learning_policy_id"],
         "live_verified_fingerprint",
     )
+    try:
+        from measurement_journal import capture
+        capture(int(event['id']))
+    except Exception:
+        logging.getLogger(__name__).exception('Prospective signal capture failed: event %s', event['id'])
+    return stored
 
 
 def _backfill_legacy_versions(identity=None):
@@ -184,7 +191,17 @@ def _record_versioned(result, name=None):
         return outcome
     ticker = str((result or {}).get("ticker") or "").upper().replace(".OL", "")
     try:
-        _stamp_live_event(_latest_event(ticker))
+        observed_at = str(result.get('generated_at') or tracking._now())
+        market_day = tracking._entry_date_from_result(result) or observed_at[:10]
+        previous = 'FIRST_OBSERVED' if outcome.get('event_kind') == 'first_observed_qualifying_state' else outcome.get('previous_label')
+        event_key = f"{market_day}:{previous}->{outcome.get('label')}"
+        conn = tracking.connect()
+        try:
+            event = conn.execute('SELECT * FROM opportunity_events WHERE ticker=? AND event_key=?',
+                                 (ticker, event_key)).fetchone()
+        finally:
+            conn.close()
+        _stamp_live_event(dict(event) if event else None)
     except Exception:
         pass
     return outcome

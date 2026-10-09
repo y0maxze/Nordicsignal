@@ -8,6 +8,7 @@ only and serves the latest persisted data immediately.
 import logging
 
 import production
+import measurement_journal
 
 app = production.app
 log = logging.getLogger("nordicsignal.api_entrypoint")
@@ -16,7 +17,13 @@ log = logging.getLogger("nordicsignal.api_entrypoint")
 @app.get('/api/results-audit')
 def results_audit():
     from results_audit import snapshot
-    return snapshot()
+    result = snapshot()
+    try:
+        result['prospective_journal'] = measurement_journal.summary()
+    except Exception:
+        log.exception('Prospective measurement journal unavailable')
+        result['prospective_journal'] = {'status': 'unavailable'}
+    return result
 
 
 def remove_retired_product_routes():
@@ -45,6 +52,7 @@ def api_startup():
     production.main.init_db()
     production.main.seed_db()
     production.ensure_indexes()
+    measurement_journal.initialize()
     log.info(
         "API startup is provider-free; scheduled refresh owns provider-wide market work (workers=%d)",
         production._PROVIDER_WORKERS,
