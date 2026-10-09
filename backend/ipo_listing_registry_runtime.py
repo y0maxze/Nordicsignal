@@ -11,6 +11,7 @@ import hashlib
 import extra_api
 from database import connect
 import news_runtime
+from instrument_identifiers import listing_identity
 
 IPO_URL = "https://live.euronext.com/en/markets/oslo/ipos"
 MODEL_VERSION = "ipo_listing_registry_v1"
@@ -103,7 +104,7 @@ def parse_ipo_table(html):
             continue
         seen.add(identity)
         listing_id = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()[:32]
-        out.append({
+        out.append(listing_identity({
             "listing_id": listing_id,
             "listing_date": date,
             "company": company,
@@ -113,7 +114,7 @@ def parse_ipo_table(html):
             "market": market,
             "source_url": IPO_URL,
             "official": True,
-        })
+        }))
     return out
 
 
@@ -156,7 +157,7 @@ def record_listings(items):
                 continue
             conn.execute(
                 "INSERT INTO ipo_listings(listing_id,listing_date,company,ticker,isin,location,market,source_url,first_seen_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (item["listing_id"], item["listing_date"], item["company"], item.get("ticker"), item.get("isin"), item["location"], item["market"], item["source_url"], now, now),
+                (item["listing_id"], item["listing_date"], item["company"], item.get("ticker"), item.get("reported_isin", item.get("isin")), item["location"], item["market"], item["source_url"], now, now),
             )
             inserted += 1
         conn.commit()
@@ -200,7 +201,7 @@ def listings(limit=100):
     conn = connect()
     try:
         rows = conn.execute("SELECT * FROM ipo_listings ORDER BY listing_date DESC,company LIMIT ?", (max(1, min(int(limit or 100), 500)),)).fetchall()
-        return [dict(x) for x in rows]
+        return [listing_identity(x) for x in rows]
     finally:
         conn.close()
 
