@@ -5,9 +5,12 @@ that can fail independently, including source freshness, so stale data cannot hi
 behind a generic green status.
 """
 from datetime import datetime, timezone
+import json
+import math
 
 import extra_api
 from database import connect, USING_POSTGRES
+from instrument_identifiers import valid_isin
 
 SCORE_MAX_AGE_SECONDS = 30 * 60
 QUOTE_MAX_AGE_SECONDS = 4 * 24 * 60 * 60
@@ -20,9 +23,10 @@ def _now():
 def _age_seconds(value):
     try:
         dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            return None
+        delta = (datetime.now(timezone.utc) - dt).total_seconds()
+        return int(delta) if delta >= 0 else None
     except Exception:
         return None
 
@@ -39,13 +43,13 @@ def _check(name, ok, detail, severity="error"):
 
 
 def _valid_score(value):
-    if value is None:
+    if value is None or isinstance(value, bool):
         return False
     try:
         number = float(value)
     except (TypeError, ValueError):
         return False
-    return 0.0 <= number <= 100.0
+    return math.isfinite(number) and 0.0 <= number <= 100.0
 
 
 def _latest(conn, table, column):
@@ -55,6 +59,7 @@ def _latest(conn, table, column):
         row = conn.execute(f'SELECT MAX("{column}") latest FROM "{table}"').fetchone()
         return row["latest"] if row else None
     except Exception:
+        conn.rollback()
         return None
 
 
@@ -72,6 +77,7 @@ def _feed_cache_entry(conn, key, source):
         row = conn.execute("SELECT updated_at FROM runtime_feed_cache WHERE cache_key=? LIMIT 1", (key,)).fetchone()
         return _freshness_entry(row["updated_at"] if row else None, source, kind="epoch")
     except Exception:
+        conn.rollback()
         return _freshness_entry(None, source)
 
 
@@ -128,10 +134,14 @@ def data_quality_snapshot():
             severity="warning",
         ))
 
-        # Raw Yahoo research payloads are intentionally not persisted. The latest score
-        # timestamp is the auditable point at which those fundamentals were fetched and
-        # incorporated into the fundamentals component of the production score.
-        freshness["fundamentals"] = _freshness_entry(score_latest, "Yahoo Finance fundamentals incorporated into latest NordicSignal score")
+        # A recent calculation does not prove a recent report or complete inputs.
+        # The score row does not retain source-period/revision timestamps.
+        freshness["fundamentals"] = {
+            "source": "Yahoo Finance research used by score engine",
+            "latest_at": None, "age_seconds": None,
+            "mode": "source_time_unverified", "processed_at": score_latest,
+            "note": "Score calculation time is not the report publication time or proof of financial completeness.",
+        }
         freshness["scores"] = _freshness_entry(score_latest, "NordicSignal score engine")
         freshness["score_signals"] = _freshness_entry(_latest(conn, "signal_events", "created_at"), "NordicSignal score-change events")
         freshness["trend_activity"] = _freshness_entry(_latest(conn, "trend_activity_events", "created_at"), "NordicSignal trend/activity detector")
@@ -142,7 +152,7 @@ def data_quality_snapshot():
             rows = conn.execute("SELECT cache_key,updated_at FROM runtime_feed_cache WHERE cache_key LIKE 'insider_market:v1:%' ORDER BY updated_at DESC LIMIT 1").fetchall()
             insider_candidates = [dict(x) for x in rows]
         except Exception:
-            pass
+            conn.rollback()
         freshness["insider_feed"] = _freshness_entry(insider_candidates[0]["updated_at"] if insider_candidates else None, "Persisted Euronext Insider Pulse cache", kind="epoch")
 
         try:
@@ -150,14 +160,89 @@ def data_quality_snapshot():
             bad = int(row["n"] or 0) if row else 0
             checks.append(_check("trend_volume_sanity", bad == 0, "No negative volume ratios" if bad == 0 else f"{bad} invalid trend volume rows"))
         except Exception:
-            checks.append(_check("trend_volume_sanity", True, "Trend event table not populated yet", severity="info"))
+            conn.rollback()
+            checks.append(_check("trend_volume_sanity", False, "Trend volume check unavailable", severity="warning"))
 
         try:
-            row = conn.execute("SELECT COUNT(*) n FROM holding_purchase_lots WHERE shares<=0 OR purchase_price<=0").fetchone()
+            row = conn.execute("SELECT COUNT(*) n FROM holding_purchase_lots WHERE shares IS NULL OR price_nok IS NULL OR shares<=0 OR price_nok<=0 OR CAST(shares AS TEXT) IN ('NaN','Infinity','-Infinity','Inf','-Inf') OR CAST(price_nok AS TEXT) IN ('NaN','Infinity','-Infinity','Inf','-Inf')").fetchone()
             bad = int(row["n"] or 0) if row else 0
             checks.append(_check("holding_lot_sanity", bad == 0, "All purchase lots have positive shares and price" if bad == 0 else f"{bad} invalid purchase lots"))
         except Exception:
-            checks.append(_check("holding_lot_sanity", True, "Purchase-lot table unavailable/not initialized", severity="info"))
+            conn.rollback()
+            checks.append(_check("holding_lot_sanity", False, "Purchase-lot check unavailable", severity="warning"))
+
+        try:
+            rows = conn.execute(
+                "SELECT s.ticker,q.price,q.captured_at,q.market_time FROM stocks s LEFT JOIN quotes q "
+                "ON q.id=(SELECT MAX(id) FROM quotes x WHERE x.ticker=s.ticker) WHERE s.active=1"
+            ).fetchall()
+            missing, unknown_time, stale_time, invalid_prices = [], [], [], []
+            for row in rows:
+                ticker = row['ticker']
+                if row['captured_at'] is None:
+                    missing.append(ticker)
+                price = row['price']
+                if price is None or not math.isfinite(float(price)) or float(price) <= 0:
+                    invalid_prices.append(ticker)
+                age = _age_seconds(row['market_time'])
+                if age is None:
+                    unknown_time.append(ticker)
+                elif age > QUOTE_MAX_AGE_SECONDS:
+                    stale_time.append(ticker)
+            metrics['persisted_quotes'] = {'active_stocks': active_n, 'missing': len(missing),
+                'invalid_or_missing_price': len(invalid_prices), 'unknown_or_invalid_market_time': len(unknown_time),
+                'market_time_older_than_four_days': len(stale_time)}
+            checks.append(_check('persisted_quote_coverage', active_n > 0 and not missing and not invalid_prices,
+                f'{active_n-len(missing)}/{active_n} active stocks have a persisted quote; {len(invalid_prices)} missing/invalid prices', 'warning'))
+            checks.append(_check('persisted_quote_market_time', active_n > 0 and not unknown_time and not stale_time,
+                f'{len(unknown_time)} unknown/invalid and {len(stale_time)} old trade times in persisted snapshots; not a live quote verdict', 'warning'))
+        except Exception:
+            conn.rollback()
+            checks.append(_check('persisted_quote_coverage', False, 'Per-stock persisted quote check unavailable', 'warning'))
+
+        try:
+            rows = conn.execute('SELECT ticker,payload FROM company_context_profiles').fetchall()
+            descriptions = verified_financials = fresh_financials = unverified_financials = invalid_payloads = 0
+            for row in rows:
+                try:
+                    payload = json.loads(row['payload'])
+                    if not isinstance(payload, dict):
+                        raise ValueError('profile is not an object')
+                    descriptions += bool(payload.get('description'))
+                    financials = payload.get('financials')
+                    if not isinstance(financials, list):
+                        raise ValueError('financials is not an array')
+                    if financials:
+                        if payload.get('yahoo_identity_verified') is True:
+                            verified_financials += 1
+                            source = (payload.get('field_sources') or {}).get('financials') or {}
+                            age = _age_seconds(source.get('captured_at'))
+                            fresh_financials += source.get('status') == 'stored' and age is not None and age <= 2*24*60*60
+                        else:
+                            unverified_financials += 1
+                except (ValueError, TypeError, AttributeError):
+                    invalid_payloads += 1
+            metrics['company_profiles'] = {'stored': len(rows), 'with_description': descriptions,
+                'financials_with_verified_identity': verified_financials,
+                'financials_recently_collected': fresh_financials,
+                'unverified_financials_hidden': unverified_financials, 'invalid_payloads': invalid_payloads}
+            checks.append(_check('company_profile_payloads', not invalid_payloads,
+                f'{invalid_payloads} invalid profile payloads'))
+            checks.append(_check('company_financial_coverage', bool(rows) and fresh_financials == len(rows),
+                f'{fresh_financials}/{len(rows)} automatic profiles have recently collected financials with verified identity; reviewed pilots are separate', 'warning'))
+        except Exception:
+            conn.rollback()
+            checks.append(_check('company_financial_coverage', False, 'Company profile coverage check unavailable', 'warning'))
+
+        try:
+            rows = conn.execute('SELECT ticker,isin FROM ipo_listings').fetchall()
+            invalid = [r['ticker'] for r in rows if not valid_isin(r['isin'])]
+            metrics['listing_identifiers'] = {'stored': len(rows), 'invalid_or_missing': len(invalid)}
+            checks.append(_check('listing_identifier_format', bool(rows) and not invalid,
+                f'{len(invalid)}/{len(rows)} missing/invalid ISINs in source listing records; format validity is not current identity certification', 'warning'))
+        except Exception:
+            conn.rollback()
+            checks.append(_check('listing_identifier_format', False, 'Listing identifier check unavailable', 'warning'))
     finally:
         conn.close()
 
@@ -179,7 +264,7 @@ def data_quality_snapshot():
             "calendar":"Euronext financial calendar",
             "signal_evidence":"Yahoo Finance daily price/volume history replayed through NordicSignal rules",
         },
-        "freshness_policy":"Live Yahoo prices are fetched on request and are not inferred from the persisted quotes table. The persisted_price_snapshot timestamp is diagnostic storage only. Score/fundamentals freshness is the time Yahoo fundamentals were incorporated into the latest score. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
+        "freshness_policy":"Live Yahoo prices are fetched on request and are not inferred from the persisted quotes table. Persisted snapshots are checked per active stock. Score time is calculation time; financial report publication time and completeness are not established by it. Profile collection age does not certify report-period freshness. Feed-cache timestamps describe when NordicSignal last persisted a successfully renderable feed.",
         "generated_at":_now(),
     }
 

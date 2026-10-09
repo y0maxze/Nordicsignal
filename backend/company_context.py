@@ -14,6 +14,7 @@ import base64
 from urllib.parse import urlsplit
 from database import connect
 import company_evidence as evidence
+from instrument_identifiers import valid_isin
 
 log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
@@ -152,7 +153,7 @@ def universe():
         legal = [r['company'] for r in matches if re.search(r'\s(?:ASA|AS)$',r['company'],re.I)]
         if len(set(v.casefold() for v in legal)) > 1:
             continue
-        isins = {str(r.get('isin')).upper() for r in matches if re.fullmatch(r'[A-Z]{2}[A-Z0-9]{9}[0-9]',str(r.get('isin') or '').upper())}
+        isins = {str(r.get('isin')).upper() for r in matches if valid_isin(str(r.get('isin') or '').upper())}
         out[ticker] = {**matches[0], 'ticker':ticker, 'identity':norm(matches[0]['company']),
                        'legal_name':legal[0] if len(set(v.casefold() for v in legal))==1 else None,
                        'isin':next(iter(isins)) if len(isins)==1 else None,

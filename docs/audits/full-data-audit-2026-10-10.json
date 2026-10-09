@@ -1,0 +1,973 @@
+{
+  "audit_date_oslo": "2026-10-10",
+  "retrieval_window_utc": "2026-10-09 22:27–22:37",
+  "scope": "Whole-table read-only scans of 61 market/research/operational tables. Separate statements are not one atomic cross-table snapshot. Private holdings only received a count-only validity check; no balances, tokens, subscriptions or secrets exported. This is a structural/coverage audit, not full issuer-source verification.",
+  "table_count": 61,
+  "row_count": 198518,
+  "inventory": [
+    {
+      "dataset": "alert_history",
+      "rows": 359
+    },
+    {
+      "dataset": "capital_flow_events",
+      "rows": 238
+    },
+    {
+      "dataset": "company_context_events",
+      "rows": 293
+    },
+    {
+      "dataset": "company_context_issuers",
+      "rows": 293
+    },
+    {
+      "dataset": "company_context_profiles",
+      "rows": 186
+    },
+    {
+      "dataset": "company_context_state",
+      "rows": 1
+    },
+    {
+      "dataset": "company_evidence_versions",
+      "rows": 1378
+    },
+    {
+      "dataset": "company_newsweb_windows",
+      "rows": 740
+    },
+    {
+      "dataset": "early_discovery_observations",
+      "rows": 0
+    },
+    {
+      "dataset": "event_evidence_events",
+      "rows": 1
+    },
+    {
+      "dataset": "event_evidence_outcomes",
+      "rows": 0
+    },
+    {
+      "dataset": "financing_document_jobs",
+      "rows": 293
+    },
+    {
+      "dataset": "fundamentals",
+      "rows": 0
+    },
+    {
+      "dataset": "high_conviction_shadow_outcomes",
+      "rows": 1197
+    },
+    {
+      "dataset": "high_conviction_shadow_snapshots",
+      "rows": 641
+    },
+    {
+      "dataset": "insider_detail_cache",
+      "rows": 272
+    },
+    {
+      "dataset": "insider_history",
+      "rows": 235
+    },
+    {
+      "dataset": "insider_ledger",
+      "rows": 5
+    },
+    {
+      "dataset": "insider_trades",
+      "rows": 0
+    },
+    {
+      "dataset": "instrument_signal_cache",
+      "rows": 4
+    },
+    {
+      "dataset": "ipo_candidates",
+      "rows": 0
+    },
+    {
+      "dataset": "ipo_listing_outcomes",
+      "rows": 0
+    },
+    {
+      "dataset": "ipo_listings",
+      "rows": 102
+    },
+    {
+      "dataset": "ipo_scheduler_state",
+      "rows": 1
+    },
+    {
+      "dataset": "measurement_candidate_checks",
+      "rows": 0
+    },
+    {
+      "dataset": "measurement_entries",
+      "rows": 0
+    },
+    {
+      "dataset": "measurement_input_health",
+      "rows": 1
+    },
+    {
+      "dataset": "measurement_price_candidates",
+      "rows": 0
+    },
+    {
+      "dataset": "measurement_reconcile_attempts",
+      "rows": 1
+    },
+    {
+      "dataset": "measurement_series",
+      "rows": 1
+    },
+    {
+      "dataset": "measurement_signal_evidence",
+      "rows": 0
+    },
+    {
+      "dataset": "measurement_signals",
+      "rows": 0
+    },
+    {
+      "dataset": "opportunity_benchmark_evidence",
+      "rows": 29
+    },
+    {
+      "dataset": "opportunity_event_versions",
+      "rows": 10
+    },
+    {
+      "dataset": "opportunity_events",
+      "rows": 10
+    },
+    {
+      "dataset": "opportunity_forward_returns",
+      "rows": 29
+    },
+    {
+      "dataset": "opportunity_market_context",
+      "rows": 10
+    },
+    {
+      "dataset": "opportunity_market_returns",
+      "rows": 29
+    },
+    {
+      "dataset": "opportunity_path_evidence",
+      "rows": 29
+    },
+    {
+      "dataset": "opportunity_scheduler_state",
+      "rows": 1
+    },
+    {
+      "dataset": "opportunity_shadow_returns",
+      "rows": 1896
+    },
+    {
+      "dataset": "opportunity_shadow_scan_repairs",
+      "rows": 68
+    },
+    {
+      "dataset": "opportunity_shadow_scan_results",
+      "rows": 148465
+    },
+    {
+      "dataset": "opportunity_shadow_scan_runs",
+      "rows": 5838
+    },
+    {
+      "dataset": "opportunity_shadow_smart_money",
+      "rows": 859
+    },
+    {
+      "dataset": "opportunity_shadow_snapshots",
+      "rows": 975
+    },
+    {
+      "dataset": "opportunity_state",
+      "rows": 60
+    },
+    {
+      "dataset": "ownership_changes",
+      "rows": 0
+    },
+    {
+      "dataset": "ownership_positions",
+      "rows": 0
+    },
+    {
+      "dataset": "ownership_snapshots",
+      "rows": 0
+    },
+    {
+      "dataset": "quotes",
+      "rows": 213
+    },
+    {
+      "dataset": "runtime_feed_cache",
+      "rows": 4
+    },
+    {
+      "dataset": "scores",
+      "rows": 33437
+    },
+    {
+      "dataset": "short_positions",
+      "rows": 0
+    },
+    {
+      "dataset": "signal_event_state",
+      "rows": 4
+    },
+    {
+      "dataset": "signal_events",
+      "rows": 0
+    },
+    {
+      "dataset": "signal_evidence_cache",
+      "rows": 13
+    },
+    {
+      "dataset": "signal_instrument_catalog",
+      "rows": 5
+    },
+    {
+      "dataset": "stocks",
+      "rows": 46
+    },
+    {
+      "dataset": "trend_activity_events",
+      "rows": 220
+    },
+    {
+      "dataset": "trend_activity_state",
+      "rows": 26
+    }
+  ],
+  "timestamps": {
+    "fields_checked": 82,
+    "fields": [
+      "alert_history.source_created_at",
+      "alert_history.first_sent_at",
+      "alert_history.last_sent_at",
+      "alert_history.read_at",
+      "capital_flow_events.event_at",
+      "capital_flow_events.first_seen_at",
+      "capital_flow_events.last_seen_at",
+      "company_context_events.observed_at",
+      "company_context_issuers.attempted_at",
+      "company_context_profiles.attempted_at",
+      "company_context_profiles.captured_at",
+      "company_context_state.checked_at",
+      "company_evidence_versions.recorded_at",
+      "company_newsweb_windows.attempted_at",
+      "early_discovery_observations.observed_at",
+      "event_evidence_events.published_at",
+      "event_evidence_events.observed_at",
+      "event_evidence_outcomes.settled_at",
+      "financing_document_jobs.attempted_at",
+      "financing_document_jobs.finished_at",
+      "fundamentals.updated_at",
+      "high_conviction_shadow_outcomes.settled_at",
+      "high_conviction_shadow_snapshots.observed_at",
+      "high_conviction_shadow_snapshots.created_at",
+      "insider_history.published_at",
+      "insider_history.captured_at",
+      "insider_ledger.first_seen_at",
+      "instrument_signal_cache.updated_at",
+      "ipo_candidates.published_at",
+      "ipo_candidates.first_seen_at",
+      "ipo_candidates.last_seen_at",
+      "ipo_listing_outcomes.settled_at",
+      "ipo_listings.first_seen_at",
+      "ipo_listings.last_seen_at",
+      "ipo_scheduler_state.last_scan_at",
+      "ipo_scheduler_state.last_registry_sync_at",
+      "ipo_scheduler_state.updated_at",
+      "measurement_candidate_checks.checked_at",
+      "measurement_entries.market_at",
+      "measurement_entries.recorded_at",
+      "measurement_input_health.checked_at",
+      "measurement_price_candidates.recorded_at",
+      "measurement_reconcile_attempts.checked_at",
+      "measurement_series.started_at",
+      "measurement_signal_evidence.captured_at",
+      "measurement_signals.signal_at",
+      "measurement_signals.event_created_at",
+      "measurement_signals.available_at",
+      "measurement_signals.captured_at",
+      "opportunity_benchmark_evidence.settled_at",
+      "opportunity_event_versions.captured_at",
+      "opportunity_events.observed_at",
+      "opportunity_events.created_at",
+      "opportunity_forward_returns.settled_at",
+      "opportunity_market_context.captured_at",
+      "opportunity_market_returns.settled_at",
+      "opportunity_path_evidence.settled_at",
+      "opportunity_scheduler_state.last_external_trigger_at",
+      "opportunity_scheduler_state.updated_at",
+      "opportunity_shadow_returns.settled_at",
+      "opportunity_shadow_scan_repairs.created_at",
+      "opportunity_shadow_scan_results.completed_at",
+      "opportunity_shadow_scan_runs.started_at",
+      "opportunity_shadow_scan_runs.completed_at",
+      "opportunity_shadow_smart_money.captured_at",
+      "opportunity_shadow_snapshots.observed_at",
+      "opportunity_shadow_snapshots.created_at",
+      "opportunity_state.observed_at",
+      "opportunity_state.updated_at",
+      "ownership_changes.created_at",
+      "ownership_snapshots.captured_at",
+      "quotes.captured_at",
+      "quotes.market_time",
+      "scores.created_at",
+      "signal_event_state.updated_at",
+      "signal_events.created_at",
+      "signal_evidence_cache.updated_at",
+      "signal_instrument_catalog.last_seen_at",
+      "trend_activity_events.observed_at",
+      "trend_activity_events.created_at",
+      "trend_activity_state.observed_at",
+      "trend_activity_state.updated_at"
+    ],
+    "findings": [
+      {
+        "field": "alert_history.read_at",
+        "future": 0,
+        "invalid_or_naive": 0,
+        "missing": 235,
+        "rows": 359
+      },
+      {
+        "field": "company_context_profiles.captured_at",
+        "future": 0,
+        "invalid_or_naive": 0,
+        "missing": 47,
+        "rows": 186
+      },
+      {
+        "field": "opportunity_shadow_scan_runs.completed_at",
+        "future": 0,
+        "invalid_or_naive": 0,
+        "missing": 4,
+        "rows": 5838
+      },
+      {
+        "field": "quotes.market_time",
+        "future": 0,
+        "invalid_or_naive": 0,
+        "missing": 212,
+        "rows": 213
+      }
+    ]
+  },
+  "dates": {
+    "fields_checked": 29,
+    "fields": [
+      "early_discovery_observations.market_date",
+      "event_evidence_outcomes.entry_date",
+      "event_evidence_outcomes.exit_date",
+      "high_conviction_shadow_outcomes.target_date",
+      "high_conviction_shadow_outcomes.benchmark_target_date",
+      "high_conviction_shadow_snapshots.market_date",
+      "high_conviction_shadow_snapshots.benchmark_entry_date",
+      "insider_history.trade_date",
+      "insider_ledger.trade_date",
+      "insider_trades.trade_date",
+      "ipo_listing_outcomes.entry_date",
+      "ipo_listing_outcomes.exit_date",
+      "ipo_listings.listing_date",
+      "measurement_entries.session_date",
+      "measurement_price_candidates.session_date",
+      "opportunity_forward_returns.target_date",
+      "opportunity_market_context.benchmark_entry_date",
+      "opportunity_market_context.regime_asof_date",
+      "opportunity_market_returns.benchmark_target_date",
+      "opportunity_shadow_returns.target_date",
+      "opportunity_shadow_returns.benchmark_target_date",
+      "opportunity_shadow_scan_results.market_date",
+      "opportunity_shadow_snapshots.market_date",
+      "opportunity_shadow_snapshots.benchmark_entry_date",
+      "opportunity_shadow_snapshots.regime_asof_date",
+      "ownership_changes.from_date",
+      "ownership_changes.to_date",
+      "ownership_snapshots.as_of_date",
+      "short_positions.position_date"
+    ],
+    "findings": [
+      {
+        "field": "opportunity_shadow_scan_results.market_date",
+        "future": 0,
+        "invalid": 0,
+        "missing": 61,
+        "rows": 148465
+      }
+    ]
+  },
+  "json": {
+    "fields_checked": 24,
+    "fields": [
+      "alert_history.payload_json",
+      "capital_flow_events.payload_json",
+      "company_context_events.payload",
+      "company_context_profiles.payload",
+      "company_evidence_versions.payload",
+      "company_evidence_versions.changed_fields",
+      "company_newsweb_windows.payload",
+      "early_discovery_observations.components",
+      "early_discovery_observations.reasons",
+      "event_evidence_events.raw_payload",
+      "high_conviction_shadow_snapshots.feature_payload",
+      "insider_detail_cache.payload",
+      "instrument_signal_cache.payload",
+      "ipo_candidates.raw_payload",
+      "measurement_entries.evidence_json",
+      "measurement_input_health.report_json",
+      "measurement_price_candidates.evidence_json",
+      "measurement_series.policy_json",
+      "measurement_signal_evidence.source_json",
+      "opportunity_events.payload",
+      "opportunity_state.payload",
+      "runtime_feed_cache.payload",
+      "signal_evidence_cache.payload",
+      "trend_activity_state.metrics"
+    ],
+    "findings": []
+  },
+  "numeric": {
+    "fields_checked": 116,
+    "fields": [
+      "capital_flow_events.shares",
+      "capital_flow_events.price",
+      "capital_flow_events.value_nok",
+      "early_discovery_observations.research_score",
+      "event_evidence_events.materiality_ratio_pct",
+      "event_evidence_events.amount_nok",
+      "event_evidence_outcomes.entry_close",
+      "event_evidence_outcomes.exit_close",
+      "event_evidence_outcomes.return_pct",
+      "event_evidence_outcomes.benchmark_return_pct",
+      "event_evidence_outcomes.excess_return_pct",
+      "event_evidence_outcomes.max_drawdown_pct",
+      "event_evidence_outcomes.max_runup_pct",
+      "fundamentals.revenue",
+      "fundamentals.ebitda",
+      "fundamentals.ebit",
+      "fundamentals.eps",
+      "fundamentals.free_cash_flow",
+      "fundamentals.net_debt",
+      "high_conviction_shadow_outcomes.target_price",
+      "high_conviction_shadow_outcomes.return_pct",
+      "high_conviction_shadow_outcomes.benchmark_return_pct",
+      "high_conviction_shadow_outcomes.excess_return_pct",
+      "high_conviction_shadow_outcomes.max_drawdown_pct",
+      "high_conviction_shadow_outcomes.max_runup_pct",
+      "high_conviction_shadow_snapshots.entry_price",
+      "high_conviction_shadow_snapshots.base_score",
+      "high_conviction_shadow_snapshots.fundamentals",
+      "high_conviction_shadow_snapshots.valuation",
+      "high_conviction_shadow_snapshots.sentiment",
+      "high_conviction_shadow_snapshots.insider_score",
+      "high_conviction_shadow_snapshots.opportunity_score",
+      "high_conviction_shadow_snapshots.reversal_score",
+      "high_conviction_shadow_snapshots.rsi14",
+      "high_conviction_shadow_snapshots.macd_histogram",
+      "high_conviction_shadow_snapshots.volume_ratio",
+      "high_conviction_shadow_snapshots.current_drawdown_pct",
+      "high_conviction_shadow_snapshots.smart_money_points",
+      "high_conviction_shadow_snapshots.buy_value_nok",
+      "high_conviction_shadow_snapshots.max_materiality_ratio_pct",
+      "high_conviction_shadow_snapshots.benchmark_entry_close",
+      "high_conviction_shadow_snapshots.benchmark_ret20_pct",
+      "high_conviction_shadow_snapshots.benchmark_ma50_gap_pct",
+      "high_conviction_shadow_snapshots.prior_mean_excess_return_pct",
+      "high_conviction_shadow_snapshots.prior_median_excess_return_pct",
+      "high_conviction_shadow_snapshots.prior_positive_excess_rate_pct",
+      "high_conviction_shadow_snapshots.prior_median_max_drawdown_pct",
+      "high_conviction_shadow_snapshots.prior_median_max_runup_pct",
+      "insider_detail_cache.updated_at",
+      "insider_history.shares",
+      "insider_history.price",
+      "insider_history.transaction_value",
+      "insider_ledger.shares",
+      "insider_ledger.price",
+      "insider_trades.shares",
+      "insider_trades.price",
+      "ipo_candidates.offer_price_nok",
+      "ipo_listing_outcomes.entry_close",
+      "ipo_listing_outcomes.exit_close",
+      "ipo_listing_outcomes.return_pct",
+      "ipo_listing_outcomes.benchmark_return_pct",
+      "ipo_listing_outcomes.excess_return_pct",
+      "ipo_listing_outcomes.max_drawdown_pct",
+      "ipo_listing_outcomes.max_runup_pct",
+      "ipo_listing_outcomes.first_day_vs_offer_pct",
+      "opportunity_benchmark_evidence.benchmark_return_pct",
+      "opportunity_benchmark_evidence.excess_return_pct",
+      "opportunity_events.score",
+      "opportunity_events.entry_price",
+      "opportunity_events.reversal_score",
+      "opportunity_events.volume_ratio",
+      "opportunity_events.buy_value_nok",
+      "opportunity_forward_returns.target_price",
+      "opportunity_forward_returns.return_pct",
+      "opportunity_market_context.benchmark_entry_close",
+      "opportunity_market_context.benchmark_ret20_pct",
+      "opportunity_market_context.benchmark_ma50_gap_pct",
+      "opportunity_market_returns.benchmark_return_pct",
+      "opportunity_market_returns.excess_return_pct",
+      "opportunity_path_evidence.max_drawdown_pct",
+      "opportunity_path_evidence.max_runup_pct",
+      "opportunity_shadow_returns.target_price",
+      "opportunity_shadow_returns.return_pct",
+      "opportunity_shadow_returns.benchmark_return_pct",
+      "opportunity_shadow_returns.excess_return_pct",
+      "opportunity_shadow_smart_money.role_adjusted_qualified_value_nok",
+      "opportunity_shadow_snapshots.entry_price",
+      "opportunity_shadow_snapshots.opportunity_score",
+      "opportunity_shadow_snapshots.reversal_score",
+      "opportunity_shadow_snapshots.volume_ratio",
+      "opportunity_shadow_snapshots.insider_points",
+      "opportunity_shadow_snapshots.buy_value_nok",
+      "opportunity_shadow_snapshots.benchmark_entry_close",
+      "opportunity_shadow_snapshots.benchmark_ret20_pct",
+      "opportunity_shadow_snapshots.benchmark_ma50_gap_pct",
+      "opportunity_state.score",
+      "ownership_changes.shares_before",
+      "ownership_changes.shares_after",
+      "ownership_changes.shares_delta",
+      "ownership_changes.pct_before",
+      "ownership_changes.pct_after",
+      "ownership_changes.pct_delta",
+      "ownership_positions.shares",
+      "ownership_positions.ownership_pct",
+      "quotes.price",
+      "quotes.change_pct",
+      "runtime_feed_cache.updated_at",
+      "short_positions.short_pct",
+      "signal_event_state.score",
+      "signal_events.previous_score",
+      "signal_events.score",
+      "trend_activity_events.volume_ratio",
+      "trend_activity_events.recent_volume_ratio",
+      "trend_activity_events.return_1d_pct",
+      "trend_activity_events.return_5d_pct",
+      "trend_activity_events.trend_spread_pct"
+    ],
+    "findings": [
+      {
+        "field": "capital_flow_events.shares",
+        "missing": 35,
+        "nonfinite": 0,
+        "rows": 238
+      },
+      {
+        "field": "capital_flow_events.price",
+        "missing": 105,
+        "nonfinite": 0,
+        "rows": 238
+      },
+      {
+        "field": "capital_flow_events.value_nok",
+        "missing": 117,
+        "nonfinite": 0,
+        "rows": 238
+      },
+      {
+        "field": "event_evidence_events.materiality_ratio_pct",
+        "missing": 1,
+        "nonfinite": 0,
+        "rows": 1
+      },
+      {
+        "field": "event_evidence_events.amount_nok",
+        "missing": 1,
+        "nonfinite": 0,
+        "rows": 1
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.base_score",
+        "missing": 19,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.fundamentals",
+        "missing": 19,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.valuation",
+        "missing": 19,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.sentiment",
+        "missing": 19,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.insider_score",
+        "missing": 19,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.volume_ratio",
+        "missing": 336,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.max_materiality_ratio_pct",
+        "missing": 641,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.prior_mean_excess_return_pct",
+        "missing": 611,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.prior_median_excess_return_pct",
+        "missing": 611,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.prior_positive_excess_rate_pct",
+        "missing": 611,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.prior_median_max_drawdown_pct",
+        "missing": 611,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "high_conviction_shadow_snapshots.prior_median_max_runup_pct",
+        "missing": 611,
+        "nonfinite": 0,
+        "rows": 641
+      },
+      {
+        "field": "insider_history.shares",
+        "missing": 32,
+        "nonfinite": 0,
+        "rows": 235
+      },
+      {
+        "field": "insider_history.price",
+        "missing": 102,
+        "nonfinite": 0,
+        "rows": 235
+      },
+      {
+        "field": "insider_history.transaction_value",
+        "missing": 114,
+        "nonfinite": 0,
+        "rows": 235
+      },
+      {
+        "field": "insider_ledger.shares",
+        "missing": 1,
+        "nonfinite": 0,
+        "rows": 5
+      },
+      {
+        "field": "insider_ledger.price",
+        "missing": 5,
+        "nonfinite": 0,
+        "rows": 5
+      },
+      {
+        "field": "opportunity_shadow_snapshots.volume_ratio",
+        "missing": 486,
+        "nonfinite": 0,
+        "rows": 975
+      },
+      {
+        "field": "quotes.change_pct",
+        "missing": 167,
+        "nonfinite": 0,
+        "rows": 213
+      }
+    ]
+  },
+  "relations": {
+    "fields_checked": 23,
+    "fields": [
+      "quotes.ticker->stocks.ticker",
+      "scores.ticker->stocks.ticker",
+      "opportunity_event_versions.event_id->opportunity_events.id",
+      "opportunity_forward_returns.event_id->opportunity_events.id",
+      "opportunity_benchmark_evidence.event_id->opportunity_events.id",
+      "opportunity_path_evidence.event_id->opportunity_events.id",
+      "opportunity_market_context.event_id->opportunity_events.id",
+      "opportunity_market_returns.event_id->opportunity_events.id",
+      "opportunity_shadow_returns.snapshot_id->opportunity_shadow_snapshots.id",
+      "opportunity_shadow_smart_money.snapshot_id->opportunity_shadow_snapshots.id",
+      "opportunity_shadow_scan_results.run_id->opportunity_shadow_scan_runs.run_id",
+      "opportunity_shadow_scan_repairs.run_id->opportunity_shadow_scan_runs.run_id",
+      "high_conviction_shadow_outcomes.snapshot_id->high_conviction_shadow_snapshots.id",
+      "event_evidence_outcomes.event_id->event_evidence_events.event_id",
+      "ipo_listing_outcomes.listing_id->ipo_listings.listing_id",
+      "ownership_positions.snapshot_id->ownership_snapshots.id",
+      "financing_document_jobs.event_key->company_context_events.event_key",
+      "measurement_signals.series_id->measurement_series.series_id",
+      "measurement_signals.event_id->opportunity_events.id",
+      "measurement_entries->measurement_signals",
+      "measurement_price_candidates->measurement_signals",
+      "measurement_signal_evidence->measurement_signals",
+      "measurement_candidate_checks->measurement_signals"
+    ],
+    "findings": []
+  },
+  "domain_checks": [
+    {
+      "check_name": "score_range_components",
+      "invalid": 0,
+      "rows": 33437
+    },
+    {
+      "check_name": "quote_price_volume",
+      "invalid": 0,
+      "rows": 213
+    },
+    {
+      "check_name": "trend_volume",
+      "invalid": 0,
+      "rows": 220
+    },
+    {
+      "check_name": "insider_history_values",
+      "invalid": 0,
+      "rows": 235
+    },
+    {
+      "check_name": "flow_values",
+      "invalid": 0,
+      "rows": 238
+    },
+    {
+      "check_name": "opportunity_return_arithmetic",
+      "invalid": 0,
+      "rows": 29
+    },
+    {
+      "check_name": "shadow_return_arithmetic",
+      "invalid": 0,
+      "rows": 1896
+    },
+    {
+      "check_name": "high_conviction_return_arithmetic",
+      "invalid": 0,
+      "rows": 1197
+    },
+    {
+      "check_name": "historical_version_sequence",
+      "invalid": 0,
+      "rows": 1378
+    }
+  ],
+  "evidence_signature_check": [
+    {
+      "signature_mismatches": 0,
+      "versions": 1378
+    }
+  ],
+  "profiles": {
+    "description": 74,
+    "financials": 12,
+    "isin": 86,
+    "registry": 62,
+    "yahoo_identity_verified": 8
+  },
+  "profile_field_status": [
+    {
+      "description": "unavailable",
+      "financials": "unavailable",
+      "n": 108,
+      "registry": "unavailable"
+    },
+    {
+      "description": "stored",
+      "financials": "unavailable",
+      "n": 57,
+      "registry": "stored"
+    },
+    {
+      "description": "stale",
+      "financials": "unavailable",
+      "n": 8,
+      "registry": "unavailable"
+    },
+    {
+      "description": "unavailable",
+      "financials": "stored",
+      "n": 4,
+      "registry": null
+    },
+    {
+      "description": "stale",
+      "financials": "stale",
+      "n": 4,
+      "registry": "unavailable"
+    },
+    {
+      "description": "stored",
+      "financials": "stale",
+      "n": 2,
+      "registry": "stored"
+    },
+    {
+      "description": "stale",
+      "financials": "stale",
+      "n": 2,
+      "registry": "stale"
+    },
+    {
+      "description": "stale",
+      "financials": "unavailable",
+      "n": 1,
+      "registry": "stale"
+    }
+  ],
+  "active_universe": {
+    "size": 26,
+    "live_scores": 26,
+    "with_persisted_quote": 24,
+    "with_market_time": 1
+  },
+  "source_coverage": {
+    "coverage_windows": [
+      {
+        "first_day": "2024-10-01",
+        "last_day": "2026-10-10",
+        "n": 740,
+        "status": "partial"
+      }
+    ],
+    "document_states": [
+      {
+        "n": 269,
+        "state": "unsupported_document"
+      },
+      {
+        "n": 24,
+        "state": "partial"
+      }
+    ],
+    "financial_facts": {
+      "facts": 56,
+      "invalid_period": 0,
+      "missing_currency": 0,
+      "missing_field_source": 20,
+      "unverified_identity": 20
+    },
+    "insider_sources": {
+      "internal_transfers": 0,
+      "rows": 235,
+      "source_url_missing": 0,
+      "trade_date_missing": 0,
+      "value_missing": 114
+    }
+  },
+  "scan_run_states": [
+    {
+      "n": 4,
+      "newest": "2026-09-25T12:25:39.411325+00:00",
+      "oldest": "2026-08-31T11:55:37.040980+00:00",
+      "run_status": "RUNNING"
+    },
+    {
+      "n": 5834,
+      "newest": "2026-10-09T22:26:35.933276+00:00",
+      "oldest": "2026-08-30T16:12:46.440608+00:00",
+      "run_status": "COMPLETED"
+    }
+  ],
+  "latest_scan": {
+    "completed_at": "2026-10-09T22:27:16.915433+00:00",
+    "expected_tickers": 26,
+    "run_id": "21a199f935e543d5ba0d40e8b4a78d69",
+    "run_status": "COMPLETED",
+    "signal_model_id": "2026-08-30-v1.4:835173b04d9a2e91",
+    "started_at": "2026-10-09T22:26:35.933276+00:00"
+  },
+  "issuer_totals": {
+    "distinct_tickers": 80,
+    "rows": 293,
+    "ticker_mapped": 80
+  },
+  "financing_jobs": [
+    {
+      "latest_attempt": "2026-10-05T17:20:25.530890+00:00",
+      "maximum_attempts": 5,
+      "n": 24,
+      "oldest_attempt": "2026-10-05T16:26:27.467581+00:00",
+      "state": "partial"
+    },
+    {
+      "latest_attempt": "2026-10-09T05:06:10.154883+00:00",
+      "maximum_attempts": 4,
+      "n": 269,
+      "oldest_attempt": "2026-10-05T17:26:27.279336+00:00",
+      "state": "unsupported_document"
+    }
+  ],
+  "external_sample": {
+    "listing_count": 102,
+    "trade_sample_isins": 283,
+    "invalid_listing_isins": [
+      {
+        "ticker": "NORSE",
+        "isin": "NO001288525"
+      }
+    ],
+    "invalid_sample_isins": [],
+    "matched_listing_isins": 61,
+    "sample_isins_outside_ipo_registry": 222,
+    "listing_isins_not_in_single_day_trade_sample": 33,
+    "sample_markets": {
+      "MERK": 7990,
+      "XOSL": 104131,
+      "XOAS": 3243
+    }
+  },
+  "reviewed_pilots": {
+    "profiles": 3,
+    "tickers": [
+      "HYPRO",
+      "HDLY",
+      "INIFY"
+    ],
+    "financial_groups": 12,
+    "metric_comparisons": 30,
+    "result": "contract_valid; original statements not re-read in this run"
+  },
+  "tests": {
+    "backend": 990,
+    "frontend_worker": 78
+  },
+  "limitations": [
+    "IPO register is historical admissions, not a full current instrument master",
+    "One day's trades do not cover untraded or halted instruments",
+    "Legacy raw returns do not certify net total-return performance",
+    "No per-issuer full reconciliation against every original financial report",
+    "No physical iPhone test or secret rotation in this data audit"
+  ]
+}

@@ -13,6 +13,7 @@ import re
 
 from database import connect
 from ipo_reviewed_profiles import enrich
+from instrument_identifiers import listing_identity
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ def project(listings, candidates, tracked=(), now=None, source_status=None):
     today = now.astimezone(ZoneInfo('Europe/Oslo')).date()
     items, completed, seen = [], set(), set()
     for row in sorted(listings, key=lambda x: str(x.get('listing_date') or ''), reverse=True):
+        row = listing_identity(row)
         day = _date(row.get('listing_date'))
         if not day or day > today or not _source(row.get('source_url')):
             continue
