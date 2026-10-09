@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 import hashlib
 import json
+import math
 
 from database import connect
 
@@ -81,6 +82,11 @@ def initialize():
           evidence_json TEXT NOT NULL, evidence_hash TEXT NOT NULL,
           PRIMARY KEY(series_id,event_id)
         );
+        CREATE TABLE IF NOT EXISTS measurement_signal_evidence (
+          series_id TEXT NOT NULL, event_id BIGINT NOT NULL,
+          captured_at TEXT NOT NULL, source_json TEXT NOT NULL,
+          PRIMARY KEY(series_id,event_id)
+        );
         ''')
         conn.execute('INSERT INTO measurement_series VALUES(?,?,?,?) ON CONFLICT(series_id) DO NOTHING',
                      (SERIES_ID, now(), policy, hashlib.sha256(policy.encode()).hexdigest()))
@@ -122,8 +128,14 @@ def capture(event_id):
                            'ON CONFLICT(series_id,event_id) DO NOTHING',
                            (SERIES_ID, event_id, row['ticker'], row['label'], model,
                             observed.isoformat(), created.isoformat(), captured, captured, digest))
+        inserted = cur.rowcount == 1
+        if inserted:
+            # Same transaction as the signal. Never reconstruct old snapshots
+            # from a mutable event on retry or during schema initialization.
+            conn.execute('INSERT INTO measurement_signal_evidence VALUES(?,?,?,?)',
+                         (SERIES_ID, event_id, captured, canonical(row)))
         conn.commit()
-        return cur.rowcount == 1
+        return inserted
     finally:
         conn.close()
 
@@ -230,6 +242,39 @@ def record_entry(event_id, instrument, sessions, observations):
         conn.close()
 
 
+def decision_evidence(row):
+    """Bounded public projection of the original capture, never current analysis."""
+    raw = row.get('source_json')
+    if raw is None:
+        return {'status': 'not_captured'}
+    if hashlib.sha256(raw.encode()).hexdigest() != row['source_hash']:
+        return {'status': 'integrity_error'}
+    try:
+        source = json.loads(raw)
+        payload = json.loads(source['payload'])
+        opportunity = payload.get('opportunity')
+        if not isinstance(opportunity, dict):
+            return {'status': 'unavailable'}
+        components = opportunity.get('components')
+        components = components if isinstance(components, dict) else {}
+        reasons = opportunity.get('reasons')
+        reasons = reasons if isinstance(reasons, list) else []
+        def number(value):
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else None
+        def text(value):
+            return value[:300] if isinstance(value, str) else None
+        return {'status': 'captured', 'score': number(opportunity.get('score')),
+                'confidence': text(opportunity.get('confidence')),
+                'reasons': [r[:300] for r in reasons[:20] if isinstance(r, str)],
+                'reasons_truncated': len(reasons) > 20,
+                'components': {k: number(components.get(k)) for k in
+                               ('reversal_score', 'volume_ratio', 'independent_buyers', 'buy_value_nok')},
+                'insider_label': text(components.get('insider_label')),
+                'source_hash': row['source_hash']}
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return {'status': 'unavailable'}
+
+
 def summary():
     """Read-only status. Absence is not a successful empty journal."""
     conn = connect()
@@ -240,8 +285,15 @@ def summary():
         counts = conn.execute('SELECT COUNT(*) AS signals,COUNT(e.event_id) AS entries '
                               'FROM measurement_signals s LEFT JOIN measurement_entries e '
                               'ON e.series_id=s.series_id AND e.event_id=s.event_id WHERE s.series_id=?', (SERIES_ID,)).fetchone()
-        recent = [dict(x) for x in conn.execute('SELECT event_id,ticker,label,model_id,available_at '
-                  'FROM measurement_signals WHERE series_id=? ORDER BY available_at DESC,event_id DESC LIMIT 20', (SERIES_ID,)).fetchall()]
+        recent = []
+        for item in conn.execute('SELECT s.event_id,s.ticker,s.label,s.model_id,s.available_at,s.signal_at,'
+                  's.source_hash,d.source_json FROM measurement_signals s LEFT JOIN measurement_signal_evidence d '
+                  'ON d.series_id=s.series_id AND d.event_id=s.event_id '
+                  'WHERE s.series_id=? ORDER BY s.available_at DESC,s.event_id DESC LIMIT 20', (SERIES_ID,)).fetchall():
+            row = dict(item)
+            row['decision_evidence'] = decision_evidence(row)
+            row.pop('source_json')
+            recent.append(row)
         return {'status': 'collecting_signals', 'series_id': SERIES_ID,
                 'started_at': series['started_at'], 'policy_hash': series['policy_hash'],
                 'signals': counts['signals'], 'simulated_entries': counts['entries'],
