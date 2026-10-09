@@ -77,14 +77,27 @@ an indexed headline, and no one-off historical status is presented as current.
    Invalid/external/auth/API notification destinations fall back to the app.
    Cache contracts advance to v34. No Access policy or push enrollment change.
 
+4. **Corporate-action presentation:** the authenticated alerts screen showed DVD
+   five-day price changes around -90% on 8–9 October. The issuer's 8 October
+   announcement confirms NOK 20.60 ex-dividend that day:
+   https://www.marketscreener.com/news/deep-value-driller-as-ex-dividend-nok-20-60-today-ce785ddedf81f025
+   Raw close-to-close changes are not verified total returns. Trend alerts and
+   stock technical context now say so explicitly, including dividend/split
+   caveats. Historical events, scores, rules and stored price data are unchanged.
+   Missing exchange metadata is now labelled unknown, not guessed Oslo Børs.
+
 Local validation: 838 backend tests (four existing FastAPI lifecycle deprecation
-warnings), 66 UI/Worker tests. New tests cover legacy migration, preservation of
+warnings), 67 UI/Worker tests. New tests cover legacy migration, preservation of
 trade/capture timestamps, unknown/future dates, visible mobile-readable times,
 partial-source rendering and executable service-worker offline/upgrade behavior.
 PR checks and independent production deployments remain release requirements.
 
 ## Remaining priorities — not concealed by this release
 
+- Source-verified corporate-action adjustment research, including DVD's
+  extraordinary dividend and issuer identity/name change. The added caveat is
+  not an implemented total-return engine; validate adjustment provenance and
+  point-in-time behavior separately before proposing model changes.
 - Actual iPhone PWA install/update/offline and push receipt/tap/deduplication.
   Desktop browser and simulated service-worker tests do not certify iOS.
 - Broader source-reviewed financial/description coverage; automated profile gaps
