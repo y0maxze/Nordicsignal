@@ -52,6 +52,15 @@ def initialize():
           evidence_hash TEXT NOT NULL, recorded_at TEXT NOT NULL, evidence_json TEXT NOT NULL,
           PRIMARY KEY(series_id,event_id,evidence_hash)
         );
+        CREATE TABLE IF NOT EXISTS measurement_reconcile_attempts (
+          series_id TEXT NOT NULL, event_id BIGINT NOT NULL,
+          checked_at TEXT NOT NULL, outcome TEXT NOT NULL,
+          PRIMARY KEY(series_id,event_id)
+        );
+        CREATE TABLE IF NOT EXISTS measurement_candidate_checks (
+          series_id TEXT NOT NULL, event_id BIGINT NOT NULL, checked_at TEXT NOT NULL,
+          PRIMARY KEY(series_id,event_id)
+        );
         ''')
         conn.commit()
     finally:
@@ -59,52 +68,83 @@ def initialize():
 
 
 def reconcile():
-    """Repair missing captures using NOW, never the original signal availability.
-
-    Unversioned events remain gaps; bounded work never reports full coverage when
-    truncated. Oldest gaps first, so repeated successful work drains the backlog.
-    """
+    """Repair using current availability; rotate failures without hiding old gaps."""
     conn = connect()
+    checked = journal.now()
     try:
-        series = conn.execute('SELECT started_at FROM measurement_series WHERE series_id=?', (journal.SERIES_ID,)).fetchone()
+        series = conn.execute('SELECT started_at FROM measurement_series WHERE series_id=?',
+                              (journal.SERIES_ID,)).fetchone()
         if not series:
-            return {'status':'not_started'}
+            return {'status': 'not_started'}
         start = journal.timestamp(series['started_at'])
-        # One-day slack for ISO offset representations; exact comparison below.
-        lower = (start.date()-timedelta(days=1)).isoformat()
-        rows = [dict(r) for r in conn.execute('SELECT e.id,e.created_at,v.source FROM opportunity_events e '
-            'LEFT JOIN opportunity_event_versions v ON v.event_id=e.id '
-            'LEFT JOIN measurement_signals s ON s.event_id=e.id AND s.series_id=? '
-            'WHERE s.event_id IS NULL AND e.created_at>=? ORDER BY e.id LIMIT ?',
-            (journal.SERIES_ID,lower,_LIMIT+1)).fetchall()]
+        lower = (start.date() - timedelta(days=1)).isoformat()
+        # Exact timestamp comparison below; slack accommodates ISO offsets.
+        joins = (' FROM opportunity_events e '
+                 'LEFT JOIN opportunity_event_versions v ON v.event_id=e.id '
+                 'LEFT JOIN measurement_signals s ON s.event_id=e.id AND s.series_id=? '
+                 'LEFT JOIN measurement_reconcile_attempts a ON a.event_id=e.id AND a.series_id=? '
+                 'WHERE s.event_id IS NULL AND (e.created_at>=? OR e.created_at IS NULL) ')
+        params = (journal.SERIES_ID, journal.SERIES_ID, lower)
+        rows = [dict(r) for r in conn.execute(
+            'SELECT e.id,e.created_at,v.source' + joins +
+            "ORDER BY COALESCE(a.checked_at,''),e.id LIMIT ?", params + (_LIMIT + 1,)).fetchall()]
     finally:
         conn.close()
-    report = {'status':'ok','captured':0,'unversioned':0,'invalid':0,'failed':0,
-              'truncated':len(rows)>_LIMIT,'gap_event_ids':[]}
+    report = {'status': 'ok', 'captured': 0, 'unversioned': 0, 'invalid': 0,
+              'failed': 0, 'unreviewed': 0, 'truncated': len(rows) > _LIMIT,
+              'gap_event_ids': []}
+    attempts = []
     for row in rows[:_LIMIT]:
+        outcome = 'failed'
         try:
-            if journal.timestamp(row['created_at']) < start:
-                continue
-        except (ValueError,TypeError):
-            report['invalid']+=1
-            report['gap_event_ids'].append(row['id'])
-            continue
-        if row['source'] != 'live_verified_fingerprint':
-            report['unversioned']+=1;report['gap_event_ids'].append(row['id']);continue
-        try:
-            if journal.capture(row['id']): report['captured']+=1
-        except Exception:
-            log.exception('Measurement capture reconciliation failed for event %s',row['id'])
-            report['failed']+=1;report['gap_event_ids'].append(row['id'])
-    if report['truncated'] or report['gap_event_ids']: report['status']='partial'
-    report['gap_event_ids']=report['gap_event_ids'][:20]
-    conn=connect()
+            created = journal.timestamp(row['created_at'])
+        except (ValueError, TypeError):
+            outcome = 'invalid'
+        else:
+            if created < start:
+                outcome = 'before_series'
+            elif row['source'] != 'live_verified_fingerprint':
+                outcome = 'unversioned'
+            else:
+                try:
+                    if journal.capture(row['id']):
+                        report['captured'] += 1
+                    # Verify the postcondition even if capture returned False.
+                    verify = connect()
+                    try:
+                        present = verify.execute('SELECT event_id FROM measurement_signals '
+                            'WHERE series_id=? AND event_id=?', (journal.SERIES_ID, row['id'])).fetchone()
+                    finally:
+                        verify.close()
+                    outcome = 'captured' if present else 'failed'
+                except Exception:
+                    log.exception('Measurement capture reconciliation failed for event %s', row['id'])
+        attempts.append((journal.SERIES_ID, row['id'], checked, outcome))
+    conn = connect()
     try:
+        for attempt in attempts:
+            conn.execute('INSERT INTO measurement_reconcile_attempts VALUES(?,?,?,?) '
+                         'ON CONFLICT(series_id,event_id) DO UPDATE SET '
+                         'checked_at=excluded.checked_at,outcome=excluded.outcome', attempt)
+        # Count all outstanding candidates, not only the rows just attempted.
+        for item in conn.execute("SELECT COALESCE(a.outcome,'unreviewed') AS outcome,COUNT(*) AS n" +
+                                 joins + 'GROUP BY a.outcome', params).fetchall():
+            key = item['outcome']
+            if key == 'before_series':
+                continue
+            if key not in ('unversioned', 'invalid', 'failed', 'unreviewed'):
+                key = 'unreviewed'
+            report[key] += item['n']
+        report['gap_event_ids'] = [r['id'] for r in conn.execute('SELECT e.id' + joins +
+            "AND COALESCE(a.outcome,'unreviewed')<>'before_series' ORDER BY e.id LIMIT 20", params).fetchall()]
+        if report['truncated'] or report['gap_event_ids']:
+            report['status'] = 'partial'
         conn.execute('INSERT INTO measurement_input_health VALUES(?,?,?) ON CONFLICT(series_id) '
                      'DO UPDATE SET checked_at=excluded.checked_at,report_json=excluded.report_json',
-                     (journal.SERIES_ID,journal.now(),journal.canonical(report)))
+                     (journal.SERIES_ID, checked, journal.canonical(report)))
         conn.commit()
-    finally: conn.close()
+    finally:
+        conn.close()
     return report
 
 
@@ -114,10 +154,15 @@ def capture_candidates(ticker, rows):
     try:
         signals=[dict(r) for r in conn.execute('SELECT s.event_id,s.available_at FROM measurement_signals s '
             'LEFT JOIN measurement_entries e ON e.event_id=s.event_id AND e.series_id=s.series_id '
-            'WHERE s.series_id=? AND s.ticker=? AND e.event_id IS NULL ORDER BY s.event_id LIMIT ?',
+            'LEFT JOIN measurement_candidate_checks c ON c.event_id=s.event_id AND c.series_id=s.series_id '
+            "WHERE s.series_id=? AND s.ticker=? AND e.event_id IS NULL ORDER BY COALESCE(c.checked_at,''),s.event_id LIMIT ?",
             (journal.SERIES_ID,ticker,_LIMIT)).fetchall()]
         written=0
+        checked=journal.now()
         for signal in signals:
+            conn.execute('INSERT INTO measurement_candidate_checks VALUES(?,?,?) '
+                'ON CONFLICT(series_id,event_id) DO UPDATE SET checked_at=excluded.checked_at',
+                (journal.SERIES_ID,signal['event_id'],checked))
             try: session=scheduled_session_after(signal['available_at'])
             except ValueError: continue
             matches=[]
@@ -128,7 +173,7 @@ def capture_candidates(ticker, rows):
                     market_at=datetime.fromtimestamp(epoch,timezone.utc)
                     if market_at.astimezone(OSLO).date().isoformat()!=session['date']:continue
                     price=str(journal.positive(row.get('open')))
-                    if market_at>journal.timestamp(journal.now()):continue
+                    if market_at>journal.timestamp(checked):continue
                     matches.append({'timestamp':epoch,'open':price})
                 except (ValueError,TypeError,KeyError,OverflowError,OSError):continue
             if not matches:continue
