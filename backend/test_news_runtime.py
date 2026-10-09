@@ -81,3 +81,5 @@ def test_full_issuer_name_requires_word_boundaries():
     from news_runtime import _matches_issuer
     assert not _matches_issuer('NotTechstep ASA Q3 results','TECH','Techstep ASA')
     assert _matches_issuer('Techstep ASA: Q3 results','TECH','Techstep ASA')
+    assert _matches_issuer('Mowi ASA: Q3 results','MOWI','Mowi')
+    assert not _matches_issuer('Mowitech ASA: Q3 results','MOWI','Mowi')

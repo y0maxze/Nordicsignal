@@ -67,7 +67,7 @@ def _matches_issuer(text, ticker, company):
     company_n = _norm(company)
     # A shared word (e.g. Aker) cannot identify Aker ASA vs Aker Solutions.
     # Keep the canonical full name, with word boundaries, or a distinct ticker.
-    if company_n and len(company_n) >= 5 and re.search(rf'\b{re.escape(company_n)}\b', normalized):
+    if company_n and len(company_n) >= 4 and re.search(rf'\b{re.escape(company_n)}\b', normalized):
         return True
     # Never trust short ticker strings as the sole match. Long/distinct tickers are acceptable.
     ticker_n = _norm(ticker)
