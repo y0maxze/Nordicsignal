@@ -125,6 +125,29 @@ def test_market_prefers_newer_dated_observation_over_old_quote(monkeypatch):
     assert row['data_status']=='LAGRET'
 
 
+def test_recent_capture_cannot_freshen_old_or_undated_trade(monkeypatch):
+    for stamp in [None, '2026-09-22T10:00:00Z', '2026-09-25T10:00:00', '2099-01-01T00:00:00Z', 'bad']:
+        def rows(sql):
+            if 'quotes' in sql:
+                return [{'ticker':'EQNR','price':200,'change_pct':2,'captured_at':'2026-09-25T10:00:00Z','market_time':stamp}]
+            return [{'ticker':'EQNR','payload':json.dumps({'reversal':{'metrics':{'close':300,'close_date':'2026-09-24'}}})}]
+        monkeypatch.setattr(market,'read_rows',rows)
+        row=market.snapshot([{'ticker':'EQNR','score':69}])['items'][0]
+        assert row['price']==300 and row['quote_as_of']=='2026-09-24'
+        assert row['change_pct'] is None and row['score']==69
+
+
+def test_dated_quote_and_legacy_only_price_keep_distinct_time_semantics(monkeypatch):
+    quote={'ticker':'EQNR','price':200,'change_pct':2,'captured_at':'2026-09-25T10:00:00Z','market_time':'2026-09-24T14:25:00Z'}
+    monkeypatch.setattr(market,'read_rows',lambda sql:[quote] if 'quotes' in sql else [])
+    row=market.snapshot([{'ticker':'EQNR'}])['items'][0]
+    assert row['quote_as_of']=='2026-09-24T14:25:00+00:00' and row['change_pct']==2
+    quote['market_time']=None
+    row=market.snapshot([{'ticker':'EQNR'}])['items'][0]
+    assert row['price']==200 and row['quote_as_of'] is None and row['change_pct'] is None
+    assert row['quote_captured_at']==quote['captured_at'] and row['quote_time_kind']=='unknown'
+
+
 def test_morning_status_and_compact_financial_values():
     page=(ROOT/'frontend/morning.html').read_text()
     labels=page[page.index('function riskLabel'):page.index('function rowAttrs')]

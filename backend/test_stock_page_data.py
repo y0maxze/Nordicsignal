@@ -46,6 +46,33 @@ def test_ranked_quote_is_still_persisted(db):
     c.close()
 
 
+def test_quote_preserves_trade_time_separately_from_capture(db):
+    provider = Mock()
+    provider.quote.return_value = {'price': 42.4, 'market_time': '2026-10-08T14:25:00Z',
+                                  'captured_at': '2026-10-09T10:00:00Z'}
+    assert quote_result('AKSO', provider, db)['persistence_status'] == 'stored'
+    c = db()
+    row = dict(c.execute('SELECT * FROM quotes').fetchone())
+    assert row['market_time'] == '2026-10-08T14:25:00Z'
+    assert row['captured_at'] == '2026-10-09T10:00:00Z'
+    c.close()
+
+
+def test_quote_time_migration_is_idempotent_and_never_backfills_capture(tmp_path, monkeypatch):
+    import database
+    monkeypatch.setattr(database, 'USING_POSTGRES', False)
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'legacy.sqlite')
+    c = database.connect()
+    c.executescript("CREATE TABLE quotes(id INTEGER PRIMARY KEY, ticker TEXT, price REAL, change_pct REAL, volume INTEGER, captured_at TEXT); INSERT INTO quotes VALUES(1,'AKSO',42,2,100,'2026-10-09T10:00:00Z');")
+    c.close()
+    database.init_db(); database.init_db()
+    c = database.connect()
+    row = dict(c.execute('SELECT * FROM quotes').fetchone())
+    assert row['market_time'] is None
+    assert row['price'] == 42 and row['captured_at'] == '2026-10-09T10:00:00Z'
+    c.close()
+
+
 def test_cache_failure_preserves_quote_and_releases_connection():
     provider, conn = Mock(), Mock()
     provider.quote.return_value = {'price': 12, 'source': 'Yahoo Finance', 'market_time': None}

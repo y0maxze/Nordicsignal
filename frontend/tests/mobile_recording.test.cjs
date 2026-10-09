@@ -38,6 +38,8 @@ test('technical fields use readable Norwegian labels and preserve unknown states
  const dom=await stockPage({}),w=dom.window,d=w.document;
  assert.match(d.getElementById('technicalSection').textContent,/Fallende eller svak/);
  assert.match(d.getElementById('technicalSection').textContent,/Mangler data/);
+ assert.match(d.getElementById('technicalSection').textContent,/ikke bekreftet totalavkastning/);
+ assert.match(d.getElementById('ticker').textContent,/Markedsplass ukjent/);
  assert.doesNotMatch(d.getElementById('technicalSection').textContent,/FALLING_OR_WEAK|UTILGJENGELIG/);
  w.renderTechnical({reversal:{regime:'NEW_UNKNOWN_REGIME',metrics:{}}});
  assert.match(d.getElementById('technicalSection').textContent,/Ukjent/);
@@ -50,11 +52,11 @@ test('failed Opportunity load ends loading with a retry and no inferred system a
  assert.ok(d.getElementById('retryOpportunity'));
  assert.doesNotMatch(d.getElementById('whatNow').textContent,/Laster/);dom.window.close();
 });
-async function alertPage({permission='granted',sub=true,ready=true,fail=false,supported=true}={}){
+async function alertPage({permission='granted',sub=true,ready=true,fail=false,supported=true,items=[]}={}){
  const dom=new JSDOM(read('alerts.html'),{url:'https://app.test/alerts',runScripts:'outside-only'}),w=dom.window,calls=[];
  w.AbortSignal.timeout=()=>undefined;
  if(supported){w.Notification={permission};w.PushManager=function(){};Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistration:async()=>({pushManager:{getSubscription:async()=>sub?{endpoint:'private-test-endpoint'}:null}})}})}
- w.fetch=async(url,opts)=>{calls.push({url,opts});if(fail&&url.includes('/push/'))throw Error();return {ok:true,json:async()=>url.includes('/push/')?{delivery_ready:ready}:{items:[]}}};
+ w.fetch=async(url,opts)=>{calls.push({url,opts});if(fail&&url.includes('/push/'))throw Error();return {ok:true,json:async()=>url.includes('/push/')?{delivery_ready:ready}:{items}}};
  w.eval(read('alerts.js'));await settle();return {dom,calls};
 }
 test('existing push subscription is described without claiming server registration or delivery',async()=>{
@@ -66,6 +68,16 @@ test('existing push subscription is described without claiming server registrati
  d.getElementById('refreshPushStatus').click();await settle();
  assert.ok(calls.every(c=>!c.opts.method&&!c.opts.body));
  assert.equal(calls.filter(c=>c.url==='/api/push/status').length,2);dom.window.close();
+});
+test('trend alerts distinguish price changes from total return without rewriting stored evidence',async(t)=>{
+ const {dom}=await alertPage({items:[{ticker:'DVD',event_type:'trend_activity',event:'Trend ned',detail:'5d -90.4%'},{ticker:'AAA',event_type:'score_change',event:'Scoreendring'}]});
+ t.after(()=>dom.window.close());
+ const cards=dom.window.document.querySelectorAll('.alertCard');
+ assert.equal(cards.length,2);
+ assert.match(cards[0].textContent,/5d -90.4%/);
+ assert.match(cards[0].textContent,/Kursendring, ikke bekreftet totalavkastning/);
+ assert.match(cards[0].textContent,/Utbytte, splitt/);
+ assert.equal(cards[1].querySelector('.trendReturnNotice'),null);
 });
 test('push permissions, absent subscriptions, server failure and unsupported browsers stay distinct',async()=>{
  const cases=[{permission:'denied',sub:false,ready:false},{permission:'default',fail:true},{supported:false}];

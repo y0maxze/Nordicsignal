@@ -35,8 +35,8 @@ def test_service_worker_does_not_cache_access_redirects_or_api():
     program = r'''
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const handlers={},writes=[];let redirected=true;
-const response=()=>({ok:true,redirected,type:'basic',clone(){return this}});
-const ctx={URL,Response,self:{location:{origin:'https://example.test'},addEventListener(k,v){handlers[k]=v},skipWaiting(){},clients:{claim(){}}},caches:{open:async()=>({put:async(...x)=>writes.push(x)}),match:async()=>null},fetch:async()=>response()};
+const response=()=>({ok:true,redirected,type:'basic',headers:new Headers({'content-type':'text/html','x-aksjer-static-shell':'1'}),clone(){return this}});
+const ctx={URL,Response,Headers,self:{location:{origin:'https://example.test'},addEventListener(k,v){handlers[k]=v},skipWaiting(){},clients:{claim(){}}},caches:{open:async()=>({put:async(...x)=>writes.push(x)}),match:async()=>null},fetch:async()=>response()};
 vm.createContext(ctx);vm.runInContext(SCRIPT,ctx);
 (async()=>{
  let installed;handlers.install({waitUntil(p){installed=p}});await installed;assert.equal(writes.length,0);

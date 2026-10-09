@@ -54,9 +54,9 @@ def quote_result(ticker, provider, connect):
             data['persistence_status'] = 'outside_scoring_universe'
         else:
             conn.execute(
-                'INSERT INTO quotes(ticker,price,change_pct,volume,captured_at) VALUES(?,?,?,?,?)',
+                'INSERT INTO quotes(ticker,price,change_pct,volume,captured_at,market_time) VALUES(?,?,?,?,?,?)',
                 (ticker, data.get('price'), data.get('change_pct'), data.get('volume'),
-                 data.get('captured_at') or datetime.now(timezone.utc).isoformat()),
+                 data.get('captured_at') or datetime.now(timezone.utc).isoformat(), data.get('market_time')),
             )
             conn.commit()
             data['persistence_status'] = 'stored'

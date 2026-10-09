@@ -143,6 +143,8 @@ async function serveAsset(request, env, pathname) {
   const headers = applySecurityHeaders(new Headers(response.headers));
   headers.delete("content-length");
   headers.set("cache-control", "no-store");
+  // Only our static app shell, never an Access/challenge response, gets this marker.
+  headers.set("x-aksjer-static-shell", "1");
   return new Response(html, {status:response.status, headers});
 }
 
