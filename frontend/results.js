@@ -19,7 +19,7 @@
   if(!h)return '<p class="muted">Kilde- og journalkontroll er ikke tilgjengelig.</p>';
   const r=h.reconciliation;
   const state={ok:'Kontroll gjennomført',partial:'Hull eller ufullstendig kontroll',stale:'Kontrollen mangler eller er eldre enn 30 minutter'};
-  return `<p><strong>${esc(state[h.status]||'Kontrollstatus ukjent')}</strong> · ${esc(time(h.checked_at))} (Oslo).</p><p>${num(r?.captured)} journalposter hentet inn ved siste kontroll · ${num(r?(r.unversioned+r.invalid+r.failed):null)} uløste avvik${r?.truncated?' · kontrollen er avkortet':''}.</p><p class="muted">${num(h.candidate_events)} signaler har foreløpige åpningsdata i karantene. Ubekreftet identitet, justeringsgrunnlag eller offisiell åpning gir ingen simulert handel. Handelskalenderen dekker 2026; ekstraordinære handelsstanser er ikke automatisk verifisert.</p>`;
+  return `<p><strong>${esc(state[h.status]||'Kontrollstatus ukjent')}</strong> · ${esc(time(h.checked_at))} (Oslo).</p><p>${num(r?.captured)} journalposter hentet inn ved siste kontroll · ${num(r?(r.unversioned+r.invalid+r.failed+(r.unreviewed??0)):null)} uløste avvik${numeric(r?.unreviewed)?` (herav ${num(r.unreviewed)} ennå ikke kontrollert)`:""}${r?.truncated?' · kontrollen er avkortet':''}.</p><p class="muted">${num(h.candidate_events)} signaler har foreløpige åpningsdata i karantene. Ubekreftet identitet, justeringsgrunnlag eller offisiell åpning gir ingen simulert handel. Handelskalenderen dekker 2026; ekstraordinære handelsstanser er ikke automatisk verifisert.</p>`;
  }
  function prospective(d){
   const j=d.prospective_journal;
