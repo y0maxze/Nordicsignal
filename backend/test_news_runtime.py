@@ -68,3 +68,16 @@ def test_specific_ir_reports_survive_without_fabricated_publication_dates():
     items=parse_ir_html(html,'https://issuer.test/investors/','AAA','Issuer')
     assert len(items)==2
     assert all(x['published_at'] is None for x in items)
+
+
+def test_shared_issuer_word_cannot_attach_another_company_disclosure():
+    html='''<table><tr><td>09 Oct 2026 10:00 CEST</td><td>Aker Solutions ASA</td>
+    <td><a href="/en/products/equities/company-news/report">Aker Solutions: Q3 results</a></td></tr></table>'''
+    assert parse_euronext_html(html,'AKER','Aker ASA')==[]
+    assert len(parse_euronext_html(html,'AKSO','Aker Solutions'))==1
+
+
+def test_full_issuer_name_requires_word_boundaries():
+    from news_runtime import _matches_issuer
+    assert not _matches_issuer('NotTechstep ASA Q3 results','TECH','Techstep ASA')
+    assert _matches_issuer('Techstep ASA: Q3 results','TECH','Techstep ASA')

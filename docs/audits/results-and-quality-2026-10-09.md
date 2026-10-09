@@ -67,6 +67,10 @@ Sources inspected:
   reaches Results on desktop and through the mobile menu. Existing brand retained.
 - IR parser rejects undated generic report/calendar/navigation indexes and keeps
   period-specific report links and direct PDFs without inventing publication dates.
+- Exchange issuer matching no longer treats a single shared name token as proof
+  of identity. Bounded full-name matching prevents Aker Solutions releases being
+  attached to Aker ASA simply because both contain Aker. Unknown identity is safer
+  than an invented match; rename/alias coverage remains a separate registry task.
 - PWA v35 refreshes shared presentation assets. Results/API snapshots are not added
   to offline caching. Anonymous production verification includes the new routes.
 - Owner-approved weekly, read-only system/source audit was created for Friday
