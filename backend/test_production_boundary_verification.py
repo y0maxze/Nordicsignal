@@ -26,5 +26,6 @@ def test_public_backend_fails_verification(monkeypatch):
     monkeypatch.setattr(verification, 'checks', [])
     verification.run()
     failed = [x for x in verification.checks if not x['passed']]
-    assert len(failed) == 7
+    assert len(failed) == 8
+    assert any('/api/results-audit' in x['check'] for x in failed)
     assert all(x['check'].startswith('Backend ') for x in failed)

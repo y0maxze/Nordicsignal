@@ -59,7 +59,9 @@ def run_content_checks():
     for path in ['/manifest.webmanifest','/sw.js','/stock_analysis.js']:
         status,body,_,_=fetch(FRONTEND,path)
         require(status==200 and len(body)>20,path+' available')
-        if path=='/sw.js':require("CACHE_NAME='aksjer-shell-v31'" in body,'PWA current shell')
+        if path=='/sw.js':
+            expected=re.search(r"CACHE_NAME='([^']+)'", (Path(__file__).resolve().parents[1]/'frontend/sw.js').read_text()).group(1)
+            require(expected in body,'PWA current shell')
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -89,7 +91,7 @@ def is_access_login(status, headers):
 def run():
     # Access was enabled by the owner on 2026-09-24 for this Worker, all traffic.
     # This checks the anonymous boundary only; it must never certify authenticated UX.
-    frontend_paths = ['/app', '/morning', '/stock?ticker=EQNR', '/holdings',
+    frontend_paths = ['/app', '/results', '/results.js', '/api/results-audit', '/morning', '/stock?ticker=EQNR', '/holdings',
                       '/holdings.html', '/portfolio', '/frontend/holdings.html',
                       '/mobile.html', '/api/stocks', '/api/market-snapshot',
                       '/api/morning-brief', '/api/early-discovery', '/api/holdings',
@@ -99,7 +101,7 @@ def run():
         require(is_access_login(status, headers), 'Worker ' + path + ' requires Access login')
     status, _ = fetch_boundary(BACKEND, '/api/health')
     require(status == 200, 'Backend public health available')
-    for path in ['/api/stocks', '/api/market-snapshot', '/api/morning-brief',
+    for path in ['/api/results-audit', '/api/stocks', '/api/market-snapshot', '/api/morning-brief',
                  '/api/early-discovery', '/api/security-status', '/api/holdings', '/api/refresh']:
         status, _ = fetch_boundary(BACKEND, path)
         require(status == 401, 'Backend ' + path + ' direct anonymous access denied')

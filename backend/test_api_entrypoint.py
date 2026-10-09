@@ -32,6 +32,11 @@ class ApiEntrypointTests(unittest.TestCase):
         paths = [getattr(route, "path", "") for route in api_entrypoint.app.router.routes]
         self.assertFalse(any(path == "/api/paper" or path.startswith("/api/paper/") for path in paths))
 
+    def test_results_audit_has_one_read_only_route(self):
+        routes = [r for r in api_entrypoint.app.router.routes if getattr(r, 'path', '') == '/api/results-audit']
+        self.assertEqual(len(routes), 1)
+        self.assertEqual(routes[0].methods, {'GET'})
+
 
 if __name__ == "__main__":
     unittest.main()

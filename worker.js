@@ -10,6 +10,8 @@ const ASSET_ROUTES = new Map([
   ["/home/", "/home.html"],
   ["/app", "/index.html"],
   ["/app/", "/index.html"],
+  ["/results", "/results.html"],
+  ["/results/", "/results.html"],
   ["/dashboard", "/index.html"],
   ["/dashboard/", "/index.html"],
   ["/mobile", "/index.html"],

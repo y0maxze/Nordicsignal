@@ -62,18 +62,12 @@ def _norm(value):
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
-def _issuer_tokens(company):
-    stop = {"asa", "as", "group", "holding", "holdings", "international", "systems", "technologies", "seafood", "limited", "ltd", "plc"}
-    return [x for x in _norm(company).split() if len(x) >= 4 and x not in stop]
-
-
 def _matches_issuer(text, ticker, company):
     normalized = _norm(text)
     company_n = _norm(company)
-    if company_n and len(company_n) >= 5 and company_n in normalized:
-        return True
-    tokens = _issuer_tokens(company)
-    if tokens and any(t in normalized for t in tokens):
+    # A shared word (e.g. Aker) cannot identify Aker ASA vs Aker Solutions.
+    # Keep the canonical full name, with word boundaries, or a distinct ticker.
+    if company_n and len(company_n) >= 4 and re.search(rf'\b{re.escape(company_n)}\b', normalized):
         return True
     # Never trust short ticker strings as the sole match. Long/distinct tickers are acceptable.
     ticker_n = _norm(ticker)
@@ -222,6 +216,13 @@ def parse_ir_html(html, base_url, ticker, company, limit=10):
             continue
         # Allow same issuer domain and direct PDF/CDN document links only.
         if target.netloc.lower() != host and not absolute.lower().endswith(".pdf"):
+            continue
+        # A generic IR index/navigation page is a resource, not an event/report.
+        # Require a dated/period-specific headline or direct document. A year in
+        # an arbitrary navigation URL alone is not publication evidence.
+        specific = bool(re.search(r'\b(?:19|20)\d{2}\b|\bq[1-4]\b|\b[1-4]q\b', norm))
+        document = target.path.lower().endswith('.pdf')
+        if not specific and not document:
             continue
         key = (norm, absolute.split("#", 1)[0])
         if key in seen:
