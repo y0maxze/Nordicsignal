@@ -13,6 +13,12 @@ app = production.app
 log = logging.getLogger("nordicsignal.api_entrypoint")
 
 
+@app.get('/api/results-audit')
+def results_audit():
+    from results_audit import snapshot
+    return snapshot()
+
+
 def remove_retired_product_routes():
     """Remove retired user-facing Paper Trading / Backtest endpoints from production."""
     kept = []

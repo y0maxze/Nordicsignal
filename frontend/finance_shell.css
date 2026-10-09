@@ -1,4 +1,6 @@
 /* Aksjer financial workspace: neutral surfaces, precise hierarchy, readable data. */
+.marketWorkflow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 22px}.marketWorkflow a{display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-decoration:none;color:var(--t)}.marketWorkflow small{font-size:10px;letter-spacing:.12em;color:var(--m)}.marketWorkflow strong{font-size:18px;letter-spacing:-.02em}.marketWorkflow span{font-size:12px;color:var(--m)}.marketWorkflow a:hover{border-color:var(--b)}
+@media(max-width:700px){.marketWorkflow{grid-template-columns:1fr;gap:8px}.marketWorkflow a{padding:14px;gap:5px}.marketWorkflow strong{font-size:16px}}
 html.aksjerFinance:root{
  --bg:#111418!important;--p:#191e24!important;--p2:#20262d!important;
  --surface:#191e24!important;--surface-2:#20262d!important;--surface-3:#272f38!important;

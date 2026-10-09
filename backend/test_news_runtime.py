@@ -50,3 +50,21 @@ class MultiSourceNewsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_ir_navigation_with_report_words_is_not_a_news_event():
+    html='''<a href="/investors/annual-reports/">Annual Reports Our annual reports provide detailed information</a>
+    <a href="/investors/quarterly-results/">Quarterly Results Find our latest financial results</a>
+    <a href="/investors/presentations-and-events/">Financial Calendar Conferences and investor meetings</a>
+    <a href="/sustainability/reporting-frameworks/">Reporting Frameworks and Assessments</a>
+    <a href="/reports/2026/">Annual reports</a>'''
+    assert parse_ir_html(html,'https://issuer.test/investors/','AAA','Issuer')==[]
+
+
+def test_specific_ir_reports_survive_without_fabricated_publication_dates():
+    html='''<a href="/reports/q3.pdf?download=1">Quarterly report</a>
+    <a href="/q2-results">Q2 2026 results</a>
+    <a href="/q2-results">Q2 2026 results</a>'''
+    items=parse_ir_html(html,'https://issuer.test/investors/','AAA','Issuer')
+    assert len(items)==2
+    assert all(x['published_at'] is None for x in items)

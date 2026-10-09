@@ -223,6 +223,13 @@ def parse_ir_html(html, base_url, ticker, company, limit=10):
         # Allow same issuer domain and direct PDF/CDN document links only.
         if target.netloc.lower() != host and not absolute.lower().endswith(".pdf"):
             continue
+        # A generic IR index/navigation page is a resource, not an event/report.
+        # Require a dated/period-specific headline or direct document. A year in
+        # an arbitrary navigation URL alone is not publication evidence.
+        specific = bool(re.search(r'\b(?:19|20)\d{2}\b|\bq[1-4]\b|\b[1-4]q\b', norm))
+        document = target.path.lower().endswith('.pdf')
+        if not specific and not document:
+            continue
         key = (norm, absolute.split("#", 1)[0])
         if key in seen:
             continue
