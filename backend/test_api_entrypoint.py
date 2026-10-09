@@ -15,6 +15,8 @@ class ApiEntrypointTests(unittest.TestCase):
         original_indexes = production.ensure_indexes
         original_refresh = production.main.refresh_all
         original_journal = api_entrypoint.measurement_journal.initialize
+        original_inputs = api_entrypoint.measurement_inputs.initialize
+        original_reconcile = api_entrypoint.measurement_inputs.schedule_reconciliation
         calls = []
         try:
             production.main.init_db = lambda: calls.append("init")
@@ -22,6 +24,8 @@ class ApiEntrypointTests(unittest.TestCase):
             production.ensure_indexes = lambda: calls.append("indexes")
             production.main.refresh_all = lambda *a, **k: calls.append("refresh")
             api_entrypoint.measurement_journal.initialize = lambda: calls.append("journal")
+            api_entrypoint.measurement_inputs.initialize = lambda: calls.append("inputs")
+            api_entrypoint.measurement_inputs.schedule_reconciliation = lambda: calls.append("reconcile")
             api_entrypoint.api_startup()
         finally:
             production.main.init_db = original_init
@@ -29,7 +33,9 @@ class ApiEntrypointTests(unittest.TestCase):
             production.ensure_indexes = original_indexes
             production.main.refresh_all = original_refresh
             api_entrypoint.measurement_journal.initialize = original_journal
-        self.assertEqual(calls, ["init", "seed", "indexes", "journal"])
+            api_entrypoint.measurement_inputs.initialize = original_inputs
+            api_entrypoint.measurement_inputs.schedule_reconciliation = original_reconcile
+        self.assertEqual(calls, ["init", "seed", "indexes", "journal", "inputs", "reconcile"])
 
     def test_retired_paper_routes_are_not_exposed(self):
         paths = [getattr(route, "path", "") for route in api_entrypoint.app.router.routes]

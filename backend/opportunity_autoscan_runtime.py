@@ -103,9 +103,18 @@ def _record_external_trigger(scan_state):
                 (triggered_at, str(scan_state), count, triggered_at),
             )
         conn.commit()
+        _schedule_measurement_check()
         return triggered_at, count
     finally:
         conn.close()
+
+
+def _schedule_measurement_check():
+    try:
+        from measurement_inputs import schedule_reconciliation
+        schedule_reconciliation()
+    except Exception:
+        log.exception('Measurement check scheduling failed')
 
 
 def _loop():
@@ -113,6 +122,7 @@ def _loop():
     while True:
         try:
             state = tracking._maybe_schedule_scan()
+            _schedule_measurement_check()
             log.info("Automatic Early Opportunity scan: %s", state)
         except Exception:
             log.exception("Automatic Early Opportunity scan scheduling failed")
