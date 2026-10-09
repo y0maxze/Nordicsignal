@@ -53,6 +53,11 @@ def _capturing_market_historical(ticker, period="1y"):
             # Trend detection is additive. It must never turn a successful price refresh
             # into a failed NordicSignal score refresh.
             log.exception("Trend/activity observation failed for %s", ticker)
+        try:
+            from measurement_inputs import capture_candidates
+            capture_candidates(str(ticker).upper(), rows)
+        except Exception:
+            log.exception("Measurement candidate capture failed for %s", ticker)
     return rows
 
 

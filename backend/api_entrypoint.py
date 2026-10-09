@@ -9,6 +9,7 @@ import logging
 
 import production
 import measurement_journal
+import measurement_inputs
 
 app = production.app
 log = logging.getLogger("nordicsignal.api_entrypoint")
@@ -20,6 +21,7 @@ def results_audit():
     result = snapshot()
     try:
         result['prospective_journal'] = measurement_journal.summary()
+        result['prospective_journal']['input_health'] = measurement_inputs.health()
     except Exception:
         log.exception('Prospective measurement journal unavailable')
         result['prospective_journal'] = {'status': 'unavailable'}
@@ -53,6 +55,8 @@ def api_startup():
     production.main.seed_db()
     production.ensure_indexes()
     measurement_journal.initialize()
+    measurement_inputs.initialize()
+    measurement_inputs.schedule_reconciliation()
     log.info(
         "API startup is provider-free; scheduled refresh owns provider-wide market work (workers=%d)",
         production._PROVIDER_WORKERS,
