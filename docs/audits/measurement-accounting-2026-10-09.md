@@ -77,3 +77,63 @@ new cases include starvation behind an unversioned event, rotation past missing
 historical data, retaining earlier gaps, no false-success capture, split invariance,
 ex-date boundaries, unpaid dividends, adverse costs, exact benchmark periods and
 rejection of unsupported/ambiguous evidence. Full publication gates run on the PR.
+
+## Production verification
+
+PR154 merged as `f318c37d85c55d943ef952daa5fa2163882b085b`. All five PR
+checks passed. Main CI and the Worker deployment passed, including the anonymous
+Access/backend boundary check. Render deployment `dep-db4m9kuq1p3s73fhffvg`
+became live at 22:05:24 UTC on 9 October. Read-only SQL confirmed both new queue
+tables. The 22:10:08 UTC reconciliation reported zero outstanding gaps and zero
+unreviewed events. There were still ten legacy events and zero measurement entries.
+Authenticated Results displayed the new unreviewed count at 22:14:31 UTC.
+This confirms the migration and status path, not a real new signal or entry.
+
+## Euronext delayed-trade sample: useful, not a certified opening feed
+
+Retrieved the public download service's Equities / Current Trading Day / Oslo
+export on 9 October 2026 UTC. Its ZIP contained `Trades_Equities.csv`, with a
+rights notice before the CSV header. No raw exchange data is committed here.
+
+| Observation | Downloaded sample |
+| --- | --- |
+| Archive bytes | 1,997,190 |
+| CSV bytes | 20,267,761 |
+| Trade rows / distinct instrument IDs | 115,364 / 283 |
+| Venues | XOSL 104,131; MERK 7,990; XOAS 3,243 |
+| Currency / price notation | NOK / MONE for every row |
+| Trade dates | 9 October 2026 for every row |
+| Market mechanisms | 1: 114,694; 3: 593; 4: 77 |
+| Modification indicator | `-` for every row; not proof of complete corrections |
+| Duplicate venue + trade IDs | 0 within this one export |
+
+Archive SHA-256: `8a87d7133ac1a01347710286ed4a338226930f65f6fb97521d57361fa52786dd`.
+CSV SHA-256: `6f0abb186a422193258bf6ce58f7a4e01f35facdf96cf6e62ed210002d2bfbd4`.
+
+The twenty-column schema includes trade/publication timestamps, instrument ID,
+currency, price, venue, trade ID and several MMT flags. It does **not** include
+`MmtTradingMode`, an auction qualifier, official-open field, adjustment basis,
+corporate-action coverage, trading-state history or an index series. Its earliest
+row is a mechanism-4 contingent trade at 06:32:11 UTC: selecting the first row is
+not an opening-price method. Rows are not globally ordered by trade time.
+
+Euronext's AVD technical explanation distinguishes market mechanism 1 (central
+limit order book) from the separate trading-mode field that identifies scheduled
+opening/closing auctions. Therefore mechanism 1 or a time near 09:00 Oslo cannot
+independently certify the frozen opening-entry contract. This is our inference
+from the inspected schema and the exchange's field definitions. The sample also
+spans three venues, while the current entry validator accepts only XOSL.
+
+Disposition: exploratory evidence only. No automated collection, entry promotion,
+source-certification claim or public redistribution was enabled. The next provider
+qualification must resolve opening/auction semantics, complete session and halt
+coverage, late corrections/revisions, effective-dated instrument mapping and
+permitted intended use. Corporate actions, comparable index observations, an
+explicit cost policy and portfolio accounting remain separate requirements.
+
+Sources:
+- https://marketdata.euronext.com/data-reporting-service/trades-file
+- https://www.euronext.com/en/data/pricing-specs-agreements/mifid-ii-compliant-data
+  (delayed export availability and UTC convention, not completeness certification)
+- https://www.euronext.com/en/media/14393/download
+  (AVD webinar, October 2025, slide 11: market mechanism versus trading mode)
