@@ -14,19 +14,22 @@ class ApiEntrypointTests(unittest.TestCase):
         original_seed = production.main.seed_db
         original_indexes = production.ensure_indexes
         original_refresh = production.main.refresh_all
+        original_journal = api_entrypoint.measurement_journal.initialize
         calls = []
         try:
             production.main.init_db = lambda: calls.append("init")
             production.main.seed_db = lambda: calls.append("seed")
             production.ensure_indexes = lambda: calls.append("indexes")
             production.main.refresh_all = lambda *a, **k: calls.append("refresh")
+            api_entrypoint.measurement_journal.initialize = lambda: calls.append("journal")
             api_entrypoint.api_startup()
         finally:
             production.main.init_db = original_init
             production.main.seed_db = original_seed
             production.ensure_indexes = original_indexes
             production.main.refresh_all = original_refresh
-        self.assertEqual(calls, ["init", "seed", "indexes"])
+            api_entrypoint.measurement_journal.initialize = original_journal
+        self.assertEqual(calls, ["init", "seed", "indexes", "journal"])
 
     def test_retired_paper_routes_are_not_exposed(self):
         paths = [getattr(route, "path", "") for route in api_entrypoint.app.router.routes]
