@@ -138,13 +138,15 @@ def test_stock_signal_timeline_contract():
     assert 'Signal-tidslinje' in page
     assert '/api/early-discovery/' in page and '/history?limit=30' in page
     assert '/api/opportunity-timeline/' in page
-    assert 'Ingen look-ahead-data brukes' in page
+    assert 'Ingen look-ahead-data brukes' not in page
+    assert 'Tidspunkt og oppnåelig inngang er ikke ferdig verifisert' in page
 
 def test_stock_changed_since_last_contract():
     page = (ROOT / 'frontend' / 'stock.html').read_text(encoding='utf-8')
     evidence = (ROOT / 'frontend' / 'stock_evidence_ui.js').read_text(encoding='utf-8')
-    assert 'Endret siden sist' in page
-    assert 'Ingen lagret materiell endring' in page
+    assert 'Siste lagrede signalendringer' in page
+    assert 'Endret siden sist' not in page
+    assert 'Ingen sammenlignbar endring i tilgjengelig historikk' in page
     assert 'previous_label' in page
     assert 'for lite data' in evidence
     assert 'får aldri sterk grønn markering' in evidence

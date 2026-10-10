@@ -15,6 +15,12 @@ app = production.app
 log = logging.getLogger("nordicsignal.api_entrypoint")
 
 
+@app.get('/api/corporate-action-evidence/{ticker}')
+def corporate_action_evidence(ticker: str):
+    from corporate_action_evidence import snapshot
+    return snapshot(ticker)
+
+
 @app.get('/api/results-audit')
 def results_audit():
     from results_audit import snapshot

@@ -45,6 +45,22 @@ def test_read_only_empty_history_never_claims_outperformance(db):
     assert d['verdict']=='not_established'
 
 
+def test_reviewed_dividend_context_does_not_rewrite_raw_returns_or_certify_identity(db):
+    event(db, 1, ticker='DVD', close='2026-09-11')
+    outcome(db, 1, -90, -3)
+    db.execute("UPDATE opportunity_forward_returns SET target_date='2026-10-08'")
+    before = [tuple(x) for x in db.execute('SELECT * FROM opportunity_forward_returns')]
+    result = audit.snapshot()
+    row = result['outcomes'][0]
+    assert row['return_pct'] == -90 and row['difference_pp'] == -87
+    assert row['corporate_actions'][0]['amount'] == 20.6
+    assert row['corporate_actions'][0]['retrospective'] is True
+    assert row['corporate_actions'][0]['association'] == 'ticker_context_not_historical_identity'
+    assert 'reviewed_corporate_action_in_window' in row['flags']
+    assert result['market_beaten'] is None and result['corporate_action_coverage']['complete_for_returns'] is False
+    assert before == [tuple(x) for x in db.execute('SELECT * FROM opportunity_forward_returns')]
+
+
 def test_same_paired_population_and_watch_separation(db):
     event(db,1);event(db,2,'BBB');event(db,3,'CCC','WATCH_CONFLUENCE')
     outcome(db,1,10,2);outcome(db,2,100);outcome(db,3,-8,2)

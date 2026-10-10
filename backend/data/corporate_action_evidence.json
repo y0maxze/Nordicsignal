@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "id": "DVD-NO0010955917-cash-dividend-2026-10-08",
+      "revision": 1,
+      "ticker": "DVD",
+      "isin": "NO0010955917",
+      "issuer": "Deep Value Driller AS",
+      "type": "cash_dividend",
+      "status": "declared",
+      "amount": 20.6,
+      "currency": "NOK",
+      "approval_date": "2026-10-07",
+      "ex_date": "2026-10-08",
+      "record_date": "2026-10-09",
+      "payment_date_expected": "2026-10-16",
+      "payment_status": "expected_not_confirmed",
+      "source_published_date": "2026-10-08",
+      "reviewed_at": "2026-10-10T05:52:08.960031+00:00",
+      "source_title": "Generalforsamlingsprotokoll 7. oktober 2026",
+      "source_pages": "2–3, punkt 6",
+      "source_url": "https://www.deepvaluedriller.no/wp-content/uploads/2026/10/Deep-Value-Driller-AS-Minutes-of-EGM-7-October-2026-incl.-appendices.pdf",
+      "identity_source_url": "https://live.euronext.com/en/product/equities/NO0010955917-XOSL",
+      "note": "Utbetaling forutsetter registrering av mellombalansen. Forventet dato er ikke bekreftet mottatt betaling. Navneendring til 3030 DVD AS er vedtatt, men effektiv registrering er ikke kontrollert her."
+    }
+  ]
+}

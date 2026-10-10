@@ -7,6 +7,7 @@ import math
 import logging
 
 from database import connect
+import corporate_action_evidence
 
 HORIZONS = (1, 5, 10, 20, 60)
 MAX_EVENTS = 1000
@@ -113,6 +114,7 @@ def snapshot():
             e['flags'].append('repeated_entry_basis')
     event_map = {e['id']: e for e in events}
     outcomes = []
+    actions = corporate_action_evidence.snapshot()
     truncated = truncated or len(returns) > MAX_EVENTS * 5
     for row in returns[:MAX_EVENTS * 5]:
         event = event_map.get(row['event_id'])
@@ -126,6 +128,9 @@ def snapshot():
             flags.append('invalid_return')
         if bench is None:
             flags.append('benchmark_missing')
+        context = corporate_action_evidence.window_context(actions['items'], event['ticker'], event['entry_date'], row.get('target_date'))
+        if context:
+            flags.append('reviewed_corporate_action_in_window')
         stored = number(row.get('excess_return_pct'))
         if own is not None and bench is not None and (stored is None or abs(own - bench - stored) > .001):
             flags.append('stored_difference_mismatch')
@@ -134,7 +139,7 @@ def snapshot():
                          'settled_at': row.get('settled_at'), 'return_pct': own,
                          'benchmark_return_pct': bench,
                          'difference_pp': round(own - bench, 3) if own is not None and bench is not None else None,
-                         'flags': flags})
+                         'corporate_actions': context, 'flags': flags})
     recorded = sorted(e['created_at'] for e in events if e.get('created_at'))
     return {'status': 'partial' if errors or truncated else 'ok', 'unavailable_sources': errors,
             'truncated': truncated, 'event_limit': MAX_EVENTS, 'generated_at': datetime.now(timezone.utc).isoformat(),
@@ -143,6 +148,7 @@ def snapshot():
             'benchmark_source': 'https://live.euronext.com/en/product/indices/NO0007035327-XOSL',
             'first_recorded_at': recorded[0] if recorded else None, 'last_recorded_at': recorded[-1] if recorded else None,
             'events': events, 'outcomes': outcomes, 'groups': summarize(events, outcomes),
+            'corporate_action_coverage': {k: v for k, v in actions.items() if k != 'items'},
             'profiles': profiles, 'policy': 'read_only_no_model_or_history_changes',
             'limitations': ['price_vs_total_return', 'benchmark_dates_not_persisted', 'execution_not_verified',
                             'costs_not_included', 'overlapping_events', 'small_sample', 'not_portfolio_return']}

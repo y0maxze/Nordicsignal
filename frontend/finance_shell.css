@@ -56,14 +56,14 @@ html.aksjerFinance:root .filter{font-size:13px;padding:8px 14px!important;border
 html.aksjerFinance:root .marketTable{padding:0!important;overflow-x:auto}
 html.aksjerFinance:root .marketTable>.toolbar{padding:18px 20px;margin:0!important;border-bottom:1px solid var(--line)}
 html.aksjerFinance:root .marketTable .toolbar h2{margin-bottom:4px}
-html.aksjerFinance:root .row{padding:13px 18px;gap:12px;min-height:56px;font-size:13px;font-variant-numeric:tabular-nums;min-width:1050px;grid-template-columns:28px minmax(165px,1.5fr) 86px 70px 50px 85px 78px 86px minmax(125px,1fr)}
-html.aksjerFinance:root .row.head{background:var(--surface-2);min-height:40px;padding-top:8px;padding-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
-html.aksjerFinance:root .row:not(.head):hover{background:var(--surface-2)!important}
-html.aksjerFinance:root .row>.stock{color:var(--t)!important;font-weight:650}
-html.aksjerFinance:root .row>.stock .sub{font-size:11px;font-weight:400}
-html.aksjerFinance:root .row>*:nth-child(n+3):nth-child(-n+8){text-align:right}
-html.aksjerFinance:root .row>*:nth-child(9){padding-left:8px}
-html.aksjerFinance:root[data-density="compact"] .row:not(.head){padding-top:7px;padding-bottom:7px;min-height:44px}
+html.aksjerFinance:root .marketTable .row{padding:13px 18px;gap:12px;min-height:56px;font-size:13px;font-variant-numeric:tabular-nums;min-width:1050px;grid-template-columns:28px minmax(165px,1.5fr) 86px 70px 50px 85px 78px 86px minmax(125px,1fr)}
+html.aksjerFinance:root .marketTable .row.head{background:var(--surface-2);min-height:40px;padding-top:8px;padding-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+html.aksjerFinance:root .marketTable .row:not(.head):hover{background:var(--surface-2)!important}
+html.aksjerFinance:root .marketTable .row>.stock{color:var(--t)!important;font-weight:650}
+html.aksjerFinance:root .marketTable .row>.stock .sub{font-size:11px;font-weight:400}
+html.aksjerFinance:root .marketTable .row>*:nth-child(n+3):nth-child(-n+8){text-align:right}
+html.aksjerFinance:root .marketTable .row>*:nth-child(9){padding-left:8px}
+html.aksjerFinance:root[data-density="compact"] .marketTable .row:not(.head){padding-top:7px;padding-bottom:7px;min-height:44px}
 html.aksjerFinance:root .price{font-size:34px;line-height:1.2;font-variant-numeric:tabular-nums}
 html.aksjerFinance:root .decisionGrid{gap:10px}
 html.aksjerFinance:root .decision b{font-size:20px;font-variant-numeric:tabular-nums}
@@ -126,11 +126,11 @@ html.aksjerFinance:root .aksjerStockSections a:hover{color:var(--t)!important;bo
  html.aksjerFinance:root .marketTable>.toolbar{padding:14px 12px}
  html.aksjerFinance:root .marketTable .toolbar h2{font-size:17px}
  html.aksjerFinance:root .marketTable .toolbar .sub{font-size:11px}
- html.aksjerFinance:root .row{min-width:0;grid-template-columns:20px minmax(0,1fr) 62px 55px 32px;gap:6px;padding:12px 10px;font-size:12px;min-height:56px}
- html.aksjerFinance:root .row>*{min-width:0}.aksjerFinance .row .stock{overflow-wrap:anywhere}
- html.aksjerFinance:root .row>*:nth-child(n+6){display:none}
- html.aksjerFinance:root .row.head{font-size:10px}
- html.aksjerFinance:root .row>.stock .sub{font-size:10px}
+ html.aksjerFinance:root .marketTable .row{min-width:0;grid-template-columns:20px minmax(0,1fr) 62px 55px 32px;gap:6px;padding:12px 10px;font-size:12px;min-height:56px}
+ html.aksjerFinance:root .marketTable .row>*{min-width:0}.aksjerFinance .marketTable .row .stock{overflow-wrap:anywhere}
+ html.aksjerFinance:root .marketTable .row>*:nth-child(n+6){display:none}
+ html.aksjerFinance:root .marketTable .row.head{font-size:10px}
+ html.aksjerFinance:root .marketTable .row>.stock .sub{font-size:10px}
  html.aksjerFinance:root .marketMeta{flex-wrap:nowrap;overflow-x:auto;gap:6px!important}
  html.aksjerFinance:root .filter{flex-shrink:0;font-size:12px;padding:8px 12px!important}
  html.aksjerFinance:root .price{font-size:28px}
@@ -200,3 +200,32 @@ html.aksjerFinance:root .cfFilters{max-width:100%}
 .companyHistory ol{padding-left:1.25rem}
 .companyHistory li{padding:.75rem 0;border-bottom:1px solid var(--line,#dce1e6)}
 @media(max-width:650px){.companyOverviewGrid{grid-template-columns:minmax(0,1fr)}}
+
+/* Legacy surfaces share foreground/background tokens in BOTH themes. */
+html.aksjerFinance:root{--panel:var(--surface)!important;--panel2:var(--surface-2)!important;--text:var(--t)!important;--muted:var(--m)!important;--green:var(--g)!important;--red:var(--r)!important;--yellow:var(--y)!important;--blue:var(--b)!important}
+html.aksjerFinance:root body{color:var(--t)!important}
+html.aksjerFinance:root :is(.qualityCheck,.labelCard,.analyticsBox,.nsPulseCard,.nsTradeRow){background:var(--surface-2)!important;border-color:var(--line)!important;color:var(--t)!important}
+html.aksjerFinance:root :is(.qualityCheck small,.qualityCheck .eyebrow,.metric small,.rule,.aiMeta,.aiTime,.modeHint,.searchBox label,.nsActorChip){color:var(--m)!important}
+html.aksjerFinance:root :is(.nsInsiderFilters button,.seg,.outline){background:var(--surface)!important;color:var(--t)!important;border-color:var(--line)!important;min-height:44px}
+html.aksjerFinance:root .nsInsiderFilters button.active{background:var(--t)!important;color:var(--bg)!important}
+html.aksjerFinance:root :is(.nsSignalPill,.nsTradeBadge,.tag){background:var(--surface-2)!important;border-color:var(--line)!important}
+html.aksjerFinance:root :is(.nsInsiderSearch,.cfSearch){background:var(--surface)!important;color:var(--t)!important;border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="news"] :is(.status,.empty){background:var(--surface-2)!important;color:var(--m)!important;border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="news"] :is(.scope,.aiBriefLabel,.aiHeadline,.aiText,.tickerTag){color:var(--t)!important}
+html.aksjerFinance:root[data-workspace="news"] .aiBrief{border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="calendar"] :is(.status,.empty){background:var(--surface-2)!important;color:var(--m)!important;border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="calendar"] :is(.empty b,.company){color:var(--t)!important}
+html.aksjerFinance:root[data-workspace="calendar"] :is(.meta,.days,.dayHead span){color:var(--m)!important;font-size:12px}
+html.aksjerFinance:root[data-workspace="calendar"] :is(.row,.dayGroup){border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="legal"] :is(.lead,.box p,.box li){color:var(--t)!important}
+html.aksjerFinance:root[data-workspace="legal"] .important{background:var(--surface-2)!important;border-color:var(--y)!important}
+html.aksjerFinance:root .ipoMarketWorkspace{padding:20px!important;overflow:visible}
+html.aksjerFinance:root button:disabled{cursor:not-allowed;opacity:.65}
+@media(max-width:1050px){html.aksjerFinance:root .nsTradeRow>:nth-child(7){display:block;grid-column:1/-1}}
+@media(max-width:550px){html.aksjerFinance:root .ipoMarketWorkspace{padding:16px!important}}
+
+html.aksjerFinance:root :is(.historyStat,.historyPanel){background:var(--surface)!important;box-shadow:none!important;color:var(--t)!important}
+
+.corporateActionContext{border-left:3px solid var(--y);padding:12px 16px;margin:14px 0;background:var(--surface-2);overflow-wrap:anywhere}.corporateActionContext h3{margin:0 0 8px;font-size:15px}.corporateActionContext p{line-height:1.6}
+
+html.aksjerFinance:root .cfBtn.primary{background:var(--t)!important;color:var(--bg)!important;border-color:var(--t)!important}

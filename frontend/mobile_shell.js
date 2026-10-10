@@ -64,7 +64,7 @@
     try{const [reg,status]=await Promise.all([serviceWorkerReady(),getJson('/api/push/status')]),sub=await reg.pushManager.getSubscription();return {active:!!sub&&sub.endpoint===confirmedEndpoint&&status.delivery_ready===true,configured:!!status.delivery_ready,subscription:sub,status}}catch{return {active:false,configured:false}}
   }
 
-  function setAlertUi(text,enabled){const s=document.getElementById('alertStatus'),b=document.getElementById('nsEnableAlerts');if(s&&text)s.textContent=text;if(b){b.textContent=enabled?'Varsler på':'Aktiver';b.classList.toggle('primary',!enabled)}}
+  function setAlertUi(text,enabled){const blocked='Notification' in window&&Notification.permission==='denied';if(blocked){text='Varsler er blokkert. Tillat varsler i nettleserens eller enhetens innstillinger, og trykk «Kontroller pushstatus». Aktivering er sperret til tillatelsen er endret.';enabled=false;}const s=document.getElementById('alertStatus'),b=document.getElementById('nsEnableAlerts');if(s&&text)s.textContent=text;if(b){if(blocked)b.disabled=true;b.textContent=blocked?'Varsler blokkert':enabled?'Varsler på':'Aktiver';b.classList.toggle('primary',!enabled)}}
   function setPushTestVisible(visible){
     const enable=document.getElementById('nsEnableAlerts');if(!enable)return;
     let button=document.getElementById('nsTestPush');
@@ -84,6 +84,7 @@
     finally{if(button){button.disabled=false;button.textContent='Test push'}}
   }
   async function enableAlerts(){
+    if('Notification' in window&&Notification.permission==='denied'){setAlertUi('',false);return}
     if(isIOS()&&!isStandalone()){setAlertUi('Legg Aksjer til på Hjem-skjerm i Safari og åpne appen der for å aktivere push.',false);return}
     if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){setAlertUi('Denne nettleseren støtter ikke Aksjer-varsler.',false);return}
     const button=document.getElementById('nsEnableAlerts');if(button)button.disabled=true;
@@ -96,7 +97,7 @@
       localStorage.setItem(ALERT_ENABLED,'1');setPushTestVisible(true);
       setAlertUi('Push-abonnement er registrert. Bruk «Test push» og bekreft mottak på telefonen.',true);
     }catch{setAlertUi('Push kunne ikke registreres. Kontroller tilkobling og innlogging, og prøv igjen.',false)}
-    finally{if(button)button.disabled=false}
+    finally{if(button)button.disabled='Notification' in window&&Notification.permission==='denied'}
   }
   async function bindAlertButton(){
     const button=document.getElementById('nsEnableAlerts');
@@ -113,6 +114,6 @@
     }
   }
 
-  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,registerRealPush,currentPushState,testRealPush}}
+  async function mount(){if(migrateLegacyMobileRoutes())return;await registerServiceWorker();mountNav();if(!['/app','/','/index.html','/stock','/stock/','/stock.html','/morning','/morning.html'].includes(location.pathname))await bindAlertButton();window.NordicSignalMobile={installApp,enableAlerts,registerRealPush,currentPushState,testRealPush,refreshAlertPermission:bindAlertButton}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
