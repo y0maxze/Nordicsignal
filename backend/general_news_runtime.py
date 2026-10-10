@@ -323,11 +323,16 @@ def general_market_news(provider=None, limit=30):
     sources["media"] = media_status
 
     merged = news_runtime._dedupe(items, 50)
+    source_failure = any(item.get("status") == "unavailable" for item in sources.values())
+    if merged:
+        status = "partial_general_news" if source_failure else "live_general_news"
+    else:
+        status = "unavailable" if source_failure else "no_market_news"
     value = {
         "scope": "market",
         "market": "Oslo Børs",
         "items": merged,
-        "status": "live_general_news" if merged else "no_market_news",
+        "status": status,
         "source": "Euronext / Oslo Børs + ticker-linked markedsnyheter",
         "sources": sources,
         "generated_at": datetime.now(timezone.utc).isoformat(),

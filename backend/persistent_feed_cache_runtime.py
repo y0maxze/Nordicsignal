@@ -96,6 +96,22 @@ def _slice_items(payload, limit):
     return result
 
 
+def _usable_feed(key, payload):
+    """A failed news lookup must not replace, or impersonate, a successful feed."""
+    if key != "market_news:v1":
+        return isinstance(payload, dict)
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        return False
+    if payload["items"]:
+        return True
+    sources = payload.get("sources") or {}
+    failed = isinstance(sources, dict) and any(
+        isinstance(source, dict) and source.get("status") == "unavailable"
+        for source in sources.values()
+    )
+    return payload.get("status") != "unavailable" and not failed
+
+
 def _background_refresh(key, builder):
     with _REFRESH_LOCK:
         if key in _REFRESHING:
@@ -105,7 +121,7 @@ def _background_refresh(key, builder):
     def run():
         try:
             payload = builder()
-            if isinstance(payload, dict):
+            if _usable_feed(key, payload):
                 try:
                     _write_cache(key, payload)
                 except Exception:
@@ -122,7 +138,7 @@ def _background_refresh(key, builder):
 def _cached(key, builder, limit, force=False):
     if not force:
         cached = _read_cache(key)
-        if cached:
+        if cached and _usable_feed(key, cached[0]):
             payload, updated_at = cached
             age = max(0.0, time.time() - updated_at)
             if age <= _FRESH_SECONDS:
@@ -133,6 +149,8 @@ def _cached(key, builder, limit, force=False):
 
     payload = builder()
     if isinstance(payload, dict):
+        if not _usable_feed(key, payload):
+            return _slice_items(_annotate(payload, "unavailable", 0), limit)
         try:
             _write_cache(key, payload)
         except Exception:

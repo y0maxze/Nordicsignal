@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch
+
+import general_news_runtime as news
 
 from general_news_runtime import _clean_company_news, _general_yahoo_items, _is_generic_ir_navigation, parse_general_euronext_html
 
@@ -28,6 +31,30 @@ class _FakeYahoo:
 
 
 class GeneralNewsRuntimeTests(unittest.TestCase):
+    def test_failed_sources_are_unavailable_not_a_successful_empty_feed(self):
+        with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
+             patch.object(news.news_runtime, '_fetch_text', side_effect=RuntimeError('upstream unavailable')), \
+             patch.object(news, '_general_yahoo_items', return_value=([], {'status': 'unavailable'})):
+            result = news.general_market_news(provider=object())
+        self.assertEqual(result['status'], 'unavailable')
+        self.assertEqual(result['items'], [])
+
+    def test_successfully_checked_empty_sources_remain_distinct(self):
+        with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
+             patch.object(news.news_runtime, '_fetch_text', return_value='<html></html>'), \
+             patch.object(news, '_general_yahoo_items', return_value=([], {'status': 'no_matches'})):
+            result = news.general_market_news(provider=object())
+        self.assertEqual(result['status'], 'no_market_news')
+
+    def test_partial_sources_keep_available_news_and_disclose_missing_coverage(self):
+        item = {'title': 'Issuer announcement', 'url': 'https://example.test/issuer'}
+        with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
+             patch.object(news.news_runtime, '_fetch_text', side_effect=RuntimeError('upstream unavailable')), \
+             patch.object(news, '_general_yahoo_items', return_value=([item], {'status': 'live'})):
+            result = news.general_market_news(provider=object())
+        self.assertEqual(result['status'], 'partial_general_news')
+        self.assertEqual(result['items'][0]['title'], item['title'])
+
     def test_generic_ir_navigation_is_not_news(self):
         generic = {
             'title': 'Annual reports',
