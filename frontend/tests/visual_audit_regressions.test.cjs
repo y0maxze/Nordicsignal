@@ -15,6 +15,33 @@ test('rule-based news overview does not turn a trading update into an asserted f
  assert.match(w.document.getElementById('aiText').textContent,/Tittelen alene bekrefter ikke/);assert.match(w.document.querySelector('.aiBadge').textContent,/REGELBASERT/);
  assert.equal(w.document.querySelector('a[href^="javascript:"]'),null);
 });
+test('news distinguishes malformed and failed lookups from a successfully checked empty feed',async t=>{
+ const dom=page(t,'news.html','/news'),w=dom.window,d=w.document;
+ let payload={items:[],status:'no_market_news',sources:{euronext:{status:'unavailable'}}};
+ w.fetch=async()=>({ok:true,json:async()=>payload});inline(dom);await settle();
+ assert.equal(d.getElementById('count').textContent,'—');assert.match(d.getElementById('statusText').textContent,/kunne ikke kontrolleres/);
+ assert.doesNotMatch(d.getElementById('aiText').textContent,/fant ingen|verifiserte saker/);
+ payload={};await vm.runInContext('loadGeneral()',dom.getInternalVMContext());assert.equal(d.getElementById('count').textContent,'—');
+ payload={items:[],status:'no_market_news',sources:{euronext:{status:'no_matches'}}};await vm.runInContext('loadGeneral()',dom.getInternalVMContext());
+ assert.equal(d.getElementById('count').textContent,'0 treff');assert.match(d.getElementById('news').textContent,/innhentede utvalget/);
+ assert.match(d.getElementById('sourceText').textContent,/Kildetid ukjent/);
+});
+test('silent news failures retain displayed items and original source time with an explicit warning',async t=>{
+ const dom=page(t,'news.html','/news'),w=dom.window,d=w.document;
+ w.fetch=async()=>({ok:true,json:async()=>({items:[{title:'Saved announcement',url:'https://example.test/saved'}],source:'Exchange',generated_at:'2026-10-09T12:00:00Z'})});inline(dom);await settle();
+ const sourceTime=d.getElementById('sourceText').textContent;assert.match(sourceTime,/2026/);assert.doesNotMatch(sourceTime,/Oppdatert/);
+ w.fetch=async()=>{throw Error('network unavailable')};await vm.runInContext('loadGeneral(true)',dom.getInternalVMContext());
+ assert.match(d.getElementById('news').textContent,/Saved announcement/);assert.equal(d.getElementById('sourceText').textContent,sourceTime);
+ assert.match(d.getElementById('statusText').textContent,/Oppdatering feilet/);assert.match(d.getElementById('aiText').textContent,/Nyere meldinger kan mangle/);
+});
+test('partial and stale news keep available items without implying full or freshly fetched coverage',async t=>{
+ const dom=page(t,'news.html','/news'),w=dom.window,d=w.document;
+ const payload={items:[{title:'Available announcement'}],generated_at:'2026-10-09T12:00:00Z',sources:{euronext:{status:'unavailable'},media:{status:'live'}}};
+ w.fetch=async()=>({ok:true,json:async()=>payload});inline(dom);await settle();
+ assert.match(d.getElementById('statusText').textContent,/Delvis kildetilgang/);assert.equal(d.getElementById('count').textContent,'1 treff');
+ payload.persistent_cache={state:'stale_while_revalidate'};await vm.runInContext('loadGeneral(true)',dom.getInternalVMContext());
+ assert.match(d.getElementById('statusText').textContent,/Lagret utvalg/);assert.match(d.getElementById('sourceText').textContent,/2026.*Oslo/);
+});
 test('empty instrument state ends loading, offers search and does not request data',async t=>{
  const dom=page(t,'instrument.html','/instrument'),w=dom.window;w.fetch=()=>{throw Error('No symbol must not fetch')};inline(dom);
  assert.equal(w.document.getElementById('name').textContent,'Velg instrument');assert.equal(w.document.querySelector('.tabs').hidden,true);
