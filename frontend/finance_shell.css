@@ -6,7 +6,7 @@ html.aksjerFinance:root{
  --surface:#191e24!important;--surface-2:#20262d!important;--surface-3:#272f38!important;
  --glass:#191e24!important;--t:#edf0f3!important;--m:#a6b0bb!important;
  --line:#333c46!important;--line-strong:#526170!important;--b:#78b8ff!important;
- --accent:#78b8ff!important;--g:#66d3a3!important;--r:#ff8795!important;--y:#e5c16a!important;
+ --violet:#c6b3ff!important;--accent:#78b8ff!important;--g:#66d3a3!important;--r:#ff8795!important;--y:#e5c16a!important;
  --shadow:none!important;--glow:none!important;
  scroll-padding-top:88px;
 }
@@ -15,9 +15,9 @@ html.aksjerFinance:root[data-theme="light"]{
  --surface:#fff!important;--surface-2:#f6f7f8!important;--surface-3:#e9edf1!important;
  --glass:#fff!important;--t:#19232e!important;--m:#596572!important;
  --line:#dce1e6!important;--line-strong:#a9b6c3!important;--b:#125fbd!important;
- --accent:#125fbd!important;--g:#087749!important;--r:#bc3349!important;--y:#866100!important;
+ --violet:#6042a6!important;--accent:#125fbd!important;--g:#087749!important;--r:#bc3349!important;--y:#866100!important;
 }
-html.aksjerFinance:root body{background:var(--bg)!important;font-size:14px;line-height:1.5}
+html.aksjerFinance:root body{margin:0;background:var(--bg)!important;font-size:14px;line-height:1.5}
 html.aksjerFinance:root body:before,html.aksjerFinance:root body:after{display:none!important}
 html.aksjerFinance:root .side{display:none!important}
 html.aksjerFinance:root .app{display:block;min-height:0}
@@ -212,7 +212,8 @@ html.aksjerFinance:root :is(.nsSignalPill,.nsTradeBadge,.tag){background:var(--s
 html.aksjerFinance:root :is(.nsInsiderSearch,.cfSearch){background:var(--surface)!important;color:var(--t)!important;border-color:var(--line)!important}
 html.aksjerFinance:root[data-workspace="news"] :is(.status,.empty){background:var(--surface-2)!important;color:var(--m)!important;border-color:var(--line)!important}
 html.aksjerFinance:root[data-workspace="news"] :is(.scope,.aiBriefLabel,.aiHeadline,.aiText,.tickerTag){color:var(--t)!important}
-html.aksjerFinance:root[data-workspace="news"] .aiBrief{border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="news"] :is(.aiBrief,.news){border-color:var(--line)!important}
+html.aksjerFinance:root[data-workspace="news"] .tag.insider{color:var(--violet)!important}
 html.aksjerFinance:root[data-workspace="calendar"] :is(.status,.empty){background:var(--surface-2)!important;color:var(--m)!important;border-color:var(--line)!important}
 html.aksjerFinance:root[data-workspace="calendar"] :is(.empty b,.company){color:var(--t)!important}
 html.aksjerFinance:root[data-workspace="calendar"] :is(.meta,.days,.dayHead span){color:var(--m)!important;font-size:12px}
@@ -229,3 +230,7 @@ html.aksjerFinance:root :is(.historyStat,.historyPanel){background:var(--surface
 .corporateActionContext{border-left:3px solid var(--y);padding:12px 16px;margin:14px 0;background:var(--surface-2);overflow-wrap:anywhere}.corporateActionContext h3{margin:0 0 8px;font-size:15px}.corporateActionContext p{line-height:1.6}
 
 html.aksjerFinance:root .cfBtn.primary{background:var(--t)!important;color:var(--bg)!important;border-color:var(--t)!important}
+
+/* Incomplete or failed research checks must not inherit a positive badge. */
+html.aksjerFinance:root:is([data-workspace="research"],[data-workspace="learning"]) .pill:not(.ready):not(.muted){color:var(--y)!important;border-color:var(--y)!important}
+html.aksjerFinance:root:is([data-workspace="research"],[data-workspace="learning"]) .pill.muted{color:var(--m)!important}

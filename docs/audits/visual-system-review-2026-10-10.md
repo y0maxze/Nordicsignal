@@ -42,7 +42,7 @@ Validation rejects malformed identifiers, dates, amounts, unsafe links, future r
 
 - Browser review above reproduces concrete defects before editing.
 - Frontend/Worker: 86 tests pass, including new public-calendar, blocked-permission, safe-source, dated-history, empty-instrument, null-price, Capital Flow mapping and corporate-action regressions.
-- Backend: suite has 1,004 tests. Final local run had one obsolete empty-history wording assertion; the correction and the related audit/evidence/shell checks passed together (37 tests). Required CI reruns the full suite before merge.
+- Backend: all 1,004 tests passed in required CI on the merged change. Frontend/Worker and backend together: 1,090 passing tests.
 - Edited inline scripts parse; `git diff --check` passes.
 - Deployment and post-deployment visual verification are recorded with the PR and task result.
 
@@ -53,3 +53,9 @@ Validation rejects malformed identifiers, dates, amounts, unsafe links, future r
 - Research pipeline shows degraded subsystems and incomplete source coverage; making those warnings readable does not resolve them.
 - Machine-extracted insider actor names can contain source narrative. Original disclosures remain available; this presentation change does not alter the frozen insider model.
 - Physical iPhone PWA/push receipt, restore drill, and effective security-identity histories require their own evidence.
+
+## Production follow-up
+
+PR #157 deployed successfully to Cloudflare and Render (merge `ebe776e4d3cf84ba0bde5f7f134eab400ee9fa83`; Render deployment `dep-db4t95gae00c739500g0`). Live checks confirmed the public calendar, blocked-notification recovery, dated stock history, original Capital Flow source, reviewed DVD context and empty-instrument state.
+
+The post-deployment screenshots revealed two remaining color issues: a pale Insider label in light-mode news and positive-green research pills for non-passing states. A final presentation-only correction uses paired theme colors for the label and warning color for incomplete/non-passing research states, leaving their recorded status unchanged. News separators now use the shared border token. Cache generation advances to v37.
