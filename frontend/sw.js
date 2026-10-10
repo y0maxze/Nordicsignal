@@ -1,5 +1,5 @@
-const CACHE_NAME='aksjer-shell-v35';
-const SHELL=['/app','/morning','/morning_navigation.js','/stock','/theme.css','/finance_shell.css','/finance_shell.js','/company_context.js','/ipo_discovery.js','/ipo_discovery.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_analysis.js','/stock_evidence_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
+const CACHE_NAME='aksjer-shell-v36';
+const SHELL=['/app','/morning','/morning_navigation.js','/stock','/theme.css','/finance_shell.css','/finance_shell.js','/company_context.js','/ipo_discovery.js','/ipo_discovery.css','/theme_light_fix.css','/theme_mode.js','/brand_config.js','/ui_shell.js','/mobile_nav.js','/mobile_shell.js','/manifest.webmanifest','/aksjer-mark.svg','/stock_selector.js','/stock_data_bridge.js','/stock_extras.js','/stock_analysis.js','/corporate_action_context.js','/stock_evidence_ui.js','/alert_local_capture.js','/alert_nav_ui.js'];
 
 function shellRequest(url){
   if(url.origin!==self.location.origin||!SHELL.includes(url.pathname))return false;

@@ -29,7 +29,7 @@ test('actual Market filter renders IPOs outside the ranked universe with one dis
  await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));
  assert.match(w.document.querySelector('.marketTable').textContent,/Equinor/);
  w.setMarketFilter('ipo');await new Promise(r=>setImmediate(r));
- assert.match(w.document.querySelector('.marketTable').textContent,/Nye på børs/);
+ assert.match(w.document.querySelector('.ipoMarketWorkspace').textContent,/Nye på børs/);
  assert.match(w.document.querySelector('.ipoResults').textContent,/New/);
  assert.equal(calls.filter(x=>x==='/api/ipo-radar/discovery').length,1);
  assert.equal(calls.length,3);dom.window.close();

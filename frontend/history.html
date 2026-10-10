@@ -24,7 +24,7 @@
           <input class="historyInput" id="historyTicker" value="LSG" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Ticker">
           <button class="historyBtn primary" id="historyLoad" type="button">Last inn</button>
         </div>
-        <a class="historyBtn" href="/stock" style="text-decoration:none;display:inline-flex;align-items:center">Aksjeanalyse</a>
+        <a id="historyAnalysis" class="historyBtn" href="/intelligence" style="text-decoration:none;display:inline-flex;align-items:center">Aksjeanalyse</a>
       </div>
     </section>
 
@@ -64,7 +64,7 @@
     let points=[];
 
     function normalizeTicker(value){return String(value||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'').slice(0,12)}
-    function clean(items){return(items||[]).map(item=>({date:item.date||item.datetime||item.timestamp,close:Number(item.close?.raw??item.close)})).filter(item=>item.date&&Number.isFinite(item.close))}
+    function clean(items){return(items||[]).filter(item=>(item.close?.raw??item.close)!=null&&(item.close?.raw??item.close)!=='').map(item=>({date:item.date||item.datetime||item.timestamp,close:Number(item.close?.raw??item.close)})).filter(item=>item.date&&Number.isFinite(item.close))}
     function resetStats(){['historyLast','historyChange','historyHigh','historyLow'].forEach(id=>byId(id).textContent='—');byId('historyChange').className=''}
     function setActivePeriod(){document.querySelectorAll('[data-period]').forEach(button=>button.classList.toggle('active',button.dataset.period===period))}
     function chartSize(){return {w:1000,h:470,left:62,right:18,top:22,bottom:36}}
@@ -86,6 +86,7 @@
       const input=byId('historyTicker');
       const ticker=normalizeTicker(input.value);
       input.value=ticker;
+      byId('historyAnalysis').href=ticker?'/stock?ticker='+encodeURIComponent(ticker):'/intelligence';
       if(!ticker)return;
       byId('historyStatus').textContent=`Laster ${ticker} · ${period}…`;
       byId('historyLoad').disabled=true;
