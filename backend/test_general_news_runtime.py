@@ -31,6 +31,25 @@ class _FakeYahoo:
 
 
 class GeneralNewsRuntimeTests(unittest.TestCase):
+    def test_actual_fetch_is_recorded_once_and_cache_hit_is_not_new_capture(self):
+        with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
+             patch.object(news.news_runtime, '_fetch_text', return_value='<html></html>') as fetch, \
+             patch.object(news, '_general_yahoo_items', return_value=([], {'status': 'no_matches'})), \
+             patch.object(news.news_observations, 'record') as record:
+            news.general_market_news(provider=object())
+            news.general_market_news(provider=object())
+        fetch.assert_called_once()
+        record.assert_called_once()
+
+    def test_observation_storage_failure_does_not_hide_available_news(self):
+        item = {'title': 'Announcement', 'url': 'https://example.test/1'}
+        with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
+             patch.object(news.news_runtime, '_fetch_text', return_value='<html></html>'), \
+             patch.object(news, '_general_yahoo_items', return_value=([item], {'status': 'live'})), \
+             patch.object(news.news_observations, 'record', side_effect=RuntimeError('storage unavailable')):
+            result = news.general_market_news(provider=object())
+        self.assertEqual(result['items'], [item])
+
     def test_failed_sources_are_unavailable_not_a_successful_empty_feed(self):
         with patch.dict(news._CACHE, {'at': 0, 'value': None}), \
              patch.object(news.news_runtime, '_fetch_text', side_effect=RuntimeError('upstream unavailable')), \

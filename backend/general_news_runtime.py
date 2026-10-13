@@ -9,11 +9,13 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import quote_plus, urljoin
 import re
+import logging
 import threading
 import time
 
 import extra_api
 import news_runtime
+import news_observations
 from providers import YahooProvider
 
 _CACHE_LOCK = threading.Lock()
@@ -337,6 +339,12 @@ def general_market_news(provider=None, limit=30):
         "sources": sources,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Every actual fetch (including background consumers) has an auditable
+    # observation time. In-memory cache hits must not manufacture new captures.
+    try:
+        news_observations.record(value)
+    except Exception:
+        logging.getLogger(__name__).exception('News observation persistence failed')
     with _CACHE_LOCK:
         _CACHE.update({"at": now, "value": value})
     result = dict(value)
