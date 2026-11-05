@@ -19,7 +19,7 @@
    catch{subscription.textContent='Nettleserabonnement: kunne ikke kontrolleres'}
   };
   const remote=async()=>{
-   try{const r=await fetch('/api/push/status',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const d=await r.json();server.textContent='Push-tjeneste: '+(d.delivery_ready===true?'serveroppsett klart · mottak ikke bekreftet':d.delivery_ready===false?'serveroppsett ikke klart':'ukjent status')}
+   try{const r=await fetch('/api/push/status',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok||r.redirected)throw Error();const d=await r.json();server.textContent='Push-tjeneste: '+(d.delivery_ready===true?(d.active_subscriptions===0?'ingen aktive abonnementer · aktiver på enheten som skal motta varsler':'serveroppsett klart · mottak ikke bekreftet'):d.delivery_ready===false?'serveroppsett ikke klart':'ukjent status')}
    catch{server.textContent='Push-tjeneste: utilgjengelig · status ukjent'}
   };
   try{await Promise.all([local(),remote()])}finally{button.disabled=false}

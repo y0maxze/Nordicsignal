@@ -191,22 +191,17 @@ def _match_stock(company, stocks):
     target = _norm(company)
     if not target:
         return None
-    exact = [x for x in stocks if _norm(x.get("name")) == target]
-    if exact:
-        return exact[0]
-    target_words = {x for x in target.split() if len(x) >= 4 and x not in {"group", "holding", "holdings", "international"}}
-    best = None
-    best_score = 0.0
-    for stock in stocks:
-        name = _norm(stock.get("name"))
-        words = {x for x in name.split() if len(x) >= 4 and x not in {"group", "holding", "holdings", "international"}}
-        if not words or not target_words:
-            continue
-        overlap = len(words & target_words)
-        score = overlap / max(1, min(len(words), len(target_words)))
-        if score > best_score:
-            best, best_score = stock, score
-    return best if best_score >= 0.75 else None
+    # Preserve short distinctive words (Å, Vår, Aker) and require the whole
+    # normalized name. Token overlap previously mapped Å Energi to Vår Energi.
+    def identity(value):
+        return tuple(word for word in _norm(value).split()
+                     if word not in {"group", "holding", "holdings"})
+    target_identity = identity(company)
+    if not target_identity:
+        return None
+    matches = [stock for stock in stocks
+               if identity(stock.get("name")) == target_identity]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _fetch_calendar_pages():

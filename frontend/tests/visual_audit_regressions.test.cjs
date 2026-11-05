@@ -79,3 +79,17 @@ test('corporate action context escapes evidence and preserves retrospective limi
  assert.equal(w.document.querySelector('#resultsContent img'),null);assert.match(w.document.body.textContent,/20,60 NOK/);assert.match(w.document.body.textContent,/lagt til i ettertid/);assert.match(w.document.body.textContent,/identiteten i den gamle måleposten er ikke verifisert/);
  assert.equal(w.AksjerActions.render([{...x,source_url:'javascript:alert(1)'}]),'');
 });
+test('push status exposes zero server subscriptions without claiming delivery',async t=>{
+ const dom=page(t,'alerts.html','/alerts'),w=dom.window;
+ w.fetch=async url=>({ok:true,json:async()=>url.includes('/push/status')?{delivery_ready:true,active_subscriptions:0}:{items:[]}});
+ w.eval(read('alerts.js'));await settle();
+ assert.match(w.document.getElementById('pushServer').textContent,/ingen aktive abonnementer/);
+});
+test('date-only market observations do not claim a completed closing auction',async t=>{
+ const dom=page(t,'index.html','/app'),w=dom.window;
+ w.AksjerIPO={load:async()=>({items:[]})};
+ w.fetch=async url=>({ok:true,json:async()=>({items:url==='/api/market-snapshot'?[{ticker:'AAA',name:'Alpha',price:100,quote_as_of:'2026-11-05'}]:[]})});
+ inline(dom);await settle();
+ assert.match(w.document.body.textContent,/Dagsobservasjon 05.11.2026 · klokkeslett ukjent/);
+ assert.doesNotMatch(w.document.body.textContent,/Sluttkurs 05.11.2026/);
+});
