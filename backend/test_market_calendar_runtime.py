@@ -54,6 +54,17 @@ class MarketCalendarRuntimeTests(unittest.TestCase):
             result = calendar.build_calendar(days=10, limit=20, holdings_only=False, today=date(2026, 8, 27))
         self.assertEqual(result['items'], [])
 
+    def test_issuer_matching_rejects_shared_words_and_ambiguity(self):
+        stocks = [{'ticker': 'VAR', 'name': 'Vår Energi'},
+                  {'ticker': 'AKER', 'name': 'Aker ASA'},
+                  {'ticker': 'AKSO', 'name': 'Aker Solutions'},
+                  {'ticker': 'LSG', 'name': 'Lerøy Seafood'}]
+        self.assertIsNone(calendar._match_stock('Å Energi AS', stocks))
+        self.assertIsNone(calendar._match_stock('Aker BP ASA', stocks))
+        self.assertEqual(calendar._match_stock('Vår Energi ASA', stocks)['ticker'], 'VAR')
+        self.assertEqual(calendar._match_stock('Lerøy Seafood Group ASA', stocks)['ticker'], 'LSG')
+        self.assertIsNone(calendar._match_stock('Vår Energi', stocks + [stocks[0]]))
+
     def test_oslo_suffix_is_canonicalized(self):
         self.assertEqual(calendar._ticker('MPCC.OL'), 'MPCC')
         self.assertEqual(calendar._ticker('LSG'), 'LSG')

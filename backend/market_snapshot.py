@@ -61,7 +61,7 @@ def snapshot(stocks):
                    change_pct=quote.get('change_pct') if use_quote and market_time else None,
                    quote_as_of=market_time.isoformat() if use_quote and market_time else None if use_quote else metrics.get('close_date'),
                    quote_captured_at=quote.get('captured_at') if use_quote else None,
-                   quote_time_kind='trade' if use_quote and market_time else 'unknown' if use_quote else 'daily_close',
+                   quote_time_kind='trade' if use_quote and market_time else 'unknown' if use_quote else 'daily_observation',
                    data_status='LAGRET' if price is not None else 'UTILGJENGELIG',
                    trend=reversal.get('regime'), volume_ratio=metrics.get('raw_volume_ratio'),
                    relative_strength=None, opportunity=payload.get('opportunity'),

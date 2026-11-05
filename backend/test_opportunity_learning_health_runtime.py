@@ -57,3 +57,24 @@ def test_learning_health_surfaces_component_failure(monkeypatch):
     assert result["learning_pipeline_status"] == "DEGRADED"
     assert "database_validation" in result["errors"]
     assert result["checks"]["model_versioning"]["status"] == "FAIL"
+
+
+def test_database_checks_bind_legacy_pattern_for_postgres(monkeypatch):
+    from database import _translate_sql
+    from psycopg._queries import PostgresQuery
+    from psycopg.adapt import Transformer
+    class Result:
+        def fetchone(self): return {'n': 0}
+        def fetchall(self): return []
+    class Connection:
+        def execute(self, sql, params=()):
+            # Real psycopg parameter parsing catches literal percent regression.
+            query = PostgresQuery(Transformer())
+            query.convert(_translate_sql(sql), params)
+            return Result()
+        def close(self): pass
+    monkeypatch.setattr(health.tracking, 'connect', lambda: Connection())
+    monkeypatch.setattr(health.identity_runtime, '_current_identity', lambda: {'signal_model_id': 'test'})
+    checks = health._database_checks()
+    assert checks['model_versioning']['status'] == 'PASS'
+    assert checks['market_context']['status'] == 'NOT_APPLICABLE'
