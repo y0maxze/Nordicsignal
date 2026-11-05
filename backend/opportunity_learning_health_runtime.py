@@ -150,7 +150,8 @@ def _database_checks():
             (active_model_id,),
         ).fetchone()["n"])
         legacy_events = int(conn.execute(
-            "SELECT COUNT(*) AS n FROM opportunity_event_versions WHERE signal_model_id LIKE 'legacy:%'"
+            "SELECT COUNT(*) AS n FROM opportunity_event_versions WHERE signal_model_id LIKE ?",
+            ("legacy:%",)
         ).fetchone()["n"])
 
         missing_context = [dict(row) for row in conn.execute(

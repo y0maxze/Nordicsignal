@@ -1,6 +1,6 @@
 (()=>{
   const esc=value=>String(value??'').replace(/[&<>\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[char]));
-  const fmt=value=>Number(value||0).toLocaleString('no-NO');
+  const fmt=value=>value==null?'—':Number(value).toLocaleString('no-NO');
   const fmt1=value=>value==null?'—':Number(value).toLocaleString('no-NO',{maximumFractionDigits:1});
   const fmtPct=value=>value==null?'—':`${Number(value)>=0?'+':''}${Number(value).toLocaleString('no-NO',{maximumFractionDigits:1})}%`;
   const pillClass=status=>status==='PASS'||status==='HEALTHY'?'ready':status==='NOT_APPLICABLE'?'muted':'';
